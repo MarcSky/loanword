@@ -3,8 +3,8 @@
   "displayName": "Loanword",
   "version": "0.1.0",
   "description": "Turn your Claude Code sessions into a personal phrasebook. Learn the words you actually needed today.",
-  "author": { "name": "swiftcoder", "url": "https://github.com/swiftcoder" },
-  "repository": "https://github.com/swiftcoder/loanword",
+  "author": { "name": "MarkSky", "url": "https://github.com/MarkSky" },
+  "repository": "https://github.com/MarkSky/loanword",
   "license": "MIT",
   "keywords": ["language-learning", "vocabulary", "flashcards", "spaced-repetition", "anki"],
   "userConfig": {

@@ -1,6 +1,6 @@
 {
   "name": "loanword",
-  "owner": { "name": "swiftcoder", "url": "https://github.com/swiftcoder" },
+  "owner": { "name": "MarcSky", "url": "https://github.com/MarcSky" },
   "description": "Loanword turns your Claude Code sessions into personal vocabulary flashcards.",
   "plugins": [
     {

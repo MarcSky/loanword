@@ -15,8 +15,11 @@ function tags(card, cfg) {
   const project = (card.project || '').split('/').filter(Boolean).pop();
   return [
     'loanword',
-    `lang:${cfg.target}`,
+    // The card's own pair, not the one currently open — an export spans decks.
+    `lang:${card.target || cfg.target}`,
+    card.native ? `from:${card.native}` : null,
     card.cefr ? `cefr:${card.cefr}` : null,
+    card.category ? `cat:${card.category}` : null,
     card.type ? `type:${card.type}` : null,
     project ? `project:${project.replace(/\s+/g, '_')}` : null,
   ]

@@ -1,0 +1,122 @@
+#!/usr/bin/env node
+// Interface dictionaries. gettext-style: the English sentence is the key, so a
+// missing entry degrades to English and there is no en.json to keep in sync.
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { PLUGIN_ROOT, readJson } from './store.mjs';
+
+const UI = join(PLUGIN_ROOT, 'ui');
+export const I18N_DIR = join(UI, 'i18n');
+
+/**
+ * Keys reached through a variable — `t(info.label)`, `t(grade.hint)` — cannot be
+ * found by scanning for string literals, so the data they come from is listed
+ * here. Adding a category or a grade means adding it here too; `missing` is the
+ * check that catches a forgotten one.
+ */
+const INDIRECT = [
+  'Engineering', 'Process', 'Collaboration', 'Phrasing', 'Connectors', 'Everyday',
+  'list', 'grid',
+  'Code, systems, debugging, review', 'Plans, estimates, releases, specs',
+  'Meetings, feedback, asking, disagreeing', 'Set phrases and idioms that resist translation',
+  'However, in terms of, that said, provided that', 'General vocabulary and everything unplaced',
+  'Breakthrough', 'Waystage', 'Threshold', 'Vantage', 'Advanced', 'Mastery',
+  'Overview', 'Deck', 'Study', 'Settings', 'Flashcards', 'Learn',
+  'Again', 'Hard', 'Good', 'Easy', 'no idea', 'barely', 'got it', 'instant',
+  'Everything', 'Favourites', 'Due now', 'Never seen', 'Learned',
+  'active', 'passive', 'both', 'light', 'dark', 'system',
+  'leave', 'next card', 'pick an answer', 'again', 'hard', 'good', 'easy', 'junk',
+  'show the answer',
+];
+
+const PLACEHOLDER = /\{(\w+)\}/g;
+
+/** Every string the interface can render, in source order-independent sorted form. */
+export function keys(source = readFileSync(join(UI, 'app.js'), 'utf8')) {
+  const found = new Set(INDIRECT);
+  for (const [, text] of source.matchAll(/\bt\(\s*'((?:[^'\\]|\\.)*)'/g)) {
+    found.add(text.replace(/\\'/g, "'").replace(/\\u2019/g, '’'));
+  }
+  // tn(n, 'card', 'cards') -> the plural entry "card|cards"
+  for (const [, one, many] of source.matchAll(/\btn\([^,]+,\s*'([^']+)',\s*'([^']+)'\s*\)/g)) {
+    found.add(`${one}|${many}`);
+  }
+  return [...found].sort();
+}
+
+export const languages = () =>
+  existsSync(I18N_DIR)
+    ? readdirSync(I18N_DIR).filter((f) => f.endsWith('.json')).map((f) => f.slice(0, -5)).sort()
+    : [];
+
+/** What a dictionary is missing, carries needlessly, or has broken. */
+export function audit(lang, all = keys()) {
+  const dict = readJson(join(I18N_DIR, `${lang}.json`), null);
+  if (!dict || typeof dict !== 'object' || Array.isArray(dict)) return { lang, readable: false };
+
+  const wanted = new Set(all);
+  const broken = [];
+  for (const [key, value] of Object.entries(dict)) {
+    if (!wanted.has(key)) continue;
+    if (key.includes('|')) {
+      if (!value || typeof value !== 'object') broken.push(key);
+      continue;
+    }
+    if (typeof value !== 'string') {
+      broken.push(key);
+      continue;
+    }
+    // A dropped {placeholder} renders the sentence with a hole in it.
+    const want = (key.match(PLACEHOLDER) || []).sort().join();
+    const got = (value.match(PLACEHOLDER) || []).sort().join();
+    if (want !== got) broken.push(key);
+  }
+
+  return {
+    lang,
+    readable: true,
+    missing: all.filter((key) => !(key in dict)),
+    unused: Object.keys(dict).filter((key) => !wanted.has(key)).sort(),
+    broken,
+  };
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+  const [command, lang] = process.argv.slice(2);
+
+  if (command === 'keys') {
+    console.log(JSON.stringify(keys(), null, 2));
+  } else if (command === 'audit') {
+    const all = keys();
+    const targets = lang ? [lang] : languages();
+    if (!targets.length) console.log('no dictionaries in ui/i18n/');
+    let bad = 0;
+    for (const code of targets) {
+      const report = audit(code, all);
+      if (!report.readable) {
+        console.log(`${code}: unreadable`);
+        bad++;
+        continue;
+      }
+      const problems = report.missing.length + report.unused.length + report.broken.length;
+      if (problems) bad++;
+      console.log(
+        `${code}: ${all.length - report.missing.length}/${all.length} translated` +
+          (report.missing.length ? `, ${report.missing.length} missing` : '') +
+          (report.unused.length ? `, ${report.unused.length} unused` : '') +
+          (report.broken.length ? `, ${report.broken.length} broken` : ''),
+      );
+      for (const key of report.missing) console.log(`  missing  ${key}`);
+      for (const key of report.unused) console.log(`  unused   ${key}`);
+      for (const key of report.broken) console.log(`  broken   ${key}`);
+    }
+    process.exit(bad ? 1 : 0);
+  } else {
+    console.log(`usage:
+  node scripts/i18n.mjs keys           every string the interface can render
+  node scripts/i18n.mjs audit [lang]   what a dictionary is missing or has broken
+
+Dictionaries live in ui/i18n/<code>.json, keyed by the English sentence.
+Present: ${languages().join(', ') || '(none)'}`);
+  }
+}

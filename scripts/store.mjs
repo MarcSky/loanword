@@ -25,10 +25,21 @@ export const paths = {
   cards: join(DATA, 'cards.jsonl'),
   state: join(DATA, 'state.json'),
   known: join(DATA, 'known_words.json'),
+  settings: join(DATA, 'settings.json'),
   log: join(DATA, 'log.txt'),
   pending: join(DATA, 'pending'),
   exportCsv: join(DATA, 'export', 'loanword.csv'),
 };
+
+/**
+ * Six domains, because that is how work vocabulary actually splits, and because
+ * a taxonomy the card-builder has to guess at produces noise. `everyday` is the
+ * fallback: an unplaceable card lands there rather than in a seventh bucket
+ * nobody browses.
+ */
+export const CATEGORIES = ['engineering', 'process', 'collaboration', 'phrasing', 'connectors', 'everyday'];
+
+export const CEFR_LEVELS = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
 
 function ensureData() {
   mkdirSync(DATA, { recursive: true });
@@ -43,16 +54,110 @@ export function log(message) {
   }
 }
 
-export function config() {
+const MODES = ['active', 'passive', 'both'];
+const THEMES = ['light', 'dark', 'system'];
+const STUDY_MODES = ['flashcards', 'learn'];
+const LANG_CODE = /^[a-z]{2}$/;
+
+/** The plugin's install-time answers. Overridden by anything the user later changes in the UI. */
+function envConfig() {
   const env = process.env;
   const limit = Number(env.CLAUDE_PLUGIN_OPTION_DAILY_LIMIT);
+  const level = String(env.CLAUDE_PLUGIN_OPTION_LEVEL || '').toUpperCase();
   return {
-    native: (env.CLAUDE_PLUGIN_OPTION_NATIVE_LANG || 'es').toLowerCase(),
-    target: (env.CLAUDE_PLUGIN_OPTION_TARGET_LANG || 'en').toLowerCase(),
-    mode: (env.CLAUDE_PLUGIN_OPTION_MODE || 'both').toLowerCase(),
+    native: (env.CLAUDE_PLUGIN_OPTION_NATIVE_LANG || 'es').toLowerCase().slice(0, 2),
+    target: (env.CLAUDE_PLUGIN_OPTION_TARGET_LANG || 'en').toLowerCase().slice(0, 2),
+    mode: MODES.includes((env.CLAUDE_PLUGIN_OPTION_MODE || '').toLowerCase())
+      ? env.CLAUDE_PLUGIN_OPTION_MODE.toLowerCase()
+      : 'both',
     dailyLimit: Number.isFinite(limit) && limit > 0 ? Math.min(Math.floor(limit), 500) : 15,
     autoBuild: env.CLAUDE_PLUGIN_OPTION_AUTO_BUILD !== 'false',
+    level: CEFR_LEVELS.includes(level) ? level : '',
+    theme: 'system',
+    studyMode: 'flashcards',
+    // '' means "follow my native language". An explicit code pins the
+    // interface regardless of which pair is being studied.
+    uiLang: '',
+    vault: String(env.CLAUDE_PLUGIN_OPTION_OBSIDIAN_VAULT || '').trim(),
   };
+}
+
+/**
+ * Every value the UI is allowed to write, with the rule that decides whether an
+ * incoming value survives. Anything not listed here is dropped: the settings
+ * file is written by a browser, so it is untrusted input like any other.
+ */
+const SETTING_RULES = {
+  native: (v) => (typeof v === 'string' && LANG_CODE.test(v.toLowerCase()) ? v.toLowerCase() : undefined),
+  target: (v) => (typeof v === 'string' && LANG_CODE.test(v.toLowerCase()) ? v.toLowerCase() : undefined),
+  mode: (v) => (MODES.includes(v) ? v : undefined),
+  dailyLimit: (v) => (Number.isFinite(v) && v >= 3 ? Math.min(Math.floor(v), 500) : undefined),
+  autoBuild: (v) => (typeof v === 'boolean' ? v : undefined),
+  level: (v) => (v === '' || CEFR_LEVELS.includes(v) ? v : undefined),
+  theme: (v) => (THEMES.includes(v) ? v : undefined),
+  studyMode: (v) => (STUDY_MODES.includes(v) ? v : undefined),
+  uiLang: (v) => (v === '' || (typeof v === 'string' && LANG_CODE.test(v.toLowerCase())) ? String(v).toLowerCase() : undefined),
+  // A filesystem path the user types. Nothing is written until the export
+  // itself confirms the directory exists, so this only has to be a sane string.
+  vault: (v) =>
+    typeof v === 'string' && v.length <= 4096 && !v.includes('\u0000') ? v.trim() : undefined,
+};
+
+/** Keeps only recognised, well-formed values; a bad one falls back rather than poisoning the config. */
+export function sanitizeSettings(input) {
+  const clean = {};
+  if (!input || typeof input !== 'object') return clean;
+  for (const [key, rule] of Object.entries(SETTING_RULES)) {
+    const value = rule(input[key]);
+    if (value !== undefined) clean[key] = value;
+  }
+  return clean;
+}
+
+export function config() {
+  return { ...envConfig(), ...sanitizeSettings(readJson(paths.settings, {})) };
+}
+
+export const isPair = (pair) =>
+  !!pair && LANG_CODE.test(String(pair.native)) && LANG_CODE.test(String(pair.target));
+
+export const samePair = (a, b) => !!a && !!b && a.native === b.native && a.target === b.target;
+
+export const pairKey = (pair) => `${pair.native}>${pair.target}`;
+
+/**
+ * Which deck an unstamped card belongs to. Cards written before decks were
+ * per-pair carry no language, and the only moment that information exists is
+ * the moment the user first changes the pair — `saveSettings` records it then.
+ */
+export function fallbackPair() {
+  const stored = readJson(paths.settings, {});
+  if (isPair(stored?.legacyPair)) {
+    return { native: stored.legacyPair.native, target: stored.legacyPair.target };
+  }
+  const cfg = config();
+  return { native: cfg.native, target: cfg.target };
+}
+
+/** Merges a patch into settings.json and returns the resulting effective config. */
+export function saveSettings(patch) {
+  const raw = readJson(paths.settings, {});
+  const clean = sanitizeSettings(patch);
+  const before = config();
+  const merged = { ...sanitizeSettings(raw), ...clean };
+
+  // legacyPair is recorded by the system, never accepted from a request body,
+  // so it has to be carried across the sanitize.
+  if (isPair(raw?.legacyPair)) merged.legacyPair = raw.legacyPair;
+
+  const switchingPair =
+    (clean.native && clean.native !== before.native) || (clean.target && clean.target !== before.target);
+  if (switchingPair && !merged.legacyPair && loadCards().some((card) => !card.target)) {
+    merged.legacyPair = { native: before.native, target: before.target };
+  }
+
+  writeJson(paths.settings, merged);
+  return config();
 }
 
 export function fileSize(file) {
@@ -112,9 +217,15 @@ export function writeJson(file, value) {
   renameSync(temp, file);
 }
 
-/** Derived from content, not assigned on write, so re-adding a card is idempotent. */
+/**
+ * Derived from content, not assigned on write, so re-adding a card is
+ * idempotent. The language pair joins the hash only when the card carries one,
+ * which keeps every id written before decks were per-pair exactly where it was
+ * — the FSRS state file is keyed by these.
+ */
 export function cardId(card) {
-  return createHash('sha1').update(`${card.front} ${card.back}`).digest('hex').slice(0, 10);
+  const pair = card.target ? ` ${card.native || ''}>${card.target}` : '';
+  return createHash('sha1').update(`${card.front} ${card.back}${pair}`).digest('hex').slice(0, 10);
 }
 
 // The deck is re-read on every request. Reusing the parsed array while the file
@@ -140,16 +251,62 @@ export function loadCards() {
     const id = cardId(card);
     if (seen.has(id)) continue;
     seen.add(id);
-    cards.push({ ...card, id });
+    // Cards written before categories existed still have to land in a real
+    // bucket, or the deck browser grows a phantom filter.
+    cards.push({ ...card, id, category: normalizeCategory(card.category), cefr: normalizeCefr(card.cefr) });
   }
   cardCache = { key, cards };
   return cards;
 }
 
-export function knownWords() {
-  const stored = readJson(paths.known, []);
-  if (!Array.isArray(stored)) return new Set();
-  return new Set(stored.filter((word) => typeof word === 'string').map((word) => word.toLowerCase()));
+const wordSet = (list) =>
+  new Set((Array.isArray(list) ? list : []).filter((w) => typeof w === 'string').map((w) => w.toLowerCase()));
+
+/**
+ * Known words are per target language: having met "however" in English says
+ * nothing about Polish, and a shared list would silently starve every deck
+ * after the first.
+ */
+export function knownWords(target = config().target) {
+  const stored = readJson(paths.known, {});
+  // v0.1 wrote one flat array, for whichever target was active back then.
+  if (Array.isArray(stored)) return target === fallbackPair().target ? wordSet(stored) : new Set();
+  return wordSet(stored?.[target]);
+}
+
+export function saveKnownWords(target, words) {
+  const stored = readJson(paths.known, {});
+  const map = Array.isArray(stored)
+    ? { [fallbackPair().target]: stored }
+    : stored && typeof stored === 'object'
+      ? { ...stored }
+      : {};
+  map[target] = [...words].sort();
+  writeJson(paths.known, map);
+}
+
+/** Every deck sitting on disk, newest-written first, with its size. */
+export function deckPairs(cards = loadCards()) {
+  const legacy = fallbackPair();
+  const seen = new Map();
+  for (const card of cards) {
+    const pair = card.target ? { native: card.native || legacy.native, target: card.target } : legacy;
+    const key = pairKey(pair);
+    const entry = seen.get(key) || { ...pair, total: 0 };
+    entry.total++;
+    seen.set(key, entry);
+  }
+  return [...seen.values()];
+}
+
+/** The cards belonging to one language pair; the others stay on disk, untouched. */
+export function cardsForPair(pair, cards = loadCards()) {
+  const legacy = fallbackPair();
+  return cards.filter((card) =>
+    card.target
+      ? card.target === pair.target && (card.native || legacy.native) === pair.native
+      : samePair(legacy, pair),
+  );
 }
 
 export function ymd(date = new Date()) {
@@ -169,6 +326,17 @@ function text(value, fallback = '') {
   return value.trim().slice(0, MAX_FIELD_LENGTH);
 }
 
+export function normalizeCategory(value) {
+  const category = String(value || '').toLowerCase().trim();
+  return CATEGORIES.includes(category) ? category : 'everyday';
+}
+
+/** '' rather than a guess: an unlabelled card is honest, a wrongly-levelled one is not. */
+export function normalizeCefr(value) {
+  const level = String(value || '').toUpperCase().trim().slice(0, 2);
+  return CEFR_LEVELS.includes(level) ? level : '';
+}
+
 /**
  * Commit a batch from card-builder: attach provenance, append, retire the queue.
  * Done by script rather than by the model so a malformed reply cannot corrupt the deck.
@@ -176,6 +344,7 @@ function text(value, fallback = '') {
 export function commit(newCards) {
   if (!Array.isArray(newCards)) throw new TypeError('commit expects a JSON array of cards');
 
+  const cfg = config();
   const queue = readJsonl(paths.queue);
   const mostRecent = queue[queue.length - 1] || {};
 
@@ -207,7 +376,12 @@ export function commit(newCards) {
         .filter(Boolean),
       example: text(card.example),
       pos: text(card.pos),
-      cefr: text(card.cefr),
+      cefr: normalizeCefr(card.cefr),
+      category: normalizeCategory(card.category),
+      // The pair the card was built for. Changing languages later opens a new
+      // deck rather than mixing two of them, and never deletes this one.
+      native: cfg.native,
+      target: cfg.target,
       ts: text(source.ts) || new Date().toISOString(),
       project: text(source.project),
     });
@@ -216,7 +390,7 @@ export function commit(newCards) {
 
   // Everything the queue offered counts as seen, including what the agent
   // rejected — otherwise rejected junk is re-captured every session.
-  const known = knownWords();
+  const known = knownWords(cfg.target);
   for (const row of queue) {
     for (const word of row.words || []) if (typeof word === 'string') known.add(word.toLowerCase());
   }
@@ -224,7 +398,7 @@ export function commit(newCards) {
     if (card.type === 'word') known.add(card.front.toLowerCase());
     for (const keyword of card.keywords) known.add(keyword.toLowerCase());
   }
-  writeJson(paths.known, [...known].sort());
+  saveKnownWords(cfg.target, known);
 
   writeFileSync(paths.queue, '');
   if (existsSync(paths.pending)) rmSync(paths.pending);
@@ -238,6 +412,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     console.log(JSON.stringify(commit(JSON.parse(raw || '[]')), null, 2));
   } else if (command === 'queue') {
     console.log(JSON.stringify({ file: paths.queue, entries: readJsonl(paths.queue).length }));
+  } else if (command === 'config') {
+    // The effective config, env plus whatever the user changed in the trainer.
+    // Anything reading CLAUDE_PLUGIN_OPTION_* directly misses the second half.
+    console.log(JSON.stringify(config(), null, 2));
   } else {
     console.log(JSON.stringify({ DATA, paths }, null, 2));
   }

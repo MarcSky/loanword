@@ -32,10 +32,23 @@ The character `▮` marks a redacted secret. Never build a card around it and
 never guess what it hid: either reword the phrase without that position, or
 skip the record.
 
+Every card carries a `category`, chosen from exactly these six:
+
+- `engineering` — code, systems, debugging, infrastructure, review.
+- `process` — planning, estimates, deadlines, releases, specs, tickets.
+- `collaboration` — meetings, feedback, disagreement, asking, thanking.
+- `phrasing` — set phrases, idioms and collocations whose meaning is not the
+  sum of their words.
+- `connectors` — discourse glue: however, in terms of, that said, provided that.
+- `everyday` — general vocabulary, and the fallback when none of the five fits.
+
+`cefr` is one of A1, A2, B1, B2, C1, C2. Use `""` when you genuinely cannot
+place the word rather than guessing a level.
+
 Return STRICTLY a JSON array, with no markdown fence and no preamble:
 
 [{"type":"phrase|word","front":"…","back":"…","keywords":["…"],
-  "example":"…","pos":"verb|noun|…","cefr":"B1"}]
+  "example":"…","pos":"verb|noun|…","cefr":"B1","category":"process"}]
 
 At most LIMIT cards. When there are more candidates than that, prefer `phrase`
 over `word`, and frequent over rare. If nothing is worth keeping, return `[]`.

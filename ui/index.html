@@ -1,156 +1,75 @@
+<!doctype html>
+<html lang="en" dir="ltr" data-theme="light">
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
 <title>Loanword</title>
-<style>
-  :root {
-    --bg: #111;
-    --fg: #e9e9e6;
-    --dim: #6d6d68;
-    --accent: #e8c547;
-    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
-  }
-  * { box-sizing: border-box; margin: 0; }
-  html, body { height: 100%; }
-  body {
-    background: var(--bg); color: var(--fg); font-family: var(--sans);
-    display: grid; grid-template-rows: 2px 1fr auto; -webkit-font-smoothing: antialiased;
-  }
-  #progress { background: var(--accent); width: 0; transition: width 150ms linear; }
-  main {
-    display: grid; place-items: center; padding: 6vh 6vw; text-align: center;
-    opacity: 1; transition: opacity 150ms ease;
-  }
-  main.turning { opacity: 0; }
-  .card { max-width: 46rem; }
-  .front { font-size: clamp(1.5rem, 4vw, 2.4rem); line-height: 1.3; font-weight: 500; }
-  .front.term { font-family: var(--mono); color: var(--accent); }
-  .back { margin-top: 2.2rem; }
-  .back[hidden] { display: none; }
-  .answer { font-size: clamp(1.2rem, 3vw, 1.7rem); line-height: 1.4; }
-  .answer.term { font-family: var(--mono); color: var(--accent); }
-  .keywords { margin-top: .9rem; font-family: var(--mono); font-size: .95rem; color: var(--accent); }
-  .example { margin-top: 1.4rem; font-size: 1.05rem; line-height: 1.5; color: var(--fg); opacity: .8; }
-  .origin { margin-top: 1.8rem; font-size: .85rem; color: var(--dim); }
-  .hint { margin-top: 2.4rem; font-size: .8rem; color: var(--dim); letter-spacing: .04em; }
-  footer { padding: 1.2rem; font-size: .75rem; color: var(--dim); text-align: center; letter-spacing: .04em; }
-  kbd { font-family: var(--mono); color: var(--fg); opacity: .55; }
-  button {
-    font: inherit; font-size: .95rem; background: none; color: var(--dim);
-    border: 1px solid #2a2a28; border-radius: 3px; padding: .5rem 1rem; cursor: pointer;
-  }
-  button:hover { color: var(--fg); border-color: var(--accent); }
-  .grades { margin-top: 2rem; display: flex; gap: .5rem; justify-content: center; flex-wrap: wrap; }
-  .empty { color: var(--dim); font-size: 1.1rem; line-height: 1.8; }
-</style>
+<link rel="stylesheet" href="app.css">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<body>
+<!--
+  THESIS: a vocabulary trainer whose deck is the residue of your own work week.
+  It refuses the course-catalogue grid where every tile is something you might
+  buy; here every tile is a debt you already incurred, carrying its own mastery.
+  OWN-WORLD: mint canvas under a warm cream plate, blush icon rail, six pastel
+  category fields (rose/peach/lavender/mint/sky/butter) owning whole tiles,
+  large soft radii, ink-solid pills for the selected state — never a coloured
+  outline. General Sans throughout, display cut at 600 / -0.04em, tabular
+  numerals, Lucide at 1.75 stroke tinted to each field's ink.
+  STORY: between two tasks the user sees what is due and where they stand in
+  two seconds, presses a key, reviews, and leaves with the tally visible.
+  FIRST VIEWPORT: mint canvas; cream plate inset 20px; 76px blush rail; display
+  headline over the due-now ink bar; pill filters for category and CEFR; a lead
+  category tile spanning two columns beside its smaller siblings; right column
+  carries profile, daily goal ring and twelve weeks of activity.
+  FORM: warm-pastel study dashboard, user-pinned from reference 1.jpg — the roll
+  was skipped because a pinned direction beats it.
+  FINISH: unreviewed and undocumented is unfinished; this build ends with the
+  finish review, the verdict, and DESIGN.md.
+-->
 
-<div id="progress"></div>
-<main id="main"></main>
-<footer id="footer"></footer>
+<div class="shell">
+  <nav class="rail" aria-label="Sections">
+    <div class="mark" title="Loanword">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M4 19V6.5A2.5 2.5 0 0 1 6.5 4H19v13"/>
+        <path d="M6.5 17H19v3H6.5A2.5 2.5 0 0 1 6.5 15H19"/>
+        <path d="M10 8.5h5"/>
+      </svg>
+    </div>
 
-<script type="module">
-const main = document.getElementById('main');
-const footer = document.getElementById('footer');
-const progress = document.getElementById('progress');
+    <div class="rail-nav" id="rail"></div>
 
-const GRADES = [null, 'Again', 'Hard', 'Good', 'Easy'];
-let cards = [], cfg = {}, i = 0, revealed = false, busy = false;
+    <div class="rail-spacer"></div>
 
-const esc = (s) => String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+    <button class="rail-btn" data-act="theme" title="Theme" aria-label="Switch theme">
+      <svg class="icon" aria-hidden="true"><use href="icons.svg#i-sun"></use></svg>
+    </button>
+    <button class="rail-btn" data-act="shortcuts" title="Keyboard shortcuts" aria-label="Keyboard shortcuts">
+      <svg class="icon" aria-hidden="true"><use href="icons.svg#i-keyboard"></use></svg>
+    </button>
+  </nav>
 
-function ago(ts, lang) {
-  if (!ts) return '';
-  const days = Math.round((Date.now() - new Date(ts)) / 864e5);
-  try {
-    return new Intl.RelativeTimeFormat(lang || 'en', { numeric: 'auto' }).format(-days, 'day');
-  } catch {
-    return `${days}d ago`;
-  }
-}
+  <main id="main">
+    <section class="page" id="page-overview" data-route="overview" aria-label="Overview"></section>
+    <section class="page" id="page-deck" data-route="deck" aria-label="Deck"></section>
+    <section class="page study" id="page-study" data-route="study" aria-label="Study"></section>
+    <section class="page" id="page-settings" data-route="settings" aria-label="Settings"></section>
+  </main>
+</div>
 
-function render() {
-  progress.style.width = `${(i / Math.max(cards.length, 1)) * 100}%`;
-  const c = cards[i];
-  if (!c) return done();
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  // phrase: front is your own wording; word: front is the term you met.
-  const termFront = c.type === 'word';
-  const origin = [c.project, ago(c.ts, cfg.native)].filter(Boolean).join(' · ');
+<dialog id="shortcuts" class="panel" style="border:0;padding:0;background:transparent">
+  <div class="panel" style="max-width:420px">
+    <div class="section-head" style="margin:0 0 14px">
+      <h2>Keyboard</h2>
+      <button class="btn btn-quiet" data-act="close-shortcuts" aria-label="Close">
+        <svg class="icon-sm icon" aria-hidden="true"><use href="icons.svg#i-x"></use></svg>
+      </button>
+    </div>
+    <dl id="shortcut-list" style="display:grid;grid-template-columns:auto 1fr;gap:10px 16px;font-size:.875rem"></dl>
+  </div>
+</dialog>
 
-  main.innerHTML = `
-    <div class="card">
-      <div class="front ${termFront ? 'term' : ''}">${esc(c.front)}</div>
-      <div class="back" ${revealed ? '' : 'hidden'}>
-        <div class="answer ${termFront ? '' : 'term'}">${esc(c.back)}</div>
-        ${c.keywords?.length ? `<div class="keywords">${esc(c.keywords.join('  ·  '))}</div>` : ''}
-        ${c.example ? `<div class="example">${esc(c.example)}</div>` : ''}
-        ${origin ? `<div class="origin">${esc(origin)}</div>` : ''}
-        <div class="grades">
-          ${[1, 2, 3, 4].map((n) => `<button data-grade="${n}">${n} ${GRADES[n]}</button>`).join('')}
-          <button data-delete="1">✕ junk</button>
-        </div>
-      </div>
-      ${revealed ? '' : '<div class="hint">SPACE</div>'}
-    </div>`;
-  footer.innerHTML = revealed
-    ? '<kbd>1</kbd> again <kbd>2</kbd> hard <kbd>3</kbd> good <kbd>4</kbd> easy <kbd>d</kbd> junk <kbd>esc</kbd> quit'
-    : '<kbd>space</kbd> show answer <kbd>esc</kbd> quit';
-}
-
-function done() {
-  progress.style.width = '100%';
-  main.innerHTML = `<p class="empty">${i ? `${i} reviewed. Done for today.` : 'Nothing due.<br>Run <b>/loanword:build</b> after a work session.'}</p>`;
-  footer.innerHTML = '<a href="/export.csv" style="color:var(--dim)">export.csv</a>';
-}
-
-function turn(fn) {
-  main.classList.add('turning');
-  setTimeout(() => {
-    fn();
-    render();
-    main.classList.remove('turning');
-  }, 150);
-}
-
-async function post(path, payload) {
-  await fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
-}
-
-async function advance(request) {
-  if (busy) return;
-  busy = true;
-  try {
-    await request;
-  } finally {
-    busy = false;
-  }
-  turn(() => { i++; revealed = false; });
-}
-
-const grade = (n) => advance(post('/grade', { id: cards[i].id, rating: n }));
-const junk = () => advance(post('/delete', { id: cards[i].id, reason: 'user marked junk in review' }));
-
-addEventListener('keydown', (e) => {
-  if (!cards[i]) return;
-  if (e.key === 'Escape') return done();
-  if (e.key === ' ' || e.key === 'Enter') {
-    e.preventDefault();
-    if (!revealed) { revealed = true; render(); }
-    return;
-  }
-  if (!revealed) return;
-  if (e.key >= '1' && e.key <= '4') grade(Number(e.key));
-  if (e.key.toLowerCase() === 'd') junk();
-});
-
-main.addEventListener('click', (e) => {
-  const b = e.target.closest('button');
-  if (!b) return;
-  if (b.dataset.grade) grade(Number(b.dataset.grade));
-  if (b.dataset.delete) junk();
-});
-
-const res = await fetch('/due');
-({ cards, config: cfg } = await res.json());
-render();
-</script>
+<script type="module" src="app.js"></script>

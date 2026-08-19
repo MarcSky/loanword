@@ -19,5 +19,9 @@ without tables and without padding:
 - streak in days, and how much of today's limit is already reviewed;
 - the five hardest — `hardest`, ranked by lapses.
 
+The numbers cover the **open deck** — the language pair currently in the
+settings. Other pairs keep their own cards and schedules; say so only if it is
+relevant, and never imply they were lost.
+
 If `total` is 0, one line: there are no cards yet, do some work and run
 `/loanword:build`.

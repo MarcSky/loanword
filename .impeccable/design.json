@@ -1,0 +1,998 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-19T16:46:52Z",
+  "title": "Design System: Loanword",
+  "extensions": {
+    "colorMeta": {
+      "ink": {
+        "role": "primary",
+        "displayName": "Trainer Ink",
+        "canonical": "oklch(18.4% 0.012 48.1)",
+        "dark": "#f6ede5",
+        "purpose": "Solid fills for the selected state and the single primary action; default body colour on the plate.",
+        "tonalRamp": [
+          "oklch(15% 0.012 48.1)",
+          "oklch(26% 0.012 48.1)",
+          "oklch(38% 0.012 48.1)",
+          "oklch(49% 0.012 48.1)",
+          "oklch(61% 0.012 48.1)",
+          "oklch(72% 0.012 48.1)",
+          "oklch(84% 0.012 48.1)",
+          "oklch(95% 0.012 48.1)"
+        ]
+      },
+      "plate": {
+        "role": "primary",
+        "displayName": "Cream Plate",
+        "canonical": "oklch(98.2% 0.009 67.7)",
+        "dark": "#1a1512",
+        "purpose": "The application surface, and the text colour on every ink-filled element.",
+        "tonalRamp": [
+          "oklch(15% 0.009 67.7)",
+          "oklch(26% 0.009 67.7)",
+          "oklch(38% 0.009 67.7)",
+          "oklch(49% 0.009 67.7)",
+          "oklch(61% 0.009 67.7)",
+          "oklch(72% 0.009 67.7)",
+          "oklch(84% 0.009 67.7)",
+          "oklch(95% 0.009 67.7)"
+        ]
+      },
+      "canvas": {
+        "role": "primary",
+        "displayName": "Mint Canvas",
+        "canonical": "oklch(86.7% 0.074 162.7)",
+        "dark": "#0f1a15",
+        "purpose": "The ground behind the plate, painted as a radial gradient from top centre. Never a content surface.",
+        "tonalRamp": [
+          "oklch(15% 0.074 162.7)",
+          "oklch(26% 0.074 162.7)",
+          "oklch(38% 0.074 162.7)",
+          "oklch(49% 0.074 162.7)",
+          "oklch(61% 0.074 162.7)",
+          "oklch(72% 0.074 162.7)",
+          "oklch(84% 0.074 162.7)",
+          "oklch(95% 0.074 162.7)"
+        ]
+      },
+      "canvas-deep": {
+        "role": "primary",
+        "displayName": "Mint Canvas Deep",
+        "canonical": "oklch(81.4% 0.086 161.9)",
+        "dark": "#0a120e",
+        "purpose": "The outer stop of the canvas gradient.",
+        "tonalRamp": [
+          "oklch(15% 0.086 161.9)",
+          "oklch(26% 0.086 161.9)",
+          "oklch(38% 0.086 161.9)",
+          "oklch(49% 0.086 161.9)",
+          "oklch(61% 0.086 161.9)",
+          "oklch(72% 0.086 161.9)",
+          "oklch(84% 0.086 161.9)",
+          "oklch(95% 0.086 161.9)"
+        ]
+      },
+      "sky": {
+        "role": "secondary",
+        "displayName": "Sky",
+        "canonical": "oklch(89.8% 0.039 250.7)",
+        "dark": "#23405f",
+        "purpose": "Engineering field ground.",
+        "tonalRamp": [
+          "oklch(15% 0.039 250.7)",
+          "oklch(26% 0.039 250.7)",
+          "oklch(38% 0.039 250.7)",
+          "oklch(49% 0.039 250.7)",
+          "oklch(61% 0.039 250.7)",
+          "oklch(72% 0.039 250.7)",
+          "oklch(84% 0.039 250.7)",
+          "oklch(95% 0.039 250.7)"
+        ]
+      },
+      "sky-ink": {
+        "role": "secondary",
+        "displayName": "Sky Ink",
+        "canonical": "oklch(44.6% 0.109 254.2)",
+        "dark": "#a9cdf3",
+        "purpose": "Engineering field ink; also the Easy grade.",
+        "tonalRamp": [
+          "oklch(15% 0.109 254.2)",
+          "oklch(26% 0.109 254.2)",
+          "oklch(38% 0.109 254.2)",
+          "oklch(49% 0.109 254.2)",
+          "oklch(61% 0.109 254.2)",
+          "oklch(72% 0.109 254.2)",
+          "oklch(84% 0.109 254.2)",
+          "oklch(95% 0.109 254.2)"
+        ]
+      },
+      "peach": {
+        "role": "secondary",
+        "displayName": "Peach",
+        "canonical": "oklch(91.7% 0.062 77.3)",
+        "dark": "#4d3a1f",
+        "purpose": "Process field ground.",
+        "tonalRamp": [
+          "oklch(15% 0.062 77.3)",
+          "oklch(26% 0.062 77.3)",
+          "oklch(38% 0.062 77.3)",
+          "oklch(49% 0.062 77.3)",
+          "oklch(61% 0.062 77.3)",
+          "oklch(72% 0.062 77.3)",
+          "oklch(84% 0.062 77.3)",
+          "oklch(95% 0.062 77.3)"
+        ]
+      },
+      "peach-ink": {
+        "role": "secondary",
+        "displayName": "Peach Ink",
+        "canonical": "oklch(50.9% 0.098 68.5)",
+        "dark": "#f2ca8b",
+        "purpose": "Process field ink; also the Hard grade and the learning tally.",
+        "tonalRamp": [
+          "oklch(15% 0.098 68.5)",
+          "oklch(26% 0.098 68.5)",
+          "oklch(38% 0.098 68.5)",
+          "oklch(49% 0.098 68.5)",
+          "oklch(61% 0.098 68.5)",
+          "oklch(72% 0.098 68.5)",
+          "oklch(84% 0.098 68.5)",
+          "oklch(95% 0.098 68.5)"
+        ]
+      },
+      "rose": {
+        "role": "secondary",
+        "displayName": "Dusty Rose",
+        "canonical": "oklch(88.8% 0.047 29.4)",
+        "dark": "#52302c",
+        "purpose": "Collaboration field ground.",
+        "tonalRamp": [
+          "oklch(15% 0.047 29.4)",
+          "oklch(26% 0.047 29.4)",
+          "oklch(38% 0.047 29.4)",
+          "oklch(49% 0.047 29.4)",
+          "oklch(61% 0.047 29.4)",
+          "oklch(72% 0.047 29.4)",
+          "oklch(84% 0.047 29.4)",
+          "oklch(95% 0.047 29.4)"
+        ]
+      },
+      "rose-ink": {
+        "role": "secondary",
+        "displayName": "Dusty Rose Ink",
+        "canonical": "oklch(46.3% 0.105 30.1)",
+        "dark": "#f3b8ae",
+        "purpose": "Collaboration field ink; also the Again grade, the rail unread badge and the error toast.",
+        "tonalRamp": [
+          "oklch(15% 0.105 30.1)",
+          "oklch(26% 0.105 30.1)",
+          "oklch(38% 0.105 30.1)",
+          "oklch(49% 0.105 30.1)",
+          "oklch(61% 0.105 30.1)",
+          "oklch(72% 0.105 30.1)",
+          "oklch(84% 0.105 30.1)",
+          "oklch(95% 0.105 30.1)"
+        ]
+      },
+      "lavender": {
+        "role": "secondary",
+        "displayName": "Lavender",
+        "canonical": "oklch(89.2% 0.044 295.5)",
+        "dark": "#383061",
+        "purpose": "Phrasing field ground; also the avatar frame.",
+        "tonalRamp": [
+          "oklch(15% 0.044 295.5)",
+          "oklch(26% 0.044 295.5)",
+          "oklch(38% 0.044 295.5)",
+          "oklch(49% 0.044 295.5)",
+          "oklch(61% 0.044 295.5)",
+          "oklch(72% 0.044 295.5)",
+          "oklch(84% 0.044 295.5)",
+          "oklch(95% 0.044 295.5)"
+        ]
+      },
+      "lavender-ink": {
+        "role": "secondary",
+        "displayName": "Lavender Ink",
+        "canonical": "oklch(42.2% 0.123 287.0)",
+        "dark": "#c6bcf1",
+        "purpose": "Phrasing field ink.",
+        "tonalRamp": [
+          "oklch(15% 0.123 287.0)",
+          "oklch(26% 0.123 287.0)",
+          "oklch(38% 0.123 287.0)",
+          "oklch(49% 0.123 287.0)",
+          "oklch(61% 0.123 287.0)",
+          "oklch(72% 0.123 287.0)",
+          "oklch(84% 0.123 287.0)",
+          "oklch(95% 0.123 287.0)"
+        ]
+      },
+      "butter": {
+        "role": "secondary",
+        "displayName": "Butter",
+        "canonical": "oklch(93.7% 0.084 99.7)",
+        "dark": "#4a411a",
+        "purpose": "Connectors field ground.",
+        "tonalRamp": [
+          "oklch(15% 0.084 99.7)",
+          "oklch(26% 0.084 99.7)",
+          "oklch(38% 0.084 99.7)",
+          "oklch(49% 0.084 99.7)",
+          "oklch(61% 0.084 99.7)",
+          "oklch(72% 0.084 99.7)",
+          "oklch(84% 0.084 99.7)",
+          "oklch(95% 0.084 99.7)"
+        ]
+      },
+      "butter-ink": {
+        "role": "secondary",
+        "displayName": "Butter Ink",
+        "canonical": "oklch(51.1% 0.098 92.5)",
+        "dark": "#ecdc93",
+        "purpose": "Connectors field ink; also the starred mark in the reading list, where it is set as both color and fill so an on state reads from across the row.",
+        "tonalRamp": [
+          "oklch(15% 0.098 92.5)",
+          "oklch(26% 0.098 92.5)",
+          "oklch(38% 0.098 92.5)",
+          "oklch(49% 0.098 92.5)",
+          "oklch(61% 0.098 92.5)",
+          "oklch(72% 0.098 92.5)",
+          "oklch(84% 0.098 92.5)",
+          "oklch(95% 0.098 92.5)"
+        ]
+      },
+      "mint": {
+        "role": "secondary",
+        "displayName": "Mint",
+        "canonical": "oklch(89.8% 0.049 161.1)",
+        "dark": "#204536",
+        "purpose": "Everyday field ground; also the system's affirmative — the correct Learn choice and the 'known' tally.",
+        "tonalRamp": [
+          "oklch(15% 0.049 161.1)",
+          "oklch(26% 0.049 161.1)",
+          "oklch(38% 0.049 161.1)",
+          "oklch(49% 0.049 161.1)",
+          "oklch(61% 0.049 161.1)",
+          "oklch(72% 0.049 161.1)",
+          "oklch(84% 0.049 161.1)",
+          "oklch(95% 0.049 161.1)"
+        ]
+      },
+      "mint-ink": {
+        "role": "secondary",
+        "displayName": "Mint Ink",
+        "canonical": "oklch(47.5% 0.095 158.8)",
+        "dark": "#9adcbb",
+        "purpose": "Everyday field ink; also the revealed answer, the switch-on state, the primary button's hover warmth and the dark theme's focus ring.",
+        "tonalRamp": [
+          "oklch(15% 0.095 158.8)",
+          "oklch(26% 0.095 158.8)",
+          "oklch(38% 0.095 158.8)",
+          "oklch(49% 0.095 158.8)",
+          "oklch(61% 0.095 158.8)",
+          "oklch(72% 0.095 158.8)",
+          "oklch(84% 0.095 158.8)",
+          "oklch(95% 0.095 158.8)"
+        ]
+      },
+      "rail": {
+        "role": "neutral",
+        "displayName": "Rail Blush",
+        "canonical": "oklch(93.4% 0.018 48.5)",
+        "dark": "#221b17",
+        "purpose": "The 76px navigation rail only.",
+        "tonalRamp": [
+          "oklch(15% 0.018 48.5)",
+          "oklch(26% 0.018 48.5)",
+          "oklch(38% 0.018 48.5)",
+          "oklch(49% 0.018 48.5)",
+          "oklch(61% 0.018 48.5)",
+          "oklch(72% 0.018 48.5)",
+          "oklch(84% 0.018 48.5)",
+          "oklch(95% 0.018 48.5)"
+        ]
+      },
+      "panel": {
+        "role": "neutral",
+        "displayName": "Panel White",
+        "canonical": "oklch(100.0% 0.000 89.9)",
+        "dark": "#221b17",
+        "purpose": "Cards and panels sitting on the plate: aside panels, inputs, chips, unselected buttons.",
+        "tonalRamp": [
+          "oklch(15% 0.000 89.9)",
+          "oklch(26% 0.000 89.9)",
+          "oklch(38% 0.000 89.9)",
+          "oklch(49% 0.000 89.9)",
+          "oklch(61% 0.000 89.9)",
+          "oklch(72% 0.000 89.9)",
+          "oklch(84% 0.000 89.9)",
+          "oklch(95% 0.000 89.9)"
+        ]
+      },
+      "sunk": {
+        "role": "neutral",
+        "displayName": "Sunk Cream",
+        "canonical": "oklch(95.6% 0.012 67.7)",
+        "dark": "#14100d",
+        "purpose": "Recessed wells: keyword pills, the study progress track, the segmented control's trough, the language-pair block and the Learn choice's key badge.",
+        "tonalRamp": [
+          "oklch(15% 0.012 67.7)",
+          "oklch(26% 0.012 67.7)",
+          "oklch(38% 0.012 67.7)",
+          "oklch(49% 0.012 67.7)",
+          "oklch(61% 0.012 67.7)",
+          "oklch(72% 0.012 67.7)",
+          "oklch(84% 0.012 67.7)",
+          "oklch(95% 0.012 67.7)"
+        ]
+      },
+      "ink-2": {
+        "role": "neutral",
+        "displayName": "Ink Two",
+        "canonical": "oklch(44.6% 0.021 50.1)",
+        "dark": "#b6a79d",
+        "purpose": "Secondary prose that still wants reading: ledes, descriptions, examples, quiet buttons, and the reading list's translation column.",
+        "tonalRamp": [
+          "oklch(15% 0.021 50.1)",
+          "oklch(26% 0.021 50.1)",
+          "oklch(38% 0.021 50.1)",
+          "oklch(49% 0.021 50.1)",
+          "oklch(61% 0.021 50.1)",
+          "oklch(72% 0.021 50.1)",
+          "oklch(84% 0.021 50.1)",
+          "oklch(95% 0.021 50.1)"
+        ]
+      },
+      "ink-3": {
+        "role": "neutral",
+        "displayName": "Ink Three",
+        "canonical": "oklch(53.6% 0.025 54.0)",
+        "dark": "#9c8d83",
+        "purpose": "Metadata that does not want reading: group counts, origin lines, key hints, the unstarred star, and the shaded word in a display headline.",
+        "tonalRamp": [
+          "oklch(15% 0.025 54.0)",
+          "oklch(26% 0.025 54.0)",
+          "oklch(38% 0.025 54.0)",
+          "oklch(49% 0.025 54.0)",
+          "oklch(61% 0.025 54.0)",
+          "oklch(72% 0.025 54.0)",
+          "oklch(84% 0.025 54.0)",
+          "oklch(95% 0.025 54.0)"
+        ]
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Line",
+        "canonical": "oklch(90.2% 0.018 59.5)",
+        "dark": "#33291f",
+        "purpose": "Structural division inside a surface: list rows, settings rows, panel borders, the rail edge.",
+        "tonalRamp": [
+          "oklch(15% 0.018 59.5)",
+          "oklch(26% 0.018 59.5)",
+          "oklch(38% 0.018 59.5)",
+          "oklch(49% 0.018 59.5)",
+          "oklch(61% 0.018 59.5)",
+          "oklch(72% 0.018 59.5)",
+          "oklch(84% 0.018 59.5)",
+          "oklch(95% 0.018 59.5)"
+        ]
+      },
+      "line-strong": {
+        "role": "neutral",
+        "displayName": "Line Strong",
+        "canonical": "oklch(84.6% 0.024 56.9)",
+        "dark": "#4a3c30",
+        "purpose": "Interactive outline at rest: buttons, chips, inputs, kbd, scrollbar thumbs.",
+        "tonalRamp": [
+          "oklch(15% 0.024 56.9)",
+          "oklch(26% 0.024 56.9)",
+          "oklch(38% 0.024 56.9)",
+          "oklch(49% 0.024 56.9)",
+          "oklch(61% 0.024 56.9)",
+          "oklch(72% 0.024 56.9)",
+          "oklch(84% 0.024 56.9)",
+          "oklch(95% 0.024 56.9)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "The page headline, one per screen, capped at 15ch and balanced. 3.75rem, stepping to 2.75rem below 860px and 2.25rem below 620px — one role at three breakpoints, not three roles.",
+        "responsive": [
+          "3.75rem",
+          "2.75rem @860",
+          "2.25rem @620"
+        ],
+        "exception": "2.5rem on the session-summary headline, which shares the stage with a 96px ring."
+      },
+      "prompt": {
+        "displayName": "Prompt",
+        "purpose": "The study card's word. The only fluid size in the system, because it is the only element whose length the design does not control."
+      },
+      "tile-lead": {
+        "displayName": "Tile Lead",
+        "purpose": "The lead category tile's line."
+      },
+      "answer": {
+        "displayName": "Answer",
+        "purpose": "The revealed translation, set in mint ink. The one large size cut at 500 rather than 600, and the reason it is tracked looser than the smaller tile title."
+      },
+      "tile": {
+        "displayName": "Tile",
+        "purpose": "The small category tile's line, pushed to the bottom of the tile by margin-top: auto."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "h2 — panel and section headings."
+      },
+      "lead": {
+        "displayName": "Lead",
+        "purpose": "The due bar's headline. The largest step that is still a label rather than a heading."
+      },
+      "headword": {
+        "displayName": "Headword",
+        "purpose": "The deck card's front — the only role that carries the Toward-Ink mix as its default colour."
+      },
+      "base": {
+        "displayName": "Base",
+        "purpose": "The boundary between heading and prose: h3 at 600/-0.01em, examples and Learn choices at 400."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Default text, buttons, inputs, the reading-list row and its group head. Ledes cap at 46ch, examples at 52ch, setting descriptions at 56ch. Tabular numerals are set here and never overridden."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "The interactive voice: chips, segmented control, deck chips, toast, setting descriptions, the shortcuts list."
+      },
+      "meta": {
+        "displayName": "Meta",
+        "purpose": "The workhorse and the most-used size in the app by a wide margin. Field labels and hints, sub-lines, tallies, group counts, keyword pills, origin lines, key hints, the small CEFR chip."
+      },
+      "caption": {
+        "displayName": "Caption",
+        "purpose": "Tags, due counts, counters, the word-card footer, the grade hint, the deck-chip count. Small, and heavy enough to survive on a pastel ground."
+      },
+      "micro": {
+        "displayName": "Micro",
+        "purpose": "The CEFR level pill and the art placeholder's prompt text. Nothing required to use the app is set this small."
+      },
+      "ring-label": {
+        "displayName": "Ring Label",
+        "purpose": "Bound to the ring's own --size so one component covers 40px to 96px."
+      },
+      "code": {
+        "displayName": "Code",
+        "purpose": "Inline code in the platform mono stack. Em-relative, so it tracks whatever role it is embedded in rather than adding a seventeenth absolute step."
+      }
+    },
+    "ramp": {
+      "closed": true,
+      "note": "This is the complete set of font sizes that ships across ui/app.css, ui/app.js and ui/index.html. A new size is a change to the system, not a local choice.",
+      "sizesByFrequency": [
+        {
+          "size": "0.8125rem",
+          "uses": 13,
+          "role": "meta"
+        },
+        {
+          "size": "0.9375rem",
+          "uses": 9,
+          "role": "body"
+        },
+        {
+          "size": "0.875rem",
+          "uses": 6,
+          "role": "label"
+        },
+        {
+          "size": "0.75rem",
+          "uses": 6,
+          "role": "caption"
+        },
+        {
+          "size": "1rem",
+          "uses": 3,
+          "role": "base"
+        },
+        {
+          "size": "0.85em",
+          "uses": 3,
+          "role": "code"
+        },
+        {
+          "size": "0.6875rem",
+          "uses": 2,
+          "role": "micro"
+        },
+        {
+          "size": "3.75rem",
+          "uses": 1,
+          "role": "display"
+        },
+        {
+          "size": "2.75rem",
+          "uses": 1,
+          "role": "display @860"
+        },
+        {
+          "size": "2.25rem",
+          "uses": 1,
+          "role": "display @620"
+        },
+        {
+          "size": "2.5rem",
+          "uses": 1,
+          "role": "display (session-summary exception)"
+        },
+        {
+          "size": "clamp(2rem, 3.4vw, 3.25rem)",
+          "uses": 1,
+          "role": "prompt"
+        },
+        {
+          "size": "1.625rem",
+          "uses": 1,
+          "role": "answer"
+        },
+        {
+          "size": "1.5rem",
+          "uses": 1,
+          "role": "tile"
+        },
+        {
+          "size": "1.3125rem",
+          "uses": 1,
+          "role": "title"
+        },
+        {
+          "size": "1.125rem",
+          "uses": 1,
+          "role": "lead"
+        },
+        {
+          "size": "1.0625rem",
+          "uses": 1,
+          "role": "headword"
+        },
+        {
+          "size": "clamp(0.625rem, calc(var(--size) * 0.25), 2rem)",
+          "uses": 1,
+          "role": "ring-label"
+        }
+      ],
+      "tracking": "A band that tightens with size and never runs positive above 1rem: -0.01em at 1rem and below, -0.015em at 1.0625-1.125rem, -0.02em at 1.3125rem, -0.03em at 1.5rem, -0.04em at display and prompt. The only positive tracking is +0.005em on caption. The band's one deliberate inversion is the answer at 1.625rem / -0.025em, the sole large size cut at 500 — lighter weight needs less tightening."
+    },
+    "radii": {
+      "tokenized": true,
+      "audit": "grep -E 'border-radius: *[0-9]+px' ui/app.css must return nothing.",
+      "scale": [
+        {
+          "token": "--r-xl",
+          "value": "30px",
+          "use": "The plate. One user; the app's outermost silhouette."
+        },
+        {
+          "token": "--r-lg",
+          "value": "22px",
+          "use": "Every content surface: panels, category tiles, word cards, the due bar, the language-pair block."
+        },
+        {
+          "token": "--r-md",
+          "value": "15px",
+          "use": "Controls that hold a value or an icon: inputs, selects, grade buttons, Learn choices, art frames, and the rail's icon buttons."
+        },
+        {
+          "token": "--r-sm",
+          "value": "10px",
+          "use": "The small icon plate inside a category tile's header, and the hovered reading-list row."
+        },
+        {
+          "token": "--r-xs",
+          "value": "6px",
+          "use": "The smallest containers: keycaps, inline code, the Learn choice's key badge, the list's group icon, the star's hit target, and the global focus ring's corner."
+        },
+        {
+          "token": "--pill",
+          "value": "999px",
+          "use": "Everything pressable that is not a card, plus every track and meter."
+        }
+      ],
+      "closed": true,
+      "note": "Six steps, closed. A seventh (--r-bar, 4px) existed for the activity chart's caps and was deleted with the chart; a token with no user is not part of the system."
+    },
+    "shadows": [
+      {
+        "name": "lift-1",
+        "value": "0 1px 2px rgb(60 40 30 / 0.05), 0 6px 16px -10px rgb(60 40 30 / 0.28)",
+        "dark": "0 1px 2px rgb(0 0 0 / 0.4), 0 6px 16px -10px rgb(0 0 0 / 0.7)",
+        "purpose": "The response to a cursor: buttons and Learn choices on hover, the pressed segment, the switch knob."
+      },
+      {
+        "name": "lift-2",
+        "value": "0 2px 4px rgb(60 40 30 / 0.06), 0 18px 40px -22px rgb(60 40 30 / 0.4)",
+        "dark": "0 2px 4px rgb(0 0 0 / 0.45), 0 18px 40px -22px rgb(0 0 0 / 0.8)",
+        "purpose": "Things already raised: the primary button and due bar at rest; tiles, word cards and grade buttons on hover, always with a 2-3px translateY."
+      },
+      {
+        "name": "lift-3",
+        "value": "0 3px 8px rgb(60 40 30 / 0.08), 0 40px 80px -40px rgb(60 40 30 / 0.5)",
+        "dark": "0 3px 8px rgb(0 0 0 / 0.5), 0 40px 80px -40px rgb(0 0 0 / 0.9)",
+        "purpose": "The two surfaces that float above the whole app: the plate and the toast."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease",
+        "value": "cubic-bezier(0.22, 1, 0.36, 1)",
+        "purpose": "The only easing curve in the system."
+      },
+      {
+        "name": "duration-state",
+        "value": "160ms",
+        "purpose": "Every hover, press and colour state change."
+      },
+      {
+        "name": "duration-surface",
+        "value": "180-220ms",
+        "purpose": "Surfaces that lift or translate: tiles, word cards, the switch knob, the toast."
+      },
+      {
+        "name": "duration-progress",
+        "value": "300ms",
+        "purpose": "The study progress fill, animated as transform: scaleX() rather than width because it runs on every card."
+      },
+      {
+        "name": "card-turn",
+        "value": "opacity 180ms, transform 320ms; from opacity 0 / translateY(10px) scale(0.985)",
+        "purpose": "The one authored moment. A transition, not an animation."
+      },
+      {
+        "name": "rise",
+        "value": "@keyframes rise — 420ms both; from opacity 0 / translateY(12px)",
+        "purpose": "The only @keyframes in the stylesheet. Applied through .enter on exactly two surfaces: the empty state and the session summary."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "animation-duration 0.01ms !important; transition-duration 0.01ms !important",
+        "purpose": "prefers-reduced-motion: reduce collapses every animation and transition in the sheet."
+      }
+    ],
+    "breakpoints": [
+      {
+        "max": "1120px",
+        "purpose": "Study drops its 300px session column; the panel moves under the card and its log wraps into a row."
+      },
+      {
+        "name": "md",
+        "value": "860px",
+        "purpose": "Display drops to 2.75rem, page padding tightens to 26px 22px 36px, category grid goes single-column with the lead tile's image above its text, Learn choices single-column, settings rows stack."
+      },
+      {
+        "name": "sm",
+        "value": "620px",
+        "purpose": "Body inset removed: the plate goes edge-to-edge with square corners and the rail becomes a sticky horizontal top bar."
+      },
+      {
+        "name": "xs",
+        "value": "480px",
+        "purpose": "Filter rows become a horizontally scrolling, snap-aligned strip bleeding 18px past the page padding."
+      }
+    ],
+    "layout": {
+      "routes": [
+        "overview",
+        "deck",
+        "study",
+        "settings"
+      ],
+      "plate": {
+        "maxWidth": "1440px",
+        "inset": "20px",
+        "radius": "var(--r-xl)",
+        "elevation": "lift-3",
+        "grid": "76px minmax(0, 1fr)"
+      },
+      "rail": {
+        "width": "76px",
+        "contents": "mark, four nav items, flexible spacer, theme, shortcuts"
+      },
+      "page": {
+        "padding": "34px 40px 44px"
+      },
+      "overview": {
+        "columns": "single",
+        "behaviour": "With no category chosen it shows the category tile grid (repeat(2, minmax(0,1fr)) at 16px, first tile spanning both columns with a 190px image panel). With a category chosen the tiles are replaced by that category's reading list, because a single tile would only repeat the heading above it."
+      },
+      "deck": {
+        "views": [
+          "list (default)",
+          "grid"
+        ],
+        "grid": "repeat(auto-fill, minmax(268px, 1fr))",
+        "gap": "14px",
+        "note": "The only auto-fill grid in the app; the deck is the one surface whose item count is unbounded."
+      },
+      "readingList": {
+        "row": "grid-template-columns: 32px minmax(0, 1.1fr) minmax(0, 1.4fr) auto 56px",
+        "gap": "14px",
+        "padding": "9px 4px",
+        "groupGap": "26px",
+        "note": "Grouped by category when the list spans more than one, flat when it does not."
+      },
+      "study": {
+        "grid": "auto minmax(0, 1fr) auto",
+        "idle": "[data-idle] collapses the grid to minmax(0, 1fr) so the empty state centres instead of perching at the top of a three-row frame",
+        "stage": "min-height: 0 with overflow-y: auto, so a short window scrolls the card rather than clipping it",
+        "minHeight": "calc(100dvh - 40px)",
+        "padding": "0",
+        "selectorNote": "Must be .page.study[data-active]; a bare .study rule outranks .page { display: none }."
+      },
+      "settings": {
+        "maxWidth": "760px",
+        "row": "copy block on the start edge, fixed 220px control block on the end edge, line hairline between, no border on the last row"
+      }
+    },
+    "icons": {
+      "set": "Lucide (vendored subset)",
+      "file": "ui/icons.svg",
+      "strokeWidth": 1.75,
+      "sizes": [
+        "20px default",
+        "16px icon-sm",
+        "13px inside tags and chip dots"
+      ],
+      "note": "<use> clones a symbol into a shadow tree, so the sprite root's presentation attributes never reach it. Stroke is declared in CSS on .icon, never in the sprite, so any new symbol inherits the weight. Icons take currentColor, which on a tinted surface is that field's ink. fill stays none everywhere except the starred star, which fills with butter ink."
+    },
+    "internationalization": {
+      "direction": "The stylesheet is written in logical properties throughout, so dir=\"rtl\" mirrors automatically. Exactly two things are flipped by hand: transform-origin on the progress fill and the switch knob's translate, and scale(-1,1) on the chevron glyph in a chip.",
+      "interfaceLanguage": "gettext-style dictionaries in ui/i18n/<code>.json where the English sentence is the key; a missing entry degrades to English. Settings carries a uiLang selector listing only the languages a dictionary exists for; its value is the language actually being rendered, never the raw setting, so the control cannot claim a language it has no dictionary for. It is independent of the deck's target. Layout must survive a ~30% string expansion (ru.json is the reference case)."
+    },
+    "accessibility": {
+      "contrastFloor": "The Toward-Ink pairing as it ships measures 6.53-7.57:1 for senior lines and 4.59-5.62:1 for junior lines in light, and 6.45-7.61:1 throughout in dark. Fading toward transparent on the same fields measured 2.88-3.48:1 and is prohibited; the codebase has zero instances.",
+      "focus": "Global :focus-visible is a 2px ink outline at 2px offset with an --r-xs corner; mint ink in dark. Inputs replace it with an ink border plus a 3px halo of 12% ink.",
+      "starState": "The star's on state is carried by fill as well as colour, not by colour alone, so it survives at 16px and does not depend on hue discrimination against the row."
+    },
+    "removed": {
+      "note": "Removed when the product turned from a trainer into a notebook. Do not reintroduce; see The No-Instrument Rule.",
+      "items": [
+        "the Progress route",
+        "the Overview aside: profile block, avatar, language-pair line, streak and mastery stat tiles",
+        "the daily-goal ring and its panel",
+        "the twelve-week and 84-day activity charts and their axes",
+        "mastery-by-domain and CEFR-spread bar charts",
+        "the hardest-words list",
+        "the rail avatar"
+      ]
+    },
+    "contractDivergence": "The FIRST VIEWPORT line in ui/index.html's direction contract still describes a right column carrying profile, goal ring and twelve weeks of activity. That column was removed with the product turn. The contract is stale on that point; this record describes what ships."
+  },
+  "components": [
+    {
+      "name": "Reading List",
+      "kind": "custom",
+      "refersTo": "list-row",
+      "description": "The notebook view and the app's default way of showing words: one line per word — star, headword, translation, CEFR badge, mastery meter. The category field identifies quietly, as a tinted headword and a 26% hover wash, never as a filled row.",
+      "html": "<div class=\"ds-group\" style=\"--tint:var(--sky,#cbe0f7);--tint-ink:var(--sky-ink,#23558f)\"><h3 class=\"ds-group-head\"><span class=\"ds-group-icon\"><svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M12 19h8\"/><path d=\"m4 17 6-6-6-6\"/></svg></span>Engineering<span class=\"ds-group-count\">3</span></h3><ul class=\"ds-rows\"><li class=\"ds-row\" style=\"--tint:var(--sky,#cbe0f7);--tint-ink:var(--sky-ink,#23558f)\"><button class=\"ds-star\" aria-pressed=\"true\" aria-label=\"Favourite\"><svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"currentColor\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z\"/></svg></button><span class=\"ds-row-front\">rollback window</span><span class=\"ds-row-back\">окно отката</span><span class=\"ds-level\">B2</span><span class=\"ds-meter\"><i style=\"width:64%\"></i></span></li><li class=\"ds-row\" style=\"--tint:var(--sky,#cbe0f7);--tint-ink:var(--sky-ink,#23558f)\"><button class=\"ds-star\" aria-pressed=\"false\" aria-label=\"Favourite\"><svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z\"/></svg></button><span class=\"ds-row-front\">flaky test</span><span class=\"ds-row-back\">нестабильный тест</span><span class=\"ds-level\">B1</span><span class=\"ds-meter\"><i style=\"width:28%\"></i></span></li><li class=\"ds-row\" style=\"--tint:var(--sky,#cbe0f7);--tint-ink:var(--sky-ink,#23558f)\"><button class=\"ds-star\" aria-pressed=\"false\" aria-label=\"Favourite\"><svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z\"/></svg></button><span class=\"ds-row-front\">back-pressure</span><span class=\"ds-row-back\">обратное давление</span><span class=\"ds-level\">C1</span><span class=\"ds-meter\"><i style=\"width:12%\"></i></span></li></ul></div>",
+      "css": ".ds-group { font-family: var(--sans, 'General Sans', ui-sans-serif, system-ui, sans-serif); font-variant-numeric: tabular-nums; } .ds-group-head { display: flex; align-items: center; gap: 9px; padding: 0 4px 10px; border-bottom: 1px solid var(--line, #e8dcd3); font-size: 0.9375rem; font-weight: 600; letter-spacing: -0.01em; color: var(--tint-ink); margin: 0; } .ds-group-icon { display: grid; place-items: center; width: 24px; height: 24px; border-radius: var(--r-xs, 6px); background: var(--tint); } .ds-group-count { margin-inline-start: auto; font-size: 0.8125rem; font-weight: 500; color: var(--ink-3, #7a6a60); } .ds-rows { list-style: none; margin: 0; padding: 0; } .ds-row { display: grid; grid-template-columns: 32px minmax(0, 1.1fr) minmax(0, 1.4fr) auto 56px; align-items: center; gap: 14px; padding: 9px 4px; border-bottom: 1px solid var(--line, #e8dcd3); font-size: 0.9375rem; } .ds-row:last-child { border-bottom: 0; } .ds-row:hover { background: color-mix(in srgb, var(--tint) 26%, transparent); border-radius: var(--r-sm, 10px); border-bottom-color: transparent; } .ds-row-front { font-weight: 600; letter-spacing: -0.01em; color: var(--tint-ink); overflow-wrap: anywhere; } .ds-row-back { color: var(--ink-2, #5e514a); overflow-wrap: anywhere; } .ds-star { display: grid; place-items: center; width: 28px; height: 28px; border: 0; background: none; cursor: pointer; border-radius: var(--r-xs, 6px); color: var(--ink-3, #7a6a60); transition: color 160ms cubic-bezier(.22,1,.36,1), background 160ms cubic-bezier(.22,1,.36,1); } .ds-star:hover { background: color-mix(in srgb, var(--ink, #17110e) 7%, transparent); color: var(--ink, #17110e); } .ds-star:focus-visible { outline: 2px solid var(--ink, #17110e); outline-offset: 2px; } .ds-star[aria-pressed='true'] { color: var(--butter-ink, #7a6412); } .ds-star[aria-pressed='true'] svg { fill: var(--butter-ink, #7a6412); } .ds-level { display: inline-grid; place-items: center; height: 24px; padding: 0 9px; border-radius: var(--pill, 999px); border: 1px solid color-mix(in srgb, currentColor 26%, transparent); font-size: 0.6875rem; font-weight: 600; color: var(--tint-ink); } .ds-meter { height: 5px; border-radius: var(--pill, 999px); background: color-mix(in srgb, var(--tint-ink) 16%, transparent); overflow: hidden; } .ds-meter i { display: block; height: 100%; border-radius: var(--pill, 999px); background: var(--tint-ink); }"
+    },
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The single primary action on a screen. Ink fill, lifted at rest, warming toward mint ink on hover.",
+      "html": "<button class=\"ds-btn ds-btn-primary\"><svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z\"/></svg><span>Start session</span></button>",
+      "css": ".ds-btn { display: inline-flex; align-items: center; gap: 9px; padding: 11px 20px; border-radius: var(--pill, 999px); border: 1px solid var(--line-strong, #d9c9be); background: var(--panel, #fff); color: var(--ink, #17110e); font: 500 0.9375rem/1.55 var(--sans, 'General Sans', ui-sans-serif, system-ui, sans-serif); font-variant-numeric: tabular-nums; white-space: nowrap; cursor: pointer; transition: transform 160ms cubic-bezier(.22,1,.36,1), background 160ms cubic-bezier(.22,1,.36,1), border-color 160ms cubic-bezier(.22,1,.36,1), box-shadow 160ms cubic-bezier(.22,1,.36,1); } .ds-btn-primary { background: var(--ink, #17110e); border-color: var(--ink, #17110e); color: var(--plate, #fdf8f3); padding: 13px 24px; box-shadow: var(--lift-2, 0 2px 4px rgb(60 40 30 / .06), 0 18px 40px -22px rgb(60 40 30 / .4)); } .ds-btn-primary:hover { background: color-mix(in srgb, var(--ink, #17110e) 88%, var(--mint-ink, #1f6c48)); border-color: transparent; } .ds-btn:active { transform: translateY(1px); } .ds-btn:focus-visible { outline: 2px solid var(--ink, #17110e); outline-offset: 2px; }"
+    },
+    {
+      "name": "Default Button",
+      "kind": "button",
+      "refersTo": "button",
+      "description": "Bordered, flat at rest per the Border-Or-Lift Rule; takes Lift 1 only under the cursor. May carry a count pill tinted from its own currentColor.",
+      "html": "<button class=\"ds-btn2\"><svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z\"/><path d=\"M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12\"/><path d=\"M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17\"/></svg><span>Browse the deck</span><span class=\"ds-count\">42</span></button>",
+      "css": ".ds-btn2 { display: inline-flex; align-items: center; gap: 9px; padding: 11px 20px; border-radius: var(--pill, 999px); border: 1px solid var(--line-strong, #d9c9be); background: var(--panel, #fff); color: var(--ink, #17110e); font: 500 0.9375rem/1.55 var(--sans, 'General Sans', ui-sans-serif, system-ui, sans-serif); font-variant-numeric: tabular-nums; cursor: pointer; transition: transform 160ms cubic-bezier(.22,1,.36,1), border-color 160ms cubic-bezier(.22,1,.36,1), box-shadow 160ms cubic-bezier(.22,1,.36,1); } .ds-btn2:hover { border-color: var(--ink-3, #7a6a60); box-shadow: var(--lift-1, 0 1px 2px rgb(60 40 30 / .05), 0 6px 16px -10px rgb(60 40 30 / .28)); } .ds-btn2:active { transform: translateY(1px); } .ds-btn2:focus-visible { outline: 2px solid var(--ink, #17110e); outline-offset: 2px; } .ds-count { display: inline-grid; place-items: center; min-width: 22px; height: 22px; padding: 0 7px; border-radius: var(--pill, 999px); background: color-mix(in srgb, currentColor 16%, transparent); font-size: 0.75rem; font-weight: 600; }"
+    },
+    {
+      "name": "Category Filter Chip",
+      "kind": "chip",
+      "refersTo": "chip",
+      "description": "Filter pill carrying the category as a 20px swatch dot. Selection is an ink fill, never a coloured outline.",
+      "html": "<div class=\"ds-chiprow\"><button class=\"ds-chip\" aria-pressed=\"false\" style=\"--tint:var(--sky,#cbe0f7);--tint-ink:var(--sky-ink,#23558f)\"><span class=\"ds-dot\"><svg viewBox=\"0 0 24 24\" width=\"13\" height=\"13\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M12 19h8\"/><path d=\"m4 17 6-6-6-6\"/></svg></span>Engineering</button><button class=\"ds-chip\" aria-pressed=\"false\" style=\"--tint:var(--peach,#fbdfb6);--tint-ink:var(--peach-ink,#8a5a1c)\"><span class=\"ds-dot\"><svg viewBox=\"0 0 24 24\" width=\"13\" height=\"13\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"m10.586 5.414-5.172 5.172\"/><path d=\"m18.586 13.414-5.172 5.172\"/><path d=\"M6 12h12\"/><circle cx=\"12\" cy=\"20\" r=\"2\"/><circle cx=\"12\" cy=\"4\" r=\"2\"/><circle cx=\"20\" cy=\"12\" r=\"2\"/><circle cx=\"4\" cy=\"12\" r=\"2\"/></svg></span>Process</button><button class=\"ds-chip\" aria-pressed=\"true\" style=\"--tint:var(--mint,#c2e8d3);--tint-ink:var(--mint-ink,#1f6c48)\"><span class=\"ds-dot\"><svg viewBox=\"0 0 24 24\" width=\"13\" height=\"13\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z\"/><path d=\"M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12\"/><path d=\"M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17\"/></svg></span>Everyday</button></div>",
+      "css": ".ds-chiprow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-family: var(--sans, 'General Sans', ui-sans-serif, system-ui, sans-serif); } .ds-chip { display: inline-flex; align-items: center; gap: 8px; height: 38px; padding: 0 15px 0 11px; border-radius: var(--pill, 999px); border: 1px solid var(--line-strong, #d9c9be); background: var(--panel, #fff); color: var(--ink-2, #5e514a); font: 500 0.875rem/1.3 var(--sans, 'General Sans', ui-sans-serif, system-ui, sans-serif); cursor: pointer; transition: background 160ms cubic-bezier(.22,1,.36,1), color 160ms cubic-bezier(.22,1,.36,1), border-color 160ms cubic-bezier(.22,1,.36,1); } .ds-dot { width: 20px; height: 20px; border-radius: var(--pill, 999px); display: grid; place-items: center; background: var(--tint, #f6efe8); color: var(--tint-ink, #5e514a); } .ds-chip:hover { border-color: var(--ink-3, #7a6a60); color: var(--ink, #17110e); } .ds-chip:focus-visible { outline: 2px solid var(--ink, #17110e); outline-offset: 2px; } .ds-chip[aria-pressed='true'] { background: var(--ink, #17110e); border-color: var(--ink, #17110e); color: var(--plate, #fdf8f3); } .ds-chip[aria-pressed='true'] .ds-dot { background: color-mix(in srgb, var(--plate, #fdf8f3) 22%, transparent); color: var(--plate, #fdf8f3); }"
+    },
+    {
+      "name": "Segmented Control",
+      "kind": "custom",
+      "description": "A sunk trough holding pill buttons; the pressed segment lifts to panel white with Lift 1. The one place a raised surface means 'current' rather than 'pressable', because the trough already reads as the resting plane. Carries the Deck's list/grid choice and the Overview's study mode.",
+      "html": "<div class=\"ds-seg\" role=\"group\" aria-label=\"View\"><button aria-pressed=\"true\"><svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M2 5h20\"/><path d=\"M6 12h12\"/><path d=\"M9 19h6\"/></svg>List</button><button aria-pressed=\"false\"><svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z\"/><path d=\"M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12\"/><path d=\"M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17\"/></svg>Cards</button></div>",
+      "css": ".ds-seg { display: inline-flex; padding: 4px; gap: 4px; border-radius: var(--pill, 999px); background: var(--sunk, #f6efe8); border: 1px solid var(--line, #e8dcd3); } .ds-seg button { display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 15px; border: 0; background: none; border-radius: var(--pill, 999px); font: 500 0.875rem/1.3 var(--sans, 'General Sans', ui-sans-serif, system-ui, sans-serif); color: var(--ink-2, #5e514a); cursor: pointer; transition: background 160ms cubic-bezier(.22,1,.36,1), color 160ms cubic-bezier(.22,1,.36,1); } .ds-seg button:hover { color: var(--ink, #17110e); } .ds-seg button:focus-visible { outline: 2px solid var(--ink, #17110e); outline-offset: 2px; } .ds-seg button[aria-pressed='true'] { background: var(--panel, #fff); color: var(--ink, #17110e); box-shadow: var(--lift-1, 0 1px 2px rgb(60 40 30 / .05), 0 6px 16px -10px rgb(60 40 30 / .28)); }"
+    },
+    {
+      "name": "Search Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Text field. Focus replaces the browser outline with an ink border plus a soft 3px halo of 12% ink.",
+      "html": "<div class=\"ds-search\"><svg viewBox=\"0 0 24 24\" width=\"20\" height=\"20\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"m21 21-4.34-4.34\"/><circle cx=\"11\" cy=\"11\" r=\"8\"/></svg><input class=\"ds-input\" type=\"search\" placeholder=\"Search the deck\"></div>",
+      "css": ".ds-search { position: relative; max-width: 340px; } .ds-search > svg { position: absolute; inset-inline-start: 14px; top: 50%; transform: translateY(-50%); color: var(--ink-3, #7a6a60); pointer-events: none; } .ds-input { width: 100%; height: 38px; padding: 0 14px 0 42px; border-radius: var(--pill, 999px); border: 1px solid var(--line-strong, #d9c9be); background: var(--panel, #fff); color: var(--ink, #17110e); font: 400 0.9375rem/1.55 var(--sans, 'General Sans', ui-sans-serif, system-ui, sans-serif); transition: border-color 160ms cubic-bezier(.22,1,.36,1), box-shadow 160ms cubic-bezier(.22,1,.36,1); } .ds-input::placeholder { color: var(--ink-3, #7a6a60); } .ds-input:hover { border-color: var(--ink-3, #7a6a60); } .ds-input:focus { outline: none; border-color: var(--ink, #17110e); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ink, #17110e) 12%, transparent); }"
+    },
+    {
+      "name": "Category Tile",
+      "kind": "card",
+      "refersTo": "category-tile",
+      "description": "The loud expression of the field: a category owns the whole tile, ground and ink, with its mastery ring attached. Substitute any of the six --tint / --tint-ink pairs.",
+      "html": "<button class=\"ds-cat\" style=\"--tint:var(--sky,#cbe0f7);--tint-ink:var(--sky-ink,#23558f)\"><div class=\"ds-cat-top\"><span class=\"ds-cat-icon\"><svg viewBox=\"0 0 24 24\" width=\"20\" height=\"20\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M12 19h8\"/><path d=\"m4 17 6-6-6-6\"/></svg></span><span class=\"ds-cat-name\">Engineering</span><span class=\"ds-cat-due\"><svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M12 3q1 4 4 6.5t3 5.5a1 1 0 0 1-14 0 5 5 0 0 1 1-3 1 1 0 0 0 5 0c0-2-1.5-3-1.5-5q0-2 2.5-4\"/></svg>4 due</span></div><div class=\"ds-cat-title\">Code, systems, debugging, review</div><div class=\"ds-cat-foot\"><span>10 words &middot; 1 learned</span><div class=\"ds-ring\" style=\"--value:.22\"><span class=\"ds-ring-label\">22%</span></div></div></button>",
+      "css": ".ds-cat { position: relative; display: flex; flex-direction: column; gap: 12px; padding: 18px; min-height: 158px; width: 320px; border-radius: var(--r-lg, 22px); border: 1px solid color-mix(in srgb, var(--tint-ink) 16%, transparent); background: var(--tint); color: var(--tint-ink); text-align: start; cursor: pointer; font-family: var(--sans, 'General Sans', ui-sans-serif, system-ui, sans-serif); font-variant-numeric: tabular-nums; transition: transform 200ms cubic-bezier(.22,1,.36,1), box-shadow 200ms cubic-bezier(.22,1,.36,1); } .ds-cat:hover { transform: translateY(-3px); box-shadow: var(--lift-2, 0 2px 4px rgb(60 40 30 / .06), 0 18px 40px -22px rgb(60 40 30 / .4)); } .ds-cat:focus-visible { outline: 2px solid var(--ink, #17110e); outline-offset: 2px; } .ds-cat-top { display: flex; align-items: center; gap: 10px; } .ds-cat-icon { width: 34px; height: 34px; display: grid; place-items: center; border-radius: var(--r-sm, 10px); background: color-mix(in srgb, var(--tint-ink) 12%, transparent); } .ds-cat-name { font-size: 0.9375rem; font-weight: 600; letter-spacing: -0.01em; } .ds-cat-due { margin-inline-start: auto; display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: var(--pill, 999px); background: color-mix(in srgb, var(--tint-ink) 14%, transparent); font-weight: 600; font-size: 0.75rem; } .ds-cat-title { margin-top: auto; font-size: 1.5rem; line-height: 1.1; letter-spacing: -0.03em; font-weight: 600; text-wrap: balance; } .ds-cat-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; font-size: 0.8125rem; color: var(--tint-ink); } .ds-ring { --size: 40px; position: relative; width: var(--size); height: var(--size); flex: none; border-radius: var(--pill, 999px); background: conic-gradient(currentColor calc(var(--value) * 360deg), color-mix(in srgb, currentColor 18%, transparent) 0); display: grid; place-items: center; } .ds-ring::after { content: ''; position: absolute; inset: calc(var(--size) * 0.11); border-radius: var(--pill, 999px); background: var(--ring-hole, var(--tint)); } .ds-ring-label { position: relative; z-index: 1; font-size: clamp(0.625rem, calc(var(--size) * 0.25), 2rem); font-weight: 600; letter-spacing: -0.03em; }"
+    },
+    {
+      "name": "Word Card",
+      "kind": "card",
+      "refersTo": "word-card",
+      "description": "The Deck's optional grid view. The field is diluted into the panel so cards stay legible in bulk, but it is still the ground. Headword mixes 72% toward ink; the footer stays at full field ink.",
+      "html": "<article class=\"ds-word\" style=\"--tint:var(--peach,#fbdfb6);--tint-ink:var(--peach-ink,#8a5a1c)\"><div class=\"ds-word-top\"><span class=\"ds-tag\"><svg viewBox=\"0 0 24 24\" width=\"13\" height=\"13\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"m10.586 5.414-5.172 5.172\"/><path d=\"m18.586 13.414-5.172 5.172\"/><path d=\"M6 12h12\"/><circle cx=\"12\" cy=\"20\" r=\"2\"/><circle cx=\"12\" cy=\"4\" r=\"2\"/><circle cx=\"20\" cy=\"12\" r=\"2\"/><circle cx=\"4\" cy=\"12\" r=\"2\"/></svg>Process</span><span class=\"ds-wlevel\">B2</span></div><div class=\"ds-word-front\">rollback window</div><div class=\"ds-word-back\">окно отката</div><div class=\"ds-word-foot\"><span class=\"ds-wmeter\"><i style=\"width:64%\"></i></span><span>due today</span></div></article>",
+      "css": ".ds-word { display: flex; flex-direction: column; gap: 10px; padding: 16px; width: 300px; border-radius: var(--r-lg, 22px); border: 1px solid color-mix(in srgb, var(--tint-ink) 18%, transparent); background: color-mix(in srgb, var(--tint) 42%, var(--panel, #fff)); text-align: start; font-family: var(--sans, 'General Sans', ui-sans-serif, system-ui, sans-serif); font-variant-numeric: tabular-nums; transition: transform 180ms cubic-bezier(.22,1,.36,1), box-shadow 180ms cubic-bezier(.22,1,.36,1), border-color 180ms cubic-bezier(.22,1,.36,1); } .ds-word:hover { transform: translateY(-2px); box-shadow: var(--lift-2, 0 2px 4px rgb(60 40 30 / .06), 0 18px 40px -22px rgb(60 40 30 / .4)); border-color: color-mix(in srgb, var(--tint-ink) 42%, transparent); } .ds-word-top { display: flex; align-items: center; gap: 8px; } .ds-tag { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px 0 7px; border-radius: var(--pill, 999px); background: color-mix(in srgb, var(--tint-ink) 14%, transparent); color: var(--tint-ink); font-size: 0.75rem; font-weight: 600; letter-spacing: 0.005em; } .ds-wlevel { margin-inline-start: auto; display: inline-grid; place-items: center; height: 24px; padding: 0 9px; border-radius: var(--pill, 999px); border: 1px solid color-mix(in srgb, currentColor 26%, transparent); font-size: 0.6875rem; font-weight: 600; color: var(--tint-ink); } .ds-word-front { font-size: 1.0625rem; font-weight: 600; letter-spacing: -0.015em; line-height: 1.25; color: color-mix(in srgb, var(--tint-ink) 72%, var(--ink, #17110e)); } .ds-word-back { font-size: 0.9375rem; line-height: 1.4; color: var(--tint-ink); } .ds-word-foot { display: flex; align-items: center; gap: 10px; margin-top: auto; padding-top: 4px; font-size: 0.75rem; color: var(--tint-ink); } .ds-wmeter { flex: 1; height: 5px; border-radius: var(--pill, 999px); background: color-mix(in srgb, var(--tint-ink) 16%, transparent); overflow: hidden; } .ds-wmeter i { display: block; height: 100%; border-radius: var(--pill, 999px); background: var(--tint-ink); }"
+    },
+    {
+      "name": "Rail Navigation",
+      "kind": "nav",
+      "refersTo": "rail-item",
+      "description": "The 76px blush rail: mark, four nav items, then a spacer pushing theme and shortcuts to the bottom. Current page is a solid ink square at the same corner as an input.",
+      "html": "<nav class=\"ds-rail\"><button class=\"ds-rail-btn\" aria-current=\"page\"><svg viewBox=\"0 0 24 24\" width=\"20\" height=\"20\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><rect width=\"7\" height=\"9\" x=\"3\" y=\"3\" rx=\"1\"/><rect width=\"7\" height=\"5\" x=\"14\" y=\"3\" rx=\"1\"/><rect width=\"7\" height=\"9\" x=\"14\" y=\"12\" rx=\"1\"/><rect width=\"7\" height=\"5\" x=\"3\" y=\"16\" rx=\"1\"/></svg></button><button class=\"ds-rail-btn\"><svg viewBox=\"0 0 24 24\" width=\"20\" height=\"20\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z\"/><path d=\"M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12\"/><path d=\"M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17\"/></svg><span class=\"ds-badge\"></span></button><button class=\"ds-rail-btn\"><svg viewBox=\"0 0 24 24\" width=\"20\" height=\"20\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M21.42 10.922a1 1 0 0 0-.019-1.838L12.83 5.18a2 2 0 0 0-1.66 0L2.6 9.08a1 1 0 0 0 0 1.832l8.57 3.908a2 2 0 0 0 1.66 0z\"/><path d=\"M22 10v6\"/><path d=\"M6 12.5V16a6 3 0 0 0 12 0v-3.5\"/></svg></button><button class=\"ds-rail-btn\"><svg viewBox=\"0 0 24 24\" width=\"20\" height=\"20\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915\"/><circle cx=\"12\" cy=\"12\" r=\"3\"/></svg></button></nav>",
+      "css": ".ds-rail { display: flex; flex-direction: column; align-items: center; gap: 10px; width: 76px; padding: 22px 0; background: var(--rail, #f4e6df); border-inline-end: 1px solid var(--line, #e8dcd3); border-radius: var(--r-lg, 22px) 0 0 var(--r-lg, 22px); } .ds-rail-btn { position: relative; width: 44px; height: 44px; display: grid; place-items: center; border: 0; border-radius: var(--r-md, 15px); color: var(--ink-2, #5e514a); background: transparent; cursor: pointer; transition: background 160ms cubic-bezier(.22,1,.36,1), color 160ms cubic-bezier(.22,1,.36,1); } .ds-rail-btn:hover { background: color-mix(in srgb, var(--ink, #17110e) 7%, transparent); color: var(--ink, #17110e); } .ds-rail-btn:focus-visible { outline: 2px solid var(--ink, #17110e); outline-offset: 2px; } .ds-rail-btn[aria-current='page'] { background: var(--ink, #17110e); color: var(--plate, #fdf8f3); } .ds-badge { position: absolute; top: 4px; inset-inline-end: 4px; min-width: 8px; height: 8px; border-radius: var(--pill, 999px); background: var(--rose-ink, #8a3f34); border: 2px solid var(--rail, #f4e6df); }"
+    },
+    {
+      "name": "Grade Buttons",
+      "kind": "button",
+      "refersTo": "grade-button",
+      "description": "The four FSRS grades, reusing four category fields instead of a semantic red/amber/green ramp (Again→rose, Hard→peach, Good→mint, Easy→sky). The label mixes toward ink and the hint stays at full field ink — the Toward-Ink pairing, never an opacity fade.",
+      "html": "<div class=\"ds-grades\"><button class=\"ds-grade\" style=\"--tint:var(--rose,#f8cfc8);--tint-ink:var(--rose-ink,#8a3f34)\"><span>1 &middot; Again</span><span class=\"ds-when\">no idea</span></button><button class=\"ds-grade\" style=\"--tint:var(--peach,#fbdfb6);--tint-ink:var(--peach-ink,#8a5a1c)\"><span>2 &middot; Hard</span><span class=\"ds-when\">barely</span></button><button class=\"ds-grade\" style=\"--tint:var(--mint,#c2e8d3);--tint-ink:var(--mint-ink,#1f6c48)\"><span>3 &middot; Good</span><span class=\"ds-when\">got it</span></button><button class=\"ds-grade\" style=\"--tint:var(--sky,#cbe0f7);--tint-ink:var(--sky-ink,#23558f)\"><span>4 &middot; Easy</span><span class=\"ds-when\">instant</span></button></div>",
+      "css": ".ds-grades { display: flex; justify-content: center; flex-wrap: wrap; gap: 10px; font-family: var(--sans, 'General Sans', ui-sans-serif, system-ui, sans-serif); } .ds-grade { display: flex; flex-direction: column; align-items: center; gap: 1px; min-width: 104px; padding: 11px 18px; border-radius: var(--r-md, 15px); background: var(--tint); color: var(--tint-ink); border: 1px solid color-mix(in srgb, var(--tint-ink) 18%, transparent); font-weight: 600; font-size: 0.9375rem; cursor: pointer; transition: transform 160ms cubic-bezier(.22,1,.36,1), box-shadow 160ms cubic-bezier(.22,1,.36,1); } .ds-grade:hover { transform: translateY(-2px); box-shadow: var(--lift-2, 0 2px 4px rgb(60 40 30 / .06), 0 18px 40px -22px rgb(60 40 30 / .4)); } .ds-grade:focus-visible { outline: 2px solid var(--ink, #17110e); outline-offset: 2px; } .ds-grade > span:first-child { color: color-mix(in srgb, var(--tint-ink) 72%, var(--ink, #17110e)); } .ds-when { font-size: 0.75rem; font-weight: 500; color: var(--tint-ink); }"
+    },
+    {
+      "name": "Mastery Ring",
+      "kind": "custom",
+      "description": "Arc inherits the parent's text colour; the hole must be painted with whatever surface the ring sits on via --ring-hole. Three sizes ship: 40px on a small tile, 46px on the lead tile, 96px on the session summary.",
+      "html": "<div class=\"ds-ringrow\"><div class=\"ds-ring2\" style=\"--value:.22;--size:40px;--ring-hole:var(--panel,#fff);color:var(--sky-ink,#23558f)\"><span class=\"ds-ring2-label\">22%</span></div><div class=\"ds-ring2\" style=\"--value:.46;--size:46px;--ring-hole:var(--panel,#fff);color:var(--peach-ink,#8a5a1c)\"><span class=\"ds-ring2-label\">46%</span></div><div class=\"ds-ring2\" style=\"--value:.78;--size:96px;--ring-hole:var(--panel,#fff);color:var(--mint-ink,#1f6c48)\"><span class=\"ds-ring2-label\">78%</span></div></div>",
+      "css": ".ds-ringrow { display: flex; align-items: center; gap: 20px; font-family: var(--sans, 'General Sans', ui-sans-serif, system-ui, sans-serif); font-variant-numeric: tabular-nums; } .ds-ring2 { --size: 40px; position: relative; width: var(--size); height: var(--size); flex: none; border-radius: var(--pill, 999px); background: conic-gradient(currentColor calc(var(--value) * 360deg), color-mix(in srgb, currentColor 18%, transparent) 0); display: grid; place-items: center; } .ds-ring2::after { content: ''; position: absolute; inset: calc(var(--size) * 0.11); border-radius: var(--pill, 999px); background: var(--ring-hole, var(--panel, #fff)); } .ds-ring2-label { position: relative; z-index: 1; font-size: clamp(0.625rem, calc(var(--size) * 0.25), 2rem); font-weight: 600; letter-spacing: -0.03em; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Warm Notebook",
+    "overview": "Loanword is one person's notebook, not a course. The deck is the residue of a work week — words its owner actually needed and did not have — and the interface is built for someone rereading their own notes, not for a student being taught. That distinction does the design work. There is no progress dashboard, no streak, no daily goal, no profile: those are instruments for measuring a learner, and there is no learner here, only a person and their list. What remains is the list itself, the words due today, and a way to sit down with them.\n\nSo the dominant form is a line, not a card. A category read straight through is a column of single-line entries — star, word, translation, level, mastery — that you can skim the way you skim a page of notes. Cards still exist, as the Deck's optional grid view and as the study surface, but the notebook is the default. Density follows from that: rows are close-set at 9px, hairline-divided, and the only thing that lifts off the page is what you are pressing.\n\nThe material is flat, warm and lightly lifted. A mint canvas holds an inset cream plate; a blush rail runs down its start edge; six pastel fields carry category meaning. Colour does the structural work that borders and shadows do in colder systems — a thing is identified by which field it belongs to, not by how far it floats. But a field does not always fill: on a tile it owns the whole surface, and in the list it survives as a tinted headword and a soft hover wash. The confirmed anti-reference is the course catalogue — uniform white cards, coloured outlines for selection, achievement furniture.",
+    "keyCharacteristics": [
+      "Four screens only: Overview, Deck, Study, Settings.",
+      "The reading list is the default view; the card grid is the alternative.",
+      "Six pastel category fields, each a ground-plus-ink pair, expressed loudly on tiles and quietly in lists.",
+      "Ink-solid fills reserved for the selected state and the primary action; in a list, selection is a filled glyph instead.",
+      "One type family (General Sans variable) across a sixteen-step ramp, tabular numerals throughout.",
+      "Every corner in the stylesheet comes from a radius token; there are no literal radii.",
+      "A hairline border or an elevation, never both at rest.",
+      "Exactly one authored motion moment: the card turn.",
+      "Every image is a deliberate empty frame carrying its generation prompt in alt."
+    ],
+    "rules": [
+      {
+        "name": "The Whole-Tile Field Rule",
+        "section": "colors",
+        "body": "A category's colour owns its surface — ground and ink — never a coloured outline, a left stripe, or a dot on a white card. On the deck grid, where cards must stay legible in bulk, the field is diluted into the panel (color-mix(in srgb, var(--tint) 42%, var(--panel)), and 55% in dark) but it is still the ground, not an accent."
+      },
+      {
+        "name": "The Quiet Field Rule",
+        "section": "colors",
+        "body": "In the reading list the same field identifies without filling: the headword takes --tint-ink, the group icon takes the pale field as a 24px plate, and the row washes to 26% of the field only on hover. A field must always say which category; it does not always have to say it loudly. Reach for the quiet expression whenever the surface is a line of text rather than an object — a filled row would turn a page of notes into a stack of cards."
+      },
+      {
+        "name": "The Ink-Solid Selection Rule",
+        "section": "colors",
+        "body": "A solid ink fill means selected or primary and nothing else: the pressed filter chip, the current rail item, the active deck chip, the primary button, the due-now bar, the toast. Selection is never expressed as a coloured outline, and a coloured field is never used to mean 'chosen'."
+      },
+      {
+        "name": "The Filled-Glyph Rule",
+        "section": "colors",
+        "body": "Where selection lives on a line rather than a surface, it is a filled glyph, not a filled background: the star sets both color and fill to butter ink when on. It is deliberately filled with the ink and not with the pale butter field — an on state has to read as on from across the row, and a pale fill at 16px does not. Any future in-row toggle follows this, not the chip's ink pill."
+      },
+      {
+        "name": "The Six-Field Scale Rule",
+        "section": "colors",
+        "body": "When something needs six graduated steps it walks the six category fields in order rather than repeating ink six times, because ink is spoken for. Category-keyed marks always use that category's own field, so a mark's colour is a fact about what it measures."
+      },
+      {
+        "name": "The One Family Rule",
+        "section": "typography",
+        "body": "General Sans covers display through micro. A second family may only appear where the content is literally code, and then only as the platform mono stack at the code role's 0.85em."
+      },
+      {
+        "name": "The Tighten-As-It-Grows Rule",
+        "section": "typography",
+        "body": "Tracking is a band that tightens with size and never runs positive above 1rem: -0.01em at 1rem and below, -0.015em at 1.0625-1.125rem, -0.02em at 1.3125rem, -0.03em at 1.5rem, -0.04em at display and prompt. The only positive tracking in the system is the +0.005em on caption. The band's one deliberate inversion is the answer, set at 1.625rem but only -0.025em, because it is the sole large size cut at 500 and lighter weight needs less tightening than heavier weight at the same size."
+      },
+      {
+        "name": "The Tabular Rule",
+        "section": "typography",
+        "body": "font-variant-numeric: tabular-nums is set on body and never overridden. Every count in this app changes between visits; none of them may shift the layout when it does."
+      },
+      {
+        "name": "The Closed-Ramp Rule",
+        "section": "typography",
+        "body": "The sixteen steps of the ramp are the whole ramp. Before adding a size, check whether an existing step is within half a pixel — two steps have already been collapsed for exactly that reason. Near-duplicates are drift, not hierarchy."
+      },
+      {
+        "name": "The Plate Rule",
+        "section": "layout",
+        "body": "Above 620px the app is an object on a canvas, not a page: the mint ground shows on all four sides and the plate keeps its xl corners. Below 620px the plate is the page — inset 0, radius 0, rail on top. There is no intermediate state where the plate is inset on some sides only."
+      },
+      {
+        "name": "The Logical Property Rule",
+        "section": "layout",
+        "body": "Every directional value in the stylesheet is logical — inset-inline-start, margin-inline, padding-inline-end, border-inline-end, text-align: start/end — so dir='rtl' mirrors the whole interface without a second stylesheet. Exactly two things are flipped by hand, because CSS gives them no logical form: transform-origin on the progress fill and the switch knob's translate, and a scale(-1, 1) on the chevron glyph in a chip. Any new directional value must be logical or must join that list explicitly."
+      },
+      {
+        "name": "The No-Instrument Rule",
+        "section": "layout",
+        "body": "This is a notebook, not a course. Streaks, daily goals, activity heatmaps, mastery dashboards, profile blocks and any other furniture that exists to measure a learner do not belong on these screens. A per-item mastery meter is a property of the word and stays; an aggregate score of the person does not. When a new surface is proposed, ask whether it tells the user something about their words or something about themselves."
+      },
+      {
+        "name": "The Border-Or-Lift Rule",
+        "section": "elevation",
+        "body": "A resting surface carries a hairline border or an elevation, never both. Panels, inputs, chips and unselected buttons are bordered and flat; the plate, the primary button, the due bar and the toast are borderless and lifted. Where a lifted element does declare a border, the border is set to its own fill colour so it exists for box-model consistency and reads as no line at all. Shadows may join a bordered surface on hover — hover is not rest."
+      },
+      {
+        "name": "The Flat-List Rule",
+        "section": "elevation",
+        "body": "The reading list takes no elevation at any state. A row responds to the cursor with a tint wash and a rounded corner, never with a lift; raising one line of a page of notes off the page is a card's gesture, and the list exists precisely because cards were too heavy for this content."
+      },
+      {
+        "name": "The Warm-Shadow Rule",
+        "section": "elevation",
+        "body": "Light-theme shadows are tinted rgb(60 40 30), never neutral black. A grey shadow on cream reads as dirt."
+      },
+      {
+        "name": "The Tokenized Radius Rule",
+        "section": "shapes",
+        "body": "Every border-radius in the stylesheet resolves to --r-xl, --r-lg, --r-md, --r-sm, --r-xs or --pill. grep -E 'border-radius: *[0-9]+px' ui/app.css must keep returning nothing. A corner that does not fit a step is a signal that the element belongs to a different tier, not that the scale needs another step."
+      },
+      {
+        "name": "The Pill Rule",
+        "section": "shapes",
+        "body": "Anything the user presses that is not a card is a pill: buttons, filter chips, tags, deck chips, counters, the toast, the switch, every progress track and meter. Rectangular radii belong to surfaces that hold content. There is no in-between radius for a button."
+      },
+      {
+        "name": "The Dashed-Frame Rule",
+        "section": "shapes",
+        "body": "A dashed border appears in exactly one place — the empty art frame — and therefore always means 'an asset belongs here and has not arrived'. It is never decorative."
+      }
+    ],
+    "dos": [
+      "Do reach for a line before a card. The reading list is the default way to show words; the grid is the alternative the user asks for.",
+      "Do give a category its field by setting --tint and --tint-ink on the element and letting descendants inherit — loudly on a tile, quietly on a row. Never write a per-category class.",
+      "Do reserve solid ink for the selected state and the single primary action on a screen, and use a filled glyph where selection lives on a line.",
+      "Do rank two lines on the same tinted ground by mixing the senior one 72% toward ink and leaving the junior one at full --tint-ink.",
+      "Do take every corner from a radius token, and pick the token that matches the element's tier rather than its pixel size.",
+      "Do check the sixteen-step ramp before adding a font size; if an existing step is within half a pixel, use it.",
+      "Do pick a hairline or an elevation for a resting surface. Lift 1-3 belong on hover, on borderless surfaces, and on the plate.",
+      "Do write every directional value as a logical property, and mirror by hand only what CSS gives no logical form.",
+      "Do ship every <img> as an empty frame whose alt is the generation prompt, and register the slot in ui/art/README.md.",
+      "Do build new settings out of the existing .setting row.",
+      "Do let a scroll container carry min-height: 0 alongside overflow-y, or a grid row will refuse to shrink and the content clips instead of scrolling."
+    ],
+    "donts": [
+      "Don't add streaks, daily goals, activity charts, profile blocks or any other instrument that scores the person rather than describing their words. That furniture was removed on purpose.",
+      "Don't fade text toward transparent on a tinted ground, by opacity or by color-mix with transparent. It measured 2.88-3.48:1 across these six fields and fails contrast on all of them. The codebase currently has zero instances; keep it that way. (opacity: 0.45 remains legitimate for the disabled button and the eliminated Learn choice, where the point is that the element is out of play.)",
+      "Don't fill a list row with its category field. The field belongs in the headword and the hover wash; a filled row turns notes back into cards.",
+      "Don't lift a list row on hover. The list is flat at every state.",
+      "Don't write a literal border-radius value. Six tokens cover every corner in the app.",
+      "Don't add a font size that is within half a pixel of an existing step.",
+      "Don't express selection as a coloured outline, a coloured border, or a tinted background. Selection is ink, or a filled glyph.",
+      "Don't put a hairline border and a shadow on the same surface at rest.",
+      "Don't repeat ink to build a scale — if six steps are needed, the six fields provide them.",
+      "Don't add a second authored motion moment, or a second @keyframes. Anything new is a 160ms state transition on the shared curve.",
+      "Don't introduce a second type family, an italic, or an uppercase letter-spaced label. General Sans at 200-700 covers the entire ramp.",
+      "Don't use an emoji or a glyph where an icon belongs — take a symbol from ui/icons.svg, or add one to the sprite at 1.75 stroke.",
+      "Don't set fill on an icon. The only filled glyph in the app is the starred star, and it fills with ink rather than with a pale field.",
+      "Don't paint a ring's hole a fixed colour — pass --ring-hole to match the surface it lands on.",
+      "Don't animate width or height on anything that updates per interaction; use transform.",
+      "Don't put readable text inside a generated illustration. The interface supplies every word, in the user's own interface language."
+    ]
+  }
+}

@@ -3,10 +3,19 @@
   "displayName": "Loanword",
   "version": "0.1.0",
   "description": "Turn your Claude Code sessions into a personal phrasebook. Learn the words you actually needed today.",
-  "author": { "name": "MarkSky", "url": "https://github.com/MarkSky" },
-  "repository": "https://github.com/MarkSky/loanword",
+  "author": {
+    "name": "MarcSky",
+    "url": "https://github.com/MarcSky"
+  },
+  "repository": "https://github.com/MarcSky/loanword",
   "license": "MIT",
-  "keywords": ["language-learning", "vocabulary", "flashcards", "spaced-repetition", "anki"],
+  "keywords": [
+    "language-learning",
+    "vocabulary",
+    "flashcards",
+    "spaced-repetition",
+    "anki"
+  ],
   "userConfig": {
     "native_lang": {
       "type": "string",
@@ -46,6 +55,12 @@
       "type": "string",
       "title": "Your level (optional)",
       "description": "A2/B1/B2/C1 — words below this level never become cards. Empty means no level filter",
+      "default": ""
+    },
+    "obsidian_vault": {
+      "type": "string",
+      "title": "Obsidian vault (optional)",
+      "description": "Absolute path to an Obsidian vault. When set, /loanword:build also writes the deck there as markdown so you can read it on your phone. Leave empty to write nothing — the deck then never leaves this machine.",
       "default": ""
     }
   }

@@ -20,17 +20,25 @@ If `entries` is 0, say the queue is empty and **stop the skill**. Launch nothing
 Read the queue and count the records. Above 60, split into batches of 60 and
 make several Task calls in a row, collecting the cards into one list.
 
+Read the effective settings — install-time answers plus anything the user later
+changed in the trainer's Settings screen. Never read `CLAUDE_PLUGIN_OPTION_*`
+directly; that misses every change made in the UI:
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/store.mjs" config
+```
+
 Launch Task with `subagent_type: loanword:card-builder`. Pass in the prompt:
 
 - the queue file path (printed by step 1),
 - the line range for this batch,
-- `NATIVE` = `$CLAUDE_PLUGIN_OPTION_NATIVE_LANG` (default `es`),
-- `TARGET` = `$CLAUDE_PLUGIN_OPTION_TARGET_LANG` (default `en`),
-- `LIMIT` = `$CLAUDE_PLUGIN_OPTION_DAILY_LIMIT` (default `15`),
-- `LEVEL` = `$CLAUDE_PLUGIN_OPTION_LEVEL` (empty means no level filter).
+- `NATIVE` = the `native` field,
+- `TARGET` = the `target` field,
+- `LIMIT` = the `dailyLimit` field,
+- `LEVEL` = the `level` field (empty means no level filter).
 
-The agent returns a JSON array of cards. It is read-only; writing the result is
-your job.
+The agent returns a JSON array of cards, each with a `category` from the six it
+is given and a `cefr` level. It is read-only; writing the result is your job.
 
 ## 3. Write the result
 
@@ -47,6 +55,15 @@ Then refresh the CSV export:
 node "${CLAUDE_PLUGIN_ROOT}/scripts/export-anki.mjs"
 ```
 
+If an Obsidian vault is configured (`vault` in the config from step 2), mirror
+the deck into it so it reaches the user's phone. Skip this silently when the
+field is empty — it exits non-zero and says why, which is not an error worth
+reporting when the feature is simply off:
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/obsidian.mjs"
+```
+
 If `commit` fails to parse the JSON, do not repair it by hand and do not invent
 cards. Tell the user the agent returned an invalid response and offer to retry.
 
@@ -58,7 +75,8 @@ Print 3–5 of the new cards straight into the chat, short and concrete:
 > Today you wanted to say "reconstruir el índice" → **rebuild the index**
 
 Close with one line: how many cards were added in total, and that
-`/loanword:review` opens the trainer.
+`/loanword:review` opens the trainer. Mention the vault only if notes were
+actually written there.
 
 ## Auto-build
 

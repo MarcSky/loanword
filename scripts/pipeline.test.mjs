@@ -119,8 +119,12 @@ test('commit writes cards with provenance and clears the queue', () => {
   assert.equal(written[0].project, '~/api', 'card carries where it came from');
   assert.ok(written[0].ts);
 
+  assert.equal(written[0].target, 'en', 'the card records which deck it belongs to');
+  assert.equal(written[0].native, 'es');
+
+  // Known words are keyed by target language, so a second target starts fresh.
   const known = JSON.parse(readFileSync(join(DATA, 'known_words.json'), 'utf8'));
-  assert.ok(known.includes('reconciliation'), 'committed words are never re-captured');
+  assert.ok(known.en.includes('reconciliation'), 'committed words are never re-captured');
 });
 
 test('committed words are not captured a second time', () => {

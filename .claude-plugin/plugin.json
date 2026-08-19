@@ -1,0 +1,52 @@
+{
+  "name": "loanword",
+  "displayName": "Loanword",
+  "version": "0.1.0",
+  "description": "Turn your Claude Code sessions into a personal phrasebook. Learn the words you actually needed today.",
+  "author": { "name": "swiftcoder", "url": "https://github.com/swiftcoder" },
+  "repository": "https://github.com/swiftcoder/loanword",
+  "license": "MIT",
+  "keywords": ["language-learning", "vocabulary", "flashcards", "spaced-repetition", "anki"],
+  "userConfig": {
+    "native_lang": {
+      "type": "string",
+      "title": "Native language",
+      "description": "The language you write prompts in (ISO code: es, pt, de, uk…)",
+      "default": "es",
+      "required": true
+    },
+    "target_lang": {
+      "type": "string",
+      "title": "Target language",
+      "description": "The language you are learning (en, de, ja…)",
+      "default": "en",
+      "required": true
+    },
+    "mode": {
+      "type": "string",
+      "title": "Capture mode",
+      "description": "active — your prompts only (how to say what you meant); passive — assistant replies only (new words from context); both — either",
+      "default": "both"
+    },
+    "daily_limit": {
+      "type": "number",
+      "title": "New cards per day",
+      "description": "Cap on new cards per day. The FSRS review queue is not limited by this number",
+      "default": 15,
+      "min": 3,
+      "max": 50
+    },
+    "auto_build": {
+      "type": "boolean",
+      "title": "Auto-build on session end",
+      "description": "Offer to build cards at the end of a session once the queue holds 10 or more records",
+      "default": true
+    },
+    "level": {
+      "type": "string",
+      "title": "Your level (optional)",
+      "description": "A2/B1/B2/C1 — words below this level never become cards. Empty means no level filter",
+      "default": ""
+    }
+  }
+}

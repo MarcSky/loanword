@@ -1,0 +1,12 @@
+{
+  "name": "loanword",
+  "owner": { "name": "swiftcoder", "url": "https://github.com/swiftcoder" },
+  "description": "Loanword turns your Claude Code sessions into personal vocabulary flashcards.",
+  "plugins": [
+    {
+      "name": "loanword",
+      "source": "./",
+      "description": "Turn your Claude Code sessions into a personal phrasebook. Learn the words you actually needed today."
+    }
+  ]
+}

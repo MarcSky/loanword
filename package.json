@@ -1,0 +1,14 @@
+{
+  "name": "loanword",
+  "version": "0.1.0",
+  "description": "Turn your Claude Code sessions into a personal phrasebook.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test scripts/*.test.mjs"
+  },
+  "dependencies": {
+    "ts-fsrs": "^5.2.0"
+  }
+}

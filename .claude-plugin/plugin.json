@@ -1,7 +1,7 @@
 {
   "name": "loanword",
   "displayName": "Loanword",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Turn your Claude Code sessions into a personal phrasebook. Learn the words you actually needed today.",
   "author": {
     "name": "MarcSky",

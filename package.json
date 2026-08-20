@@ -1,6 +1,6 @@
 {
   "name": "loanword",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "Turn your Claude Code sessions into a personal phrasebook.",
   "license": "MIT",
   "private": true,

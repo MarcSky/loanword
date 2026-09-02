@@ -1,67 +1,71 @@
 <!doctype html>
-<html lang="en" dir="ltr" data-theme="light">
+<html lang="en" dir="ltr" data-theme="light" data-script="latin" data-rail="open">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f4f5f8">
+<meta name="robots" content="noindex, nofollow">
 <title>Loanword</title>
 <link rel="stylesheet" href="app.css">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="manifest" href="manifest.webmanifest">
+<script type="module" src="vendor/webawesome/components/drawer/drawer.js"></script>
+<script type="module" src="vendor/webawesome/components/tooltip/tooltip.js"></script>
+<script type="module" src="vendor/webawesome/components/select/select.js"></script>
+<script type="module" src="vendor/webawesome/components/option/option.js"></script>
 <body>
-<!--
-  THESIS: a vocabulary trainer whose deck is the residue of your own work week.
-  It refuses the course-catalogue grid where every tile is something you might
-  buy; here every tile is a debt you already incurred, carrying its own mastery.
-  OWN-WORLD: mint canvas under a warm cream plate, blush icon rail, six pastel
-  category fields (rose/peach/lavender/mint/sky/butter) owning whole tiles,
-  large soft radii, ink-solid pills for the selected state — never a coloured
-  outline. General Sans throughout, display cut at 600 / -0.04em, tabular
-  numerals, Lucide at 1.75 stroke tinted to each field's ink.
-  STORY: between two tasks the user sees what is due and where they stand in
-  two seconds, presses a key, reviews, and leaves with the tally visible.
-  FIRST VIEWPORT: mint canvas; cream plate inset 20px; 76px blush rail; display
-  headline over the due-now ink bar; pill filters for category and CEFR; a lead
-  category tile spanning two columns beside its smaller siblings; right column
-  carries profile, daily goal ring and twelve weeks of activity.
-  FORM: warm-pastel study dashboard, user-pinned from reference 1.jpg — the roll
-  was skipped because a pinned direction beats it.
-  FINISH: unreviewed and undocumented is unfinished; this build ends with the
-  finish review, the verdict, and DESIGN.md.
--->
 
 <div class="shell">
-  <nav class="rail" aria-label="Sections">
-    <div class="mark" title="Loanword">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <path d="M4 19V6.5A2.5 2.5 0 0 1 6.5 4H19v13"/>
-        <path d="M6.5 17H19v3H6.5A2.5 2.5 0 0 1 6.5 15H19"/>
-        <path d="M10 8.5h5"/>
-      </svg>
+  <nav class="sidebar" id="sidebar" aria-label="Sections">
+    <div class="sb-head">
+      <a class="mark" href="#/overview" title="Loanword" aria-label="Loanword">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="9"/>
+          <ellipse cx="12" cy="12" rx="4" ry="9"/>
+          <path d="M3 12h18"/>
+        </svg>
+      </a>
+      <span class="sb-brand">Loanword</span>
+      <button class="sb-toggle" data-act="rail" aria-expanded="true" aria-controls="sidebar" aria-label="Collapse sidebar">
+        <svg class="icon" aria-hidden="true"><use href="icons.svg#i-sidebar-simple"></use></svg>
+      </button>
     </div>
 
-    <div class="rail-nav" id="rail"></div>
+    <div class="sb-nav" id="rail"></div>
 
-    <div class="rail-spacer"></div>
+    <div class="sb-spacer"></div>
 
-    <button class="rail-btn" data-act="theme" title="Theme" aria-label="Switch theme">
-      <svg class="icon" aria-hidden="true"><use href="icons.svg#i-sun"></use></svg>
-    </button>
-    <button class="rail-btn" data-act="shortcuts" title="Keyboard shortcuts" aria-label="Keyboard shortcuts">
-      <svg class="icon" aria-hidden="true"><use href="icons.svg#i-keyboard"></use></svg>
+    <button class="sb-item sb-theme" data-act="theme" aria-label="Switch theme" id="sb-theme">
+      <span class="sb-icon"><svg class="icon" aria-hidden="true"><use href="icons.svg#i-sun"></use></svg></span>
+      <span class="sb-label" data-theme-label>Theme</span>
     </button>
   </nav>
+
+  <header class="topbar" id="topbar"></header>
 
   <main id="main">
     <section class="page" id="page-overview" data-route="overview" aria-label="Overview"></section>
     <section class="page" id="page-deck" data-route="deck" aria-label="Deck"></section>
     <section class="page study" id="page-study" data-route="study" aria-label="Study"></section>
+    <section class="page" id="page-analytics" data-route="analytics" aria-label="Analytics"></section>
     <section class="page" id="page-settings" data-route="settings" aria-label="Settings"></section>
   </main>
+
+  <footer class="foot">
+    <span>Loanword</span>
+    <a href="https://x.com/levan_fewnix" target="_blank" rel="noopener">@levan_fewnix</a>
+    <span>2026</span>
+  </footer>
 </div>
+
+<wa-drawer id="drawer" placement="start" label="Sections" class="sb-drawer">
+  <div class="sb-nav" id="drawer-rail"></div>
+</wa-drawer>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-<dialog id="shortcuts" class="panel" style="border:0;padding:0;background:transparent">
-  <div class="panel" style="max-width:420px">
+<dialog id="shortcuts" class="modal">
+  <div class="panel" style="max-width:460px">
     <div class="section-head" style="margin:0 0 14px">
       <h2>Keyboard</h2>
       <button class="btn btn-quiet" data-act="close-shortcuts" aria-label="Close">
@@ -69,6 +73,18 @@
       </button>
     </div>
     <dl id="shortcut-list" style="display:grid;grid-template-columns:auto 1fr;gap:10px 16px;font-size:.875rem"></dl>
+  </div>
+</dialog>
+
+<dialog id="help" class="modal">
+  <div class="panel help-panel">
+    <div class="section-head" style="margin:0 0 10px">
+      <h2 id="help-title"></h2>
+      <button class="btn btn-quiet" data-act="close-help" aria-label="Close">
+        <svg class="icon-sm icon" aria-hidden="true"><use href="icons.svg#i-x"></use></svg>
+      </button>
+    </div>
+    <p id="help-body"></p>
   </div>
 </dialog>
 

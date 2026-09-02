@@ -5,55 +5,53 @@ Every image in the trainer ships as an **empty frame**. The `alt` text on each
 until a file lands here the frame shows a dashed placeholder with that prompt
 inside it, and the moment the file appears it simply renders.
 
-Drop PNG or WebP files with these exact names into this directory. Nothing else
-has to change.
+Drop WebP files with these exact names into this directory. Nothing else has to
+change. The full prompt for every one of them — with palette, composition and
+export settings — is in [`prompt.txt`](../../prompt.txt) at the repository root;
+this file is the list of what the interface actually reads.
 
 ## Shared direction
 
 Flat pastel illustration, no gradients steeper than two stops, soft long
-shadows, rounded organic shapes, one accent hue per image drawn from the tile it
-sits in. **No readable text anywhere in the image** — the UI supplies every
-word. Square or 4:3 unless noted. Transparent or matching-tint background.
+shadows, rounded organic shapes, one accent hue per image drawn from the surface
+it sits on. **No readable text anywhere in the image** — the UI supplies every
+word. Transparent or matching-tint background. Palette in
+[`DESIGN.md`](../../DESIGN.md) §2.
 
-Palette, matching `app.css`:
+## Rendered today
 
-| Token | Light | Ink |
-|---|---|---|
-| rose | `#f8cfc8` | `#8a3f34` |
-| peach | `#fbdfb6` | `#8a5a1c` |
-| lavender | `#ddd6f6` | `#4b3f8c` |
-| mint | `#c2e8d3` | `#1f6c48` |
-| sky | `#cbe0f7` | `#23558f` |
-| butter | `#f7ecab` | `#7a6412` |
-
-## Slots
-
-| File | Where | Ratio | Prompt |
+| File | Where | Ratio | prompt.txt |
 |---|---|---|---|
-| `empty-deck.png` | first-run empty state, and a language pair with no cards yet | 4:3 | An empty index-card box on a desk beside a closed laptop, one blank card standing upright, mint and cream |
-| `empty-filter.png` | deck with no matches | 4:3 | A magnifying glass resting on an empty card tray, one card tipped forward, rose and cream |
-| `empty-session.png` | study with no session | 4:3 | A single flashcard lying face down on a mint surface with a soft cast shadow |
+| `empty-deck.webp` | first run, and a language pair with no cards yet | 4:3 | T01 |
+| `empty-deck-dark.webp` | the same, dark theme | 4:3 | T02 |
+| `empty-filter.webp` | deck with no matches | 4:3 | T03 |
+| `empty-filter-dark.webp` | the same, dark theme | 4:3 | T04 |
+| `empty-session.webp` | study with nothing due | 4:3 | T05 |
+| `empty-session-dark.webp` | the same, dark theme | 4:3 | T06 |
+| `caught-up.webp` | overview, nothing due | 4:3 | T07 |
+| `caught-up-dark.webp` | the same, dark theme | 4:3 | T08 |
+| `queue-building.webp` | the build banner | 4:3 | T09 |
+| `queue-building-dark.webp` | the same, dark theme | 4:3 | T10 |
+| `first-run.webp` | first launch | 8:5 | T11 |
+| `first-run-dark.webp` | the same, dark theme | 8:5 | T12 |
+| `session-clean.webp` | clean session summary | 4:3 | T13 |
+| `session-mixed.webp` | mixed session summary | 4:3 | T14 |
+| `session-hard.webp` | difficult session summary | 4:3 | T15 |
+| `long-term.webp` | a word crossing into long-term memory | 4:3 | T16 |
+| `streak-week.webp` | weekly rhythm panel | 12:5 | T17 |
+| `junk-removed.webp` | junk confirmation | 4:3 | T18 |
+| `offline-error.webp` | server connection failure | 4:3 | T19 |
+| `cat-engineering.webp` | engineering domain spot | 3:4 | T20 |
+| `cat-process.webp` | process domain spot | 3:4 | T21 |
+| `cat-collaboration.webp` | collaboration domain spot | 3:4 | T22 |
+| `cat-phrasing.webp` | phrasing domain spot | 3:4 | T23 |
+| `cat-connectors.webp` | connectors domain spot | 3:4 | T24 |
+| `cat-everyday.webp` | everyday domain spot | 3:4 | T25 |
+| `cefr-ramp.svg` | CEFR legend and documentation | 6:1 | T26 |
+| `canvas-grain.webp` | body texture, tileable | 1:1 | G01 |
+| `app-icon-192.png` | `manifest.webmanifest` | 1:1 | B03 |
+| `app-icon-512.png` | `manifest.webmanifest` | 1:1 | B04 |
+| `app-icon-maskable-512.png` | `manifest.webmanifest`, maskable | 1:1 | B05 |
 
-These three are the only slots the interface currently renders. Each appears
-exactly when its state does, so all three are worth having and none is urgent.
-
-## Not currently placed
-
-The interface used to carry a learner avatar in the rail and a per-category
-illustration on a feature tile. Both went when the trainer became a notebook
-rather than a dashboard: the six category tiles are now identical, and an
-illustration inside a pastel field fought the field.
-
-The prompts are kept here because they would be wanted again the moment a
-category gets a detail view of its own. Nothing reads these files today — do
-not generate them expecting them to appear.
-
-| File | Ratio | Prompt |
-|---|---|---|
-| `avatar.png` | 1:1 | Portrait avatar of the learner, three-quarter view, warm rose and lavender, calm expression, plain mint background |
-| `cat-engineering.png` | 3:4 | A terminal window and a branching cable coiling out of it, sky-blue palette, no text on the screen |
-| `cat-process.png` | 3:4 | Three stacked paper cards pinned along a curving route with a small flag at the end, peach palette |
-| `cat-collaboration.png` | 3:4 | Two abstract figures across a small round table, speech shapes overlapping between them, dusty rose, no faces |
-| `cat-phrasing.png` | 3:4 | A large open quotation mark folded from paper casting a soft shadow over ruled lines, lavender |
-| `cat-connectors.png` | 3:4 | Several small dots joined by one continuous looping line threading through them, butter yellow |
-| `cat-everyday.png` | 3:4 | A coffee cup, a sticky note and a pair of glasses on a desk corner, mint palette |
+The domain spot illustrations are generated and reserved for the future domain
+detail view; current trainer screens do not render them yet.

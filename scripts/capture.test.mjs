@@ -1,8 +1,6 @@
-// Unit tests for the capture helpers, exercised in-process rather than through
-// the hook, so each rule can be checked on its own.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -14,11 +12,20 @@ const {
   candidateWords,
   capturePrompt,
   captureSession,
-  frequentWords,
+  echoLine,
+  MIN_PHRASE_WORDS,
+  MAX_PROMPT_CHARS,
+  stripFilenames,
+  codeHeavy,
+  isDerivedFrom,
+  peekCard,
+  wildMatches,
   MAX_TRANSCRIPT_BYTES,
   MAX_WORDS_PER_SESSION,
   stripCode,
 } = await import('./capture.mjs');
+
+const { frequentWords, peekFile, writeLines } = await import('./store.mjs');
 
 const CFG = { native: 'es', target: 'en', mode: 'both', dailyLimit: 15, autoBuild: true };
 const META = { ts: '2026-08-17T00:00:00Z', project: '~/work/api', session: 's1' };
@@ -51,9 +58,53 @@ test('candidateWords keeps vocabulary and drops machine tokens', () => {
 });
 
 test('candidateWords normalises case and trims punctuation', () => {
-  assert.deepEqual(candidateWords("'Quorum' Quorum quorum"), ['quorum', 'quorum', 'quorum']);
+  assert.deepEqual(candidateWords("'Quorum' quorum. Quorum"), ['quorum', 'quorum', 'quorum']);
   assert.deepEqual(candidateWords(''), []);
   assert.deepEqual(candidateWords(null), []);
+});
+
+test('a capitalised word mid-sentence is a name, not vocabulary', () => {
+  assert.ok(!candidateWords('we watched Dexscreener all morning').includes('dexscreener'));
+  assert.ok(candidateWords('Dexscreener went down again today').includes('dexscreener'), 'unless it opens the sentence');
+  assert.ok(
+    candidateWords('wir haben die Bereitstellung gesehen', { language: 'de' }).includes('bereitstellung'),
+    'German capitalises every noun, so the rule is off there',
+  );
+});
+
+test('contractions and possessives are never queued as words', () => {
+  const words = candidateWords("aren't the dev's alert isn't ready");
+  assert.ok(!words.includes("aren't"));
+  assert.ok(!words.includes("dev's"));
+  assert.ok(!words.some((word) => /['\u2019]/.test(word)));
+});
+
+test('an English plural whose singular is known is the same word', () => {
+  const known = new Set(['alert', 'batch', 'policy']);
+  assert.ok(isDerivedFrom('alerts', known));
+  assert.ok(isDerivedFrom('batches', known));
+  assert.ok(isDerivedFrom('policies', known));
+  assert.ok(!isDerivedFrom('alertness', known), 'a real derivation is still a new word');
+});
+
+test('a prompt that is mostly identifiers is code, not language', () => {
+  assert.ok(codeHeavy('getUserById parseJSON MAX_RETRIES v2 handleError'));
+  assert.ok(!codeHeavy('we should roll back the migration before the deploy'));
+  assert.equal(codeHeavy('short'), false, 'too little to judge');
+});
+
+test('a long prompt is cut at a sentence boundary, not mid-word', () => {
+  const long = `${'Necesitamos revisar el despliegue con calma. '.repeat(20)}`;
+  const row = capturePrompt({ prompt: long }, CFG, META);
+  assert.ok(row.text.length <= MAX_PROMPT_CHARS);
+  assert.match(row.text, /\.$/, 'it ends where a sentence ended');
+});
+
+test('a deck front used in a real prompt is spotted', () => {
+  const fronts = ['roll back', 'deadline', 'ship it'];
+  assert.deepEqual(wildMatches('creo que hay que roll back esto hoy', fronts), ['roll back']);
+  assert.deepEqual(wildMatches('rollback sin espacio', fronts), [], 'only whole phrases count');
+  assert.deepEqual(wildMatches('nada aquí', fronts), []);
 });
 
 test('frequentWords loads the shipped list and is empty for unknown languages', () => {
@@ -162,4 +213,77 @@ test('captureSession caps how many words one session can contribute', () => {
   assert.ok(row);
   assert.equal(row.words.length, MAX_WORDS_PER_SESSION);
   assert.equal(new Set(row.words).size, row.words.length, 'no duplicates within a batch');
+});
+
+test('the echo line names both languages and asks for one line only', () => {
+  const line = echoLine({ native: 'ru', target: 'en', echo: 'line' });
+  assert.match(line, /\bru\b/);
+  assert.match(line, /\ben\b/);
+  assert.equal(line.split('\n').filter(Boolean).length, 1, 'one line of injected context, never a paragraph');
+});
+
+test('the echo has three settings and only weave names the weak words', () => {
+  const weak = ['roll back', 'deadline'];
+  assert.equal(echoLine({ native: 'ru', target: 'en', echo: 'off' }, weak), '');
+  const line = echoLine({ native: 'ru', target: 'en', echo: 'line' }, weak);
+  assert.ok(!line.includes('roll back'));
+  const weave = echoLine({ native: 'ru', target: 'en', echo: 'weave' }, weak);
+  assert.ok(weave.includes('roll back') && weave.includes('deadline'));
+  assert.equal(weave.split('\n').filter(Boolean).length, 2, 'one extra line, never a paragraph');
+});
+
+test('a peek card is shown at most once per interval and only when asked for', () => {
+  const cfg = { ...CFG, target: 'en', peek: 'off', peekPick: [], peekEvery: 15 };
+  assert.equal(peekCard(cfg), '', 'off means nothing is printed');
+
+  writeLines(peekFile('en'), [
+    JSON.stringify({ front: 'roll back', back: 'откатить', example: 'Roll back now.', cefr: 'B1', seen: true, r: 0.4 }),
+    JSON.stringify({ front: 'deadline', back: 'срок', example: 'The deadline moved.', cefr: 'A1', starred: true, seen: true, r: 0.99 }),
+  ]);
+
+  const on = { ...cfg, peek: 'on' };
+  const first = peekCard(on, 1_000_000);
+  assert.match(first, /roll back/);
+  assert.equal(peekCard(on, 1_000_000 + 60_000), '', 'a minute later is too soon');
+  assert.match(peekCard(on, 1_000_000 + 16 * 60_000), /roll back/, 'a quarter of an hour later it comes back');
+});
+
+test('the peek filter picks the words it was told to', () => {
+  const cfg = { ...CFG, target: 'en', peek: 'on', peekEvery: 1 };
+  const at = (minutes) => 5_000_000 + minutes * 60_000;
+  assert.match(peekCard({ ...cfg, peekPick: ['starred'] }, at(0)), /deadline/);
+  assert.match(peekCard({ ...cfg, peekPick: ['A1'] }, at(2)), /deadline/, 'a level narrows it');
+  assert.match(peekCard({ ...cfg, peekPick: ['B1'] }, at(4)), /roll back/);
+  assert.match(peekCard({ ...cfg, peekPick: 'starred,slipping' }, at(6)), /roll back|deadline/);
+});
+
+test('file names are stripped, whatever the extension', () => {
+  assert.equal(stripFilenames('покажи карточку в cards.jsonl тут'), 'покажи карточку в тут');
+  assert.equal(stripFilenames('поправь ui/app.js и images/2.jpg потом'), 'поправь и потом');
+  assert.equal(stripFilenames('сравни main.go и handler_test.go снова'), 'сравни и снова');
+  assert.equal(stripFilenames('открой README.md и style.scss наконец'), 'открой и наконец');
+});
+
+test('a bare format word is vocabulary, not a file name', () => {
+  assert.equal(stripFilenames('конвертни mp3 в wav'), 'конвертни mp3 в wav');
+  assert.equal(stripFilenames('go is a fine language'), 'go is a fine language');
+  assert.equal(stripFilenames('нужен свежий дамп базы'), 'нужен свежий дамп базы');
+});
+
+test('punctuation closes up behind a removed name', () => {
+  assert.equal(stripFilenames('посмотри app.js, потом style.css.'), 'посмотри, потом.');
+});
+
+test('a phrase gutted by the stripping never reaches the queue', () => {
+  const cfg = { ...CFG, native: 'ru', target: 'en' };
+  assert.equal(capturePrompt({ prompt: 'сравни main.go и handler_test.go' }, cfg, META), null);
+  assert.equal(capturePrompt({ prompt: 'посмотри cards.jsonl' }, cfg, META), null);
+
+  const kept = capturePrompt({ prompt: 'нужно откатить миграцию перед деплоем' }, cfg, META);
+  assert.ok(kept, 'a real phrase is untouched by the floor');
+  assert.ok((kept.text.match(/\p{L}+/gu) || []).length >= MIN_PHRASE_WORDS);
+});
+
+test.after(() => {
+  rmSync(DATA, { recursive: true, force: true });
 });

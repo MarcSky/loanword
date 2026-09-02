@@ -1,7 +1,7 @@
 {
   "name": "loanword",
   "displayName": "Loanword",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Turn your Claude Code sessions into a personal phrasebook. Learn the words you actually needed today.",
   "author": {
     "name": "MarcSky",
@@ -51,17 +51,37 @@
       "description": "Offer to build cards at the end of a session once the queue holds 10 or more records",
       "default": true
     },
+    "echo": {
+      "type": "string",
+      "title": "Echo the native phrasing",
+      "description": "off — nothing; line — Claude opens every reply with the one line a native speaker would have used for your prompt; weave — the same, plus your ten weakest words worked into the answer. Costs a line of every response",
+      "default": "off"
+    },
     "level": {
       "type": "string",
       "title": "Your level (optional)",
       "description": "A2/B1/B2/C1 — words below this level never become cards. Empty means no level filter",
       "default": ""
     },
-    "obsidian_vault": {
+    "peek": {
+      "type": "boolean",
+      "title": "Show a card while Claude works",
+      "description": "Print one flashcard into the session while you wait for an answer. Nothing is graded — it is a glance, not a test",
+      "default": false
+    },
+    "peek_pick": {
       "type": "string",
-      "title": "Obsidian vault (optional)",
-      "description": "Absolute path to an Obsidian vault. When set, /loanword:build also writes the deck there as markdown so you can read it on your phone. Leave empty to write nothing — the deck then never leaves this machine.",
+      "title": "Which words to show",
+      "description": "Comma-separated, any mix of: starred, slipping, leech, new, and the levels A1 A2 B1 B2 C1 C2. States are combined, levels narrow the result. Example: starred,slipping,B1,B2. Empty means every card",
       "default": ""
+    },
+    "peek_every": {
+      "type": "number",
+      "title": "Minutes between cards",
+      "description": "At most one card per this many minutes, however many prompts you send",
+      "default": 15,
+      "min": 1,
+      "max": 120
     }
   }
 }

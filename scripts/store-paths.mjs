@@ -1,0 +1,66 @@
+import { existsSync, readdirSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+export const PLUGIN_ROOT =
+  process.env.CLAUDE_PLUGIN_ROOT || dirname(dirname(fileURLToPath(import.meta.url)));
+
+export function resolveData(env = process.env, root = PLUGIN_ROOT, home = homedir()) {
+  if (env.CLAUDE_PLUGIN_DATA) return env.CLAUDE_PLUGIN_DATA;
+
+  const store = join(home, '.claude', 'plugins', 'data');
+  const parts = root.split(/[/\\]/).filter(Boolean);
+  const cache = parts.lastIndexOf('cache');
+  if (cache >= 0 && parts.length >= cache + 4) {
+    const id = `${parts[cache + 2]}-${parts[cache + 1]}`;
+    return join(store, id.replace(/[^\w-]/g, '-'));
+  }
+
+  const decks = decksOnDisk(store);
+  return decks.length === 1 ? decks[0] : join(store, 'loanword');
+}
+
+export function decksOnDisk(store = join(homedir(), '.claude', 'plugins', 'data')) {
+  try {
+    return readdirSync(store)
+      .filter((name) => /^loanword(-[\w-]+)?$/.test(name))
+      .map((name) => join(store, name))
+      .filter((dir) => existsSync(join(dir, 'cards.jsonl')) || existsSync(join(dir, 'loanword.db')))
+      .sort();
+  } catch {
+    return [];
+  }
+}
+
+export const DATA = resolveData();
+
+export const paths = {
+  queue: join(DATA, 'queue.jsonl'),
+  cards: join(DATA, 'cards.jsonl'),
+  state: join(DATA, 'state.json'),
+  known: join(DATA, 'known_words.json'),
+  settings: join(DATA, 'settings.json'),
+  log: join(DATA, 'log.txt'),
+  logRotated: join(DATA, 'log.txt.1'),
+  lock: join(DATA, 'build.lock'),
+  db: join(DATA, 'loanword.db'),
+  pending: join(DATA, 'pending'),
+  peekState: join(DATA, 'peek.json'),
+  backups: join(DATA, 'backup'),
+  audio: join(DATA, 'audio'),
+  exportCsv: join(DATA, 'export', 'loanword.csv'),
+};
+
+const safe = (code) => String(code || '').toLowerCase().replace(/[^a-z]/g, '').slice(0, 2) || 'xx';
+
+export const queueFile = (target) => join(DATA, `queue.${safe(target)}.jsonl`);
+export const lockFile = (target) => join(DATA, `build.${safe(target)}.lock`);
+export const knownFile = (target) => join(DATA, `known.${safe(target)}.txt`);
+export const frontsFile = (target) => join(DATA, `fronts.${safe(target)}.txt`);
+export const wildFile = (target) => join(DATA, `wild.${safe(target)}.jsonl`);
+export const peekFile = (target) => join(DATA, `peek.${safe(target)}.jsonl`);
+
+export const CATEGORIES = ['engineering', 'process', 'collaboration', 'phrasing', 'connectors', 'everyday'];
+
+export const CEFR_LEVELS = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];

@@ -2,14 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { scrub, entropy, MASK } from './scrub.mjs';
 
-// Each fixture: [name, input, leaked-substrings-that-must-be-gone, must-survive?]
 const MASKED = [
   ['aws access key', 'creds AKIAIOSFODNN7EXAMPLE here', ['AKIAIOSFODNN7EXAMPLE']],
   ['aws sts key', 'ASIAIOSFODNN7EXAMPLE', ['ASIAIOSFODNN7EXAMPLE']],
   ['openai key', 'use sk-proj-abcdef0123456789ABCDEF0123', ['sk-proj-abcdef']],
   ['github pat', 'token ghp_1234567890abcdefghijklmnopqrstuvwx', ['ghp_1234567890']],
   ['github oauth', 'gho_1234567890abcdefghijklmnopqrstuvwx', ['gho_1234567890']],
-  // ponytail: prefixes split so GitHub push protection doesn't flag these fake fixtures
+
   ['slack bot token', `${'xox'}b-123456789012-abcdefghijklmnop`, [`${'xox'}b-123456789012`]],
   ['slack user token', `${'xox'}p-9999999999-zzzzzzzzzzzzzzzz`, [`${'xox'}p-9999999999`]],
   ['google api key', 'AIzaSyA1234567890abcdefghijklmnopqrstuvw', ['AIzaSyA1234567890']],
@@ -59,7 +58,6 @@ for (const [name, input, leaks] of MASKED) {
   });
 }
 
-// Ordinary working language must survive intact — the whole product depends on it.
 const KEPT = [
   ['hay que revertir la migración porque el índice no se reconstruyó'],
   ['vamos a mover esta lógica a un servicio aparte y cubrirla con pruebas'],

@@ -1,16 +1,15 @@
-// End-to-end: hook capture → queue → commit → deck.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DATA = mkdtempSync(join(tmpdir(), 'loanword-test-'));
-const PROJECT = join(homedir(), 'api'); // under $HOME so the tilde rewrite applies
+const PROJECT = join(homedir(), 'api');
 
 const env = {
   ...process.env,
@@ -20,17 +19,40 @@ const env = {
   CLAUDE_PLUGIN_OPTION_TARGET_LANG: 'en',
   CLAUDE_PLUGIN_OPTION_MODE: 'both',
   CLAUDE_PLUGIN_OPTION_DAILY_LIMIT: '15',
+  LOANWORD_NO_BUILD: '1',
 };
 
 const { AUTO_BUILD_THRESHOLD, MAX_QUEUE_BYTES } = await import('./capture.mjs');
 
-const run = (args, stdin = '') => execFileSync('node', args, { env, input: stdin, encoding: 'utf8' });
+const run = (args, stdin = '', extraEnv = {}) =>
+  execFileSync('node', args, { env: { ...env, ...extraEnv }, input: stdin, encoding: 'utf8' });
 
-const capture = (source, event) =>
-  run([join(HERE, 'capture.mjs'), `--source=${source}`], JSON.stringify(event));
+const capture = (source, event, extraEnv = {}) =>
+  run([join(HERE, 'capture.mjs'), `--source=${source}`], JSON.stringify(event), extraEnv);
 
-const queue = () =>
-  readFileSync(join(DATA, 'queue.jsonl'), 'utf8').split('\n').filter(Boolean).map(JSON.parse);
+const queueOf = (target = 'en') => {
+  const file = join(DATA, `queue.${target}.jsonl`);
+  if (!existsSync(file)) return [];
+  return readFileSync(file, 'utf8').split('\n').filter(Boolean).map(JSON.parse);
+};
+
+const queue = () => queueOf('en');
+
+const fileSizeOf = (file) => {
+  try {
+    return statSync(file).size;
+  } catch {
+    return 0;
+  }
+};
+
+const deck = () =>
+  JSON.parse(
+    run([
+      '-e',
+      `import(${JSON.stringify(join(HERE, 'db.mjs'))}).then((db) => { console.log(JSON.stringify(db.allLiveCards())); db.close(); })`,
+    ]),
+  );
 
 test('captures a native-language prompt, scrubbed', () => {
   capture('prompt', {
@@ -46,7 +68,6 @@ test('captures a native-language prompt, scrubbed', () => {
   assert.ok(!row.text.includes('/Users/bob'));
 });
 
-// es and en share the Latin script, so this can only pass via the stopword vote.
 test('ignores a prompt written in the target language', () => {
   capture('prompt', { prompt: 'please roll back the migration, the index is stale and the deploy is blocked' });
   assert.equal(queue().length, 1);
@@ -115,16 +136,17 @@ test('commit writes cards with provenance and clears the queue', () => {
   assert.equal(out.added, 2);
   assert.equal(queue().length, 0);
 
-  const written = readFileSync(join(DATA, 'cards.jsonl'), 'utf8').split('\n').filter(Boolean).map(JSON.parse);
+  const written = deck();
   assert.equal(written[0].project, '~/api', 'card carries where it came from');
   assert.ok(written[0].ts);
 
   assert.equal(written[0].target, 'en', 'the card records which deck it belongs to');
   assert.equal(written[0].native, 'es');
+  assert.ok(existsSync(join(DATA, 'loanword.db')), 'the deck lives in SQLite');
+  assert.ok(!existsSync(join(DATA, 'cards.jsonl')), 'and nothing writes the old JSONL any more');
 
-  // Known words are keyed by target language, so a second target starts fresh.
-  const known = JSON.parse(readFileSync(join(DATA, 'known_words.json'), 'utf8'));
-  assert.ok(known.en.includes('reconciliation'), 'committed words are never re-captured');
+  const known = readFileSync(join(DATA, 'known.en.txt'), 'utf8').split('\n').filter(Boolean);
+  assert.ok(known.includes('reconciliation'), 'committed words are never re-captured');
 });
 
 test('committed words are not captured a second time', () => {
@@ -215,8 +237,6 @@ test('the server rejects malformed, unknown and oversized input', async () => {
     assert.equal((await post('/grade', JSON.stringify({ id: 'deadbeef99', rating: 3 }))).status, 404);
     assert.equal((await post('/delete', JSON.stringify({ id: 'nope' }))).status, 404);
 
-    // A card id is never used as an object key before it is matched to the deck,
-    // so a crafted request cannot reach Object.prototype.
     assert.equal((await post('/grade', JSON.stringify({ id: '__proto__', rating: 3 }))).status, 404);
     assert.equal((await post('/grade', JSON.stringify({ id: 'constructor', rating: 3 }))).status, 404);
     assert.equal(({}).polluted, undefined);
@@ -240,32 +260,172 @@ test('export renders importable CSV', () => {
   const csv = run([join(HERE, 'export-anki.mjs')]);
   assert.match(csv, /1 cards/);
   const written = readFileSync(join(DATA, 'export', 'loanword.csv'), 'utf8');
-  assert.match(written, /^front;back;example;tags$/m);
+  assert.match(written, /^front;back;reading;example;tags$/m);
   assert.match(written, /cefr:B1/);
   assert.match(written, /project:api/);
   assert.equal(written.split('\n').filter(Boolean).length, 2, 'header + one surviving card');
 });
 
-test('a full queue raises the auto-build flag', () => {
-  writeFileSync(join(DATA, 'queue.jsonl'), '');
+test('a full queue asks for a build when the session ends', () => {
+  writeFileSync(join(DATA, 'queue.en.jsonl'), '');
+  writeFileSync(join(DATA, 'log.txt'), '');
   for (let i = 0; i < AUTO_BUILD_THRESHOLD; i++) {
     capture('prompt', { prompt: `hay que revertir la migración número ${i} porque el índice no se reconstruyó` });
   }
   assert.equal(queue().length, AUTO_BUILD_THRESHOLD);
-  assert.equal(existsSync(join(DATA, 'pending')), false, 'only SessionEnd raises it');
+  const log = () => readFileSync(join(DATA, 'log.txt'), 'utf8');
+  assert.doesNotMatch(log(), /build requested/, 'a prompt on its own never starts one');
 
   capture('session', { transcript_path: join(DATA, 'nothing.jsonl') });
-  assert.equal(readFileSync(join(DATA, 'pending'), 'utf8').length > 0, true);
+  assert.match(log(), /build requested for 10 record\(s\)/);
+});
+
+test('the builder\'s own session is not captured, or it would feed on itself', () => {
+  writeFileSync(join(DATA, 'queue.en.jsonl'), '');
+  capture('prompt', { prompt: 'hay que revertir la migración porque el índice no se reconstruyó' }, {
+    LOANWORD_BUILDING: '1',
+  });
+  assert.equal(queue().length, 0);
 });
 
 test('capture stops instead of growing an unbounded queue', () => {
   const line = JSON.stringify({ ts: '2026-01-01T00:00:00Z', source: 'prompt', lang: 'es', text: 'x'.repeat(400) });
   const bloated = `${line}\n`.repeat(Math.ceil(MAX_QUEUE_BYTES / (line.length + 1)) + 1);
-  writeFileSync(join(DATA, 'queue.jsonl'), bloated);
+  writeFileSync(join(DATA, 'queue.en.jsonl'), bloated);
   const before = queue().length;
 
   capture('prompt', { prompt: 'hay que revertir la migración porque el índice no se reconstruyó' });
 
   assert.equal(queue().length, before, 'nothing is appended past the cap');
-  assert.match(readFileSync(join(DATA, 'log.txt'), 'utf8'), /queue above/, 'and the reason is logged');
+  assert.match(readFileSync(join(DATA, 'log.txt'), 'utf8'), /every queue is above/, 'and the reason is logged');
+});
+
+test('a legacy single queue is carried into the open deck without losing a record', () => {
+  writeFileSync(join(DATA, 'queue.en.jsonl'), '');
+  const legacy = { ts: '2026-01-01T00:00:00Z', source: 'prompt', lang: 'es', text: 'una frase heredada del viejo formato' };
+  writeFileSync(join(DATA, 'queue.jsonl'), `${JSON.stringify(legacy)}\n`);
+
+  capture('prompt', { prompt: 'hay que revertir la migración porque el índice no se reconstruyó' });
+
+  const rows = queue();
+  assert.ok(rows.some((row) => row.text === legacy.text), 'the old record is still there');
+  assert.equal(existsSync(join(DATA, 'queue.jsonl')), false, 'and the old file is renamed aside');
+  assert.ok(existsSync(join(DATA, 'queue.jsonl.migrated')));
+});
+
+test('one prompt lands in every language being captured', () => {
+  writeFileSync(join(DATA, 'queue.en.jsonl'), '');
+  rmSync(join(DATA, 'queue.ka.jsonl'), { force: true });
+  const settings = join(DATA, 'settings.json');
+  const stored = JSON.parse(readFileSync(settings, 'utf8'));
+  writeFileSync(settings, JSON.stringify({ ...stored, targets: ['en', 'ka'] }));
+
+  capture('prompt', { prompt: 'hay que revertir la migración porque el índice no se reconstruyó' });
+
+  assert.equal(queueOf('en').length, 1);
+  assert.equal(queueOf('ka').length, 1, 'the same prompt is worth a card in both languages');
+
+  writeFileSync(settings, JSON.stringify(stored));
+});
+
+test('a Georgian reply is captured as Georgian, an English one is not', () => {
+  const settings = join(DATA, 'settings.json');
+  const stored = JSON.parse(readFileSync(settings, 'utf8'));
+  writeFileSync(settings, JSON.stringify({ ...stored, native: 'ru', target: 'ka', targets: ['ka'] }));
+  rmSync(join(DATA, 'queue.ka.jsonl'), { force: true });
+
+  const georgian = join(DATA, 'ka.jsonl');
+  const say = (text) =>
+    JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text }] } });
+
+  writeFileSync(
+    georgian,
+    say('მიგრაციის დაბრუნება საჭიროა მანამ, სანამ ინდექსი თავიდან არ აშენდება სრულად.'),
+  );
+  capture('session', { transcript_path: georgian });
+  const rows = queueOf('ka');
+  assert.equal(rows.length, 1, 'Georgian text is Georgian');
+  assert.ok(rows[0].words.some((word) => /\p{Script=Georgian}/u.test(word)), `got ${rows[0].words}`);
+
+  writeFileSync(georgian, say('The deployment keeps stalling because the reconciliation loop never converges.'));
+  capture('session', { transcript_path: georgian });
+  assert.equal(queueOf('ka').length, 1, 'an English reply is not Georgian, whatever the deck says');
+
+  writeFileSync(settings, JSON.stringify(stored));
+  rmSync(join(DATA, 'queue.ka.jsonl'), { force: true });
+});
+
+test('the echo weave asks for the weakest words and stays within the hook budget', () => {
+  const settings = join(DATA, 'settings.json');
+  const stored = JSON.parse(readFileSync(settings, 'utf8'));
+  writeFileSync(settings, JSON.stringify({ ...stored, echo: 'weave' }));
+  const weak = Array.from({ length: 12 }, (_, index) => `weak ${index}\t0.${String(index + 10)}`);
+  writeFileSync(join(DATA, 'fronts.en.txt'), `${['roll back\t0.05', ...weak, 'ship it\t0.98'].join('\n')}\n`);
+
+  const started = Date.now();
+  const out = capture('prompt', { prompt: 'hay que revertir la migración porque el índice no se reconstruyó' });
+  const spent = Date.now() - started;
+
+  assert.match(out, /Loanword echo/);
+  assert.ok(out.includes('roll back'), 'the weakest front is named first');
+  assert.equal(out.match(/weak \d+/g).length, 9, 'ten fronts in all, never the whole deck');
+  assert.ok(!out.includes('ship it'), 'a card that is holding is not worth a line');
+  assert.ok(spent < 8000, `the hook took ${spent}ms, and it gets ten seconds`);
+
+  writeFileSync(settings, JSON.stringify(stored));
+});
+
+test('the capture hook never opens the database', () => {
+  const bare = mkdtempSync(join(tmpdir(), 'loanword-hook-'));
+  capture('prompt', { prompt: 'hay que revertir la migración porque el índice no se reconstruyó' }, {
+    CLAUDE_PLUGIN_DATA: bare,
+  });
+  assert.ok(existsSync(join(bare, 'queue.en.jsonl')), 'the prompt was captured');
+  for (const name of ['loanword.db', 'loanword.db-wal', 'loanword.db-shm']) {
+    assert.equal(existsSync(join(bare, name)), false, `the hook touched ${name}`);
+  }
+  rmSync(bare, { recursive: true, force: true });
+});
+
+test('a word used in a real prompt is counted as a review, once a day', async () => {
+  writeFileSync(join(DATA, 'queue.en.jsonl'), '');
+  const port = 14749;
+  const server = spawn('node', [join(HERE, 'serve.mjs')], { env: { ...env, LOANWORD_PORT: String(port) } });
+  const base = `http://127.0.0.1:${port}`;
+  try {
+    await once(server.stdout, 'data');
+    const state = await (await fetch(`${base}/state`)).json();
+    const card = state.cards[0];
+    assert.ok(card, 'there is a card to use at work');
+
+    await fetch(`${base}/grade`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: card.id, rating: 3 }),
+    });
+
+    const fronts = readFileSync(join(DATA, 'fronts.en.txt'), 'utf8').split('\n').filter(Boolean);
+    assert.ok(fronts.some((line) => line.startsWith(card.front)), 'a reviewed card is in the snapshot');
+    assert.match(fronts[0], /\t\d\.\d+$/, 'and carries how well it is remembered');
+
+    capture('prompt', { prompt: `creo que hay que ${card.front} la migración antes del despliegue` });
+    const wild = readFileSync(join(DATA, 'wild.en.jsonl'), 'utf8').split('\n').filter(Boolean).map(JSON.parse);
+    assert.equal(wild.length, 1);
+    assert.equal(wild[0].front, card.front);
+
+    const after = await (await fetch(`${base}/state`)).json();
+    assert.equal(fileSizeOf(join(DATA, 'wild.en.jsonl')), 0, 'the file is drained once it is read');
+    assert.ok(after.stats.wild_7 >= 1, 'and the week counts it');
+
+    capture('prompt', { prompt: `otra vez hay que ${card.front} la migración antes del despliegue` });
+    await (await fetch(`${base}/state`)).json();
+    const second = await (await fetch(`${base}/state`)).json();
+    assert.equal(second.stats.wild_7, 1, 'the same card is not counted twice in a day');
+  } finally {
+    server.kill();
+  }
+});
+
+test.after(() => {
+  rmSync(DATA, { recursive: true, force: true });
 });

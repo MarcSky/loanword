@@ -1,5 +1,3 @@
-// The interface dictionaries are data, and data rots. This is the check that
-// notices before a user meets a half-translated screen.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { audit, keys, languages } from './i18n.mjs';
@@ -8,7 +6,7 @@ const ALL = keys();
 
 test('every string the interface renders is discoverable', () => {
   assert.ok(ALL.length > 100, `expected the full interface, found ${ALL.length} keys`);
-  // Spot-check one of each shape: plain, interpolated, plural, indirect.
+
   assert.ok(ALL.includes('Start session'));
   assert.ok(ALL.includes('{n} due right now'));
   assert.ok(ALL.includes('card|cards'));

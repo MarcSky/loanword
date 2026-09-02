@@ -8,7 +8,7 @@ allowed-tools: Bash
 # /loanword:stats — progress
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/serve.mjs" --stats
+CLAUDE_PLUGIN_DATA="${CLAUDE_PLUGIN_DATA}" node "${CLAUDE_PLUGIN_ROOT}/scripts/serve.mjs" --stats
 ```
 
 The command prints JSON and exits; no server is started. Retell it compactly,
@@ -24,4 +24,4 @@ settings. Other pairs keep their own cards and schedules; say so only if it is
 relevant, and never imply they were lost.
 
 If `total` is 0, one line: there are no cards yet, do some work and run
-`/loanword:build`.
+the next build, which starts on its own.

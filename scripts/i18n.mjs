@@ -1,19 +1,13 @@
 #!/usr/bin/env node
-// Interface dictionaries. gettext-style: the English sentence is the key, so a
-// missing entry degrades to English and there is no en.json to keep in sync.
+
+
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { PLUGIN_ROOT, readJson } from './store.mjs';
 
 const UI = join(PLUGIN_ROOT, 'ui');
-export const I18N_DIR = join(UI, 'i18n');
+const I18N_DIR = join(UI, 'i18n');
 
-/**
- * Keys reached through a variable — `t(info.label)`, `t(grade.hint)` — cannot be
- * found by scanning for string literals, so the data they come from is listed
- * here. Adding a category or a grade means adding it here too; `missing` is the
- * check that catches a forgotten one.
- */
 const INDIRECT = [
   'Engineering', 'Process', 'Collaboration', 'Phrasing', 'Connectors', 'Everyday',
   'list', 'grid',
@@ -26,18 +20,39 @@ const INDIRECT = [
   'Everything', 'Favourites', 'Due now', 'Never seen', 'Learned',
   'active', 'passive', 'both', 'light', 'dark', 'system',
   'leave', 'next card', 'pick an answer', 'again', 'hard', 'good', 'easy', 'junk',
-  'show the answer',
+  'show the answer', 'check your answer',
+  'Analytics', 'Cloze', 'Type it', 'Reverse',
+  '7 days', '30 days', '90 days', 'All time',
+  'Recall on your own and grade yourself against FSRS.',
+  'Four candidates from the same domain; the click is graded for you.',
+  'The example sentence with the word taken out.',
+  'Write the word from the meaning — one typo forgiven in a long word.',
+  'From your language to the one you are learning.',
+  'Reviews', 'New', 'Learned', 'In review', 'Learning', 'Relearning', 'Not started',
+  'Not worth learning', 'I already know it', 'Too rare to bother', 'The translation is wrong',
+  'Off', 'One line', 'Weave my weakest words in',
+  'On reveal', 'Also at the start of Type it',
+  'The ones slipping away', 'My starred words', 'Starred first, then slipping',
+  'got it', 'say it',
+  'Starred', 'Slipping away', 'Fought back', 'Never seen',
+  'Good morning', 'Good afternoon', 'Good evening',
 ];
 
 const PLACEHOLDER = /\{(\w+)\}/g;
 
-/** Every string the interface can render, in source order-independent sorted form. */
-export function keys(source = readFileSync(join(UI, 'app.js'), 'utf8')) {
+export const uiSources = () =>
+  readdirSync(UI)
+    .filter((name) => name.endsWith('.js'))
+    .sort()
+    .map((name) => readFileSync(join(UI, name), 'utf8'))
+    .join('\n');
+
+export function keys(source = uiSources()) {
   const found = new Set(INDIRECT);
   for (const [, text] of source.matchAll(/\bt\(\s*'((?:[^'\\]|\\.)*)'/g)) {
     found.add(text.replace(/\\'/g, "'").replace(/\\u2019/g, '’'));
   }
-  // tn(n, 'card', 'cards') -> the plural entry "card|cards"
+
   for (const [, one, many] of source.matchAll(/\btn\([^,]+,\s*'([^']+)',\s*'([^']+)'\s*\)/g)) {
     found.add(`${one}|${many}`);
   }
@@ -49,7 +64,6 @@ export const languages = () =>
     ? readdirSync(I18N_DIR).filter((f) => f.endsWith('.json')).map((f) => f.slice(0, -5)).sort()
     : [];
 
-/** What a dictionary is missing, carries needlessly, or has broken. */
 export function audit(lang, all = keys()) {
   const dict = readJson(join(I18N_DIR, `${lang}.json`), null);
   if (!dict || typeof dict !== 'object' || Array.isArray(dict)) return { lang, readable: false };
@@ -66,7 +80,7 @@ export function audit(lang, all = keys()) {
       broken.push(key);
       continue;
     }
-    // A dropped {placeholder} renders the sentence with a hole in it.
+
     const want = (key.match(PLACEHOLDER) || []).sort().join();
     const got = (value.match(PLACEHOLDER) || []).sort().join();
     if (want !== got) broken.push(key);

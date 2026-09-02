@@ -1,14 +1,29 @@
 {
   "name": "loanword",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Turn your Claude Code sessions into a personal phrasebook.",
   "license": "MIT",
   "private": true,
   "type": "module",
+  "bin": {
+    "loanword": "scripts/serve.mjs"
+  },
   "scripts": {
-    "test": "node --test scripts/*.test.mjs"
+    "test": "node --test scripts/*.test.mjs",
+    "test:perf": "LOANWORD_PERF=1 node --test scripts/perf.test.mjs",
+    "i18n": "node scripts/i18n.mjs audit",
+    "tokens": "node scripts/tokens.mjs",
+    "icons": "node scripts/icons.mjs",
+    "vendor": "node scripts/vendor.mjs"
   },
   "dependencies": {
     "ts-fsrs": "^5.2.0"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "devDependencies": {
+    "@awesome.me/webawesome": "^3.12.0",
+    "@phosphor-icons/core": "^2.1.1"
   }
 }

@@ -7,26 +7,28 @@ allowed-tools: Bash, Read, Write
 
 # /loanword:review — the trainer
 
-Start the server in the background. It exits by itself if the port is already
-serving a trainer:
+One command: it serves the trainer and opens the browser itself. It exits by
+itself if the port is already serving a trainer.
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/serve.mjs"
+CLAUDE_PLUGIN_DATA="${CLAUDE_PLUGIN_DATA}" node "${CLAUDE_PLUGIN_ROOT}/scripts/serve.mjs"
 ```
 
 Use `run_in_background: true` — the server has to stay up while the user works
-through the deck.
-
-Then open the browser:
-
-```bash
-open http://localhost:4747 2>/dev/null || xdg-open http://localhost:4747
-```
+through the deck. It closes itself after 30 minutes with no requests, so a
+finished session never leaves the port held.
 
 Say it in one line: opened http://localhost:4747 — `space` reveals the answer,
 `1–4` grade, `esc` quits.
 
-`LOANWORD_PORT` overrides the port. The server binds `127.0.0.1` only.
+To close it before then:
+
+```bash
+CLAUDE_PLUGIN_DATA="${CLAUDE_PLUGIN_DATA}" node "${CLAUDE_PLUGIN_ROOT}/scripts/serve.mjs" stop
+```
+
+`LOANWORD_PORT` overrides the port, `--idle=<minutes>` the timeout (`0` disables
+it), `--no-open` skips the browser. The server binds `127.0.0.1` only.
 
 If there are no cards the UI says so itself. Do not check that up front and do
 not run build unless asked.
@@ -38,14 +40,14 @@ Check once, after opening the browser — never before, and never twice in a
 session:
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/i18n.mjs" audit "$(node "${CLAUDE_PLUGIN_ROOT}/scripts/store.mjs" config | node -pe 'JSON.parse(require("fs").readFileSync(0)).native')"
+CLAUDE_PLUGIN_DATA="${CLAUDE_PLUGIN_DATA}" node "${CLAUDE_PLUGIN_ROOT}/scripts/i18n.mjs" audit "$(CLAUDE_PLUGIN_DATA="${CLAUDE_PLUGIN_DATA}" node "${CLAUDE_PLUGIN_ROOT}/scripts/store.mjs" config | node -pe 'JSON.parse(require("fs").readFileSync(0)).native')"
 ```
 
 - Clean, or the native language is `en`: say nothing.
 - **No dictionary at all:** offer in one line — "the trainer is in English;
   want me to translate it into <language>? about a minute, nothing leaves the
   machine". Only if they say yes:
-  1. `node "${CLAUDE_PLUGIN_ROOT}/scripts/i18n.mjs" keys` for the exact list,
+  1. `CLAUDE_PLUGIN_DATA="${CLAUDE_PLUGIN_DATA}" node "${CLAUDE_PLUGIN_ROOT}/scripts/i18n.mjs" keys` for the exact list,
   2. translate every key yourself and Write
      `${CLAUDE_PLUGIN_ROOT}/ui/i18n/<code>.json`,
   3. re-run `audit <code>` and fix what it reports.

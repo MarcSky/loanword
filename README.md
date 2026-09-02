@@ -2,27 +2,27 @@
 
 ![loancard](images/2.jpg)
 
-A Claude Code plugin that turns your work sessions into a personal phrasebook.
-You write prompts in your own language; Loanword shows how a native speaker
-would have said it, and builds flashcards from the words you actually needed.
+**Main idea: fit the foreign language to the shape of your native one.**
 
-No API keys — cards are built by a subagent on your own subscription.
+You already think in a language. Loanword does not hand you someone else's
+word list. It watches what *you* try to say in Claude Code, notices where your
+native language and the one you are learning part ways, and turns exactly those
+words into flashcards. The deck is yours because the gaps are yours.
 
-## Privacy
+- Works inside Claude Code. No API key: cards are built on your own subscription.
+- Everything stays on your machine. No server, no account, no telemetry.
+- One deck per language pair. Learn `es → en` and `en → es` side by side, and
+  capture into several of them at once.
+- Thirty-five languages, whatever they are written in: Georgian, Armenian,
+  Hindi, Bengali, Thai, Amharic, Arabic, Hebrew, Japanese, Chinese, Korean.
 
-- Everything stays local, in `~/.claude/plugins/data/loanword*`. No servers, no
-  telemetry, no accounts. The review server binds `127.0.0.1` only.
-- Code, diffs and tool output are never captured. From assistant replies only
-  candidate words are stored, never the sentence.
-- Secrets are stripped before the write, not before the model call — rules in
-  [`scripts/scrub.mjs`](scripts/scrub.mjs) (cloud/API keys, JWTs, PEM blocks,
-  `TOKEN=…`, emails, IPs, absolute paths, hex digests, high-entropy blobs).
-  Removed text leaves a `▮`.
-- One scrubbed batch of phrases goes to the same Claude you already work with.
-- **Exception you switch on:** an Obsidian vault path makes the deck leave this
-  machine via whatever syncs that vault. Empty by default.
+## How it works
 
-Found a leak in `queue.jsonl`? That is a P0 — open an issue.
+1. **You work as usual.** A hook collects the phrases you reached for.
+2. **A session ends.** Claude turns the queue into cards: the word, what it
+   means in your language, an example, a level (A1 to C2), a domain.
+3. **You open the trainer.** Pick 5, 10 or 15 minutes and review. FSRS decides
+   when each card comes back.
 
 ## Install
 
@@ -31,178 +31,195 @@ Found a leak in `queue.jsonl`? That is a P0 — open an issue.
 /plugin install loanword
 ```
 
-It asks for your native language, target language, and capture mode. Claude Code
-installs the only dependency (`ts-fsrs`); nothing needs native compilation.
+The installer asks for your native language, the language you are learning and
+the capture mode. Needs Node 22.16 or newer.
 
-## Using it
-
-Work as usual; hooks collect material. When you want cards:
+## Inside Claude Code
 
 | Command | What it does |
 |---|---|
-| `/loanword:build` | Builds cards from the queue |
 | `/loanword:review` | Opens the trainer at `localhost:4747` |
 | `/loanword:stats` | Progress: learned, streak, hardest words |
 
-With `auto_build` on, Claude offers to build at the end of any session with 10+
-records.
+There is no build command inside Claude Code. When a session ends with 10 or
+more captured records, a detached `claude -p` reads the queue and writes the
+cards. Opening the trainer does the same for anything captured since. To force
+it, use `loanword build` from the terminal.
 
-### The trainer
+## The `loanword` command
 
-Four screens — Overview, Deck, Study, Settings — served off disk, no build step,
-no framework, no network.
+The trainer is also a plain CLI, for when you want it without Claude Code.
 
-Every card has a CEFR level (A1–C2) and one of six domains:
+```
+npm link                  # once, from the plugin folder; puts `loanword` on PATH
+```
 
-| Domain | What lands there |
+| Command | What it does |
 |---|---|
-| Engineering | Code, systems, debugging, review |
-| Process | Plans, estimates, releases, specs |
-| Collaboration | Meetings, feedback, asking, disagreeing |
-| Phrasing | Set phrases and idioms that resist translation |
-| Connectors | However, in terms of, that said, provided that |
-| Everyday | General vocabulary, and anything unplaceable |
+| `loanword` | Serves the trainer and opens the browser |
+| `loanword stop` | Closes it and releases the port |
+| `loanword build` | Turns the queue into cards now |
+| `loanword --stats` | Progress as JSON, for scripts |
+| `loanword --where` | Which plugin copy and which deck it reads |
+| `loanword build --target=ka` | Builds one language instead of all of them |
+| `loanword clone --from=en --to=ka` | Copies the concepts of one deck into another |
+| `loanword speech --lang=ka` | Says which offline voice would speak, and how to get one |
+| `loanword peek` | Prints one card from the deck, the way the hook does |
+| `loanword tidy` | Lists migrated leftovers and old backups; `--remove` deletes them |
+| `loanword migrate --dry-run` | What the JSONL → SQLite move would do |
+| `loanword migrate` | Does it (also runs itself on first start) |
 
-**Overview** — what is due, per-domain mastery rings, level pills that re-scope
-the screen. **Deck** — search, filters, list or grid, stars (stored beside the
-schedule, never touching it).
+Flags and environment:
 
-**Study** has two modes, both writing to the same FSRS schedule:
+| Flag | Meaning |
+|---|---|
+| `--no-open` | Do not open the browser |
+| `--host=lan` | Bind every interface and print a URL with a one-off token. Without it, loopback only |
+| `--idle=<minutes>` | Close after that long without a request. Default 30, `0` never |
+| `LOANWORD_PORT=<port>` | Move off 4747 |
+| `NO_COLOR=1` | Plain startup banner |
 
-- **Flashcards** — `space` reveals, `1 2 3 4` are Again / Hard / Good / Easy,
-  `d` discards the card as junk.
-- **Learn** — four candidates from the same domain and direction; one click
-  grades (right and fast = Easy, right and slow = Good, wrong = Again). Better
-  for words you have never met.
+On start it prints where it serves, which deck is open, how many cards are due
+and where the data lives. `Ctrl+C`, `SIGTERM` or `loanword stop` close it
+cleanly: open connections are finished, the database is closed, the port is
+released. Nothing is ever left holding the port.
 
-Keyboard: `1`–`4` switch screens, `/` searches, `t` toggles theme, `?` lists
-shortcuts, `esc` leaves a session.
+## The trainer
 
-Interface language is a separate setting from the pair you are learning. Russian
-ships in the box; `/loanword:review` offers once to translate the rest on your
-subscription. Arabic, Hebrew, Persian and Urdu flip the layout to RTL. See
-[`ui/i18n/README.md`](ui/i18n/README.md).
+Five screens, served off disk, no build step, no framework, no network.
 
-Illustration slots ship empty; each `<img>` carries its generation prompt in
-`alt` and [`ui/art/README.md`](ui/art/README.md) is the manifest — drop a file
-with the right name into `ui/art/`.
+- **Overview**: what is due, four numbers, domains, eight weeks of rhythm.
+- **Deck**: search, filters, list or grid, edit in place, star, remove with undo.
+- **Study**: pick a length, get a planned session. A new card is shown once
+  with both sides, then comes back three to five cards later as a typed
+  question — it is never graded before you have produced it. Five exercises
+  share one FSRS schedule: flashcards, learn (four choices), cloze, type it,
+  reverse. Swipe left for Again, right for Good; `s` says the phrase out loud.
+- **Analytics**: everything from your own review log, with a table behind
+  every chart.
+- **Settings**: languages, capture, study, appearance, export.
 
-### Reading it on your phone
+The header carries the language switcher. Open it to jump between decks or add
+a language; each `native → target` pair is its own deck with its own schedule,
+and switching never touches the others. Known-word lists are per target
+language too.
 
-With an Obsidian vault configured, `/loanword:build` mirrors the deck into
-`<vault>/Loanword/` — one note per card plus an index. Your vault's sync gets it
-to the phone; there is no Obsidian plugin to install.
+Keyboard: `space` reveals, `1 2 3 4` grade, `d` junks (and asks why), `u` undoes
+that, `s` speaks, `1`–`5` switch screens, `/` searches, `t` toggles theme, `?`
+lists shortcuts, `esc` leaves a session.
 
-```
-Loanword/
-  Loanword.md          progress, per-domain and per-level tables, due, hardest words
-  ru-en/
-    bottleneck.md      one note per card
-```
+**Copy a deck.** Starting a second language does not start from nothing:
+Settings → *Copy a deck* takes the concepts you already learned — your own
+phrasing, the domain, the level, the star — and asks the builder for the new
+side. The schedule is never copied, and the deck you copied from is not
+touched. A new script also offers its alphabet as a starter deck.
 
-Notes carry properties (`category`, `cefr`, `mastery`, `due`, `status`,
-`project`, `captured`) and nested tags (`#loanword/engineering`, `#loanword/b2`).
+**Say it out loud.** Offline voices only: the browser's local ones first, then
+Piper, macOS `say` or eSpeak NG on this machine. `loanword speech --lang=ka`
+prints the one command that fetches a Piper voice — it never runs it, and no
+audio ever leaves the machine.
 
-Read-only mirror: grading happens in the trainer against FSRS. Unchanged notes
-are not rewritten, discarded cards have their note removed, and nothing outside
-`<vault>/Loanword/` is touched.
+Interface language is separate from the pair you learn. English ships in the
+box; see [`ui/i18n/README.md`](ui/i18n/README.md) for the rest.
 
-Set it under **Settings → Your data**, at install time as `obsidian_vault`, or:
+## Privacy
 
-```
-node scripts/obsidian.mjs /path/to/Vault
-```
+- Everything lives in `~/.claude/plugins/data/loanword*`. The server binds
+  `127.0.0.1` only.
+- Code, diffs and tool output are never captured. From assistant replies only
+  candidate words are stored, never the sentence.
+- Secrets are stripped before anything is written: rules in
+  [`scripts/scrub.mjs`](scripts/scrub.mjs). Removed text leaves a `▮`.
 
-### One deck per language pair
-
-Each `native → target` pair is its own deck with its own FSRS schedule; changing
-target language opens a different deck rather than touching existing cards.
-Switch from the chip row in Settings. Known-word lists are per target language.
-
-Cards written before this existed are pinned to whichever pair was open the
-first time you switched.
+Found a leak in `queue.jsonl`? That is a P0. Open an issue.
 
 ## Settings
 
-Set at install time and changeable from the trainer's Settings screen, which
-writes `settings.json` into the plugin data directory. The stored value wins;
-both the trainer and the capture hooks read the merged result.
+Set at install time, changeable from the trainer. Stored in `settings.json` in
+the plugin data directory; the stored value wins.
 
 | Option | Default | Meaning |
 |---|---|---|
 | `native_lang` | `es` | The language you write prompts in |
 | `target_lang` | `en` | The language you are learning |
-| `mode` | `both` | `active` — your prompts only; `passive` — assistant replies only |
-| `daily_limit` | `15` | New cards per day (reviews are not capped) |
-| `auto_build` | `true` | Offer to build at the end of a session |
+| `mode` | `both` | `active`: your prompts; `passive`: assistant replies |
+| `daily_limit` | `15` | New cards per day. Reviews are never capped |
+| `auto_build` | `true` | Build cards when a session ends |
+| `echo` | `off` | `line`: open every reply with the native phrasing of your prompt; `weave`: also work your ten weakest words into the answer |
 | `level` | — | `A1`…`C2`: words below this level never become cards |
-| `obsidian_vault` | — | Path to an Obsidian vault. Empty means nothing is written |
-| theme | `system` | Trainer only |
-| interface language | your native one | Trainer only |
-| default mode | `flashcards` | Which study mode a session opens in. Trainer only |
 
 ```
-node scripts/store.mjs config    # effective settings, env plus settings.json
+node scripts/store.mjs config    # effective settings
 ```
 
-Language detection is local, no model call: different alphabets by alphabet,
-same-alphabet pairs by a function-word vote (`en`, `es`, `pt`, `fr`, `it`, `de`,
-`nl`, `pl` — add yours in [`scripts/lang.mjs`](scripts/lang.mjs)).
+Language detection is local: different scripts by script, same-script pairs by
+a function-word vote, Japanese and Chinese by kana, in
+[`scripts/lang.mjs`](scripts/lang.mjs). Writing systems without spaces are
+queued as short sentences rather than split into words.
 
-## Turning it off for client repositories
+Two more settings live only in the trainer. **Show a card while Claude works**
+prints one card into the session while you wait for an answer — the words
+closest to being forgotten, or the ones you starred, at most one every fifteen
+minutes. **One sentence of your own** asks for a sentence at the end of a
+session and answers with a single line; the sentence itself is never stored.
 
-Use Claude Code's own mechanisms: install at `user` scope and
-`claude plugin disable loanword` where it does not belong; or install at
-`project` scope; or use `mode: active` so only your own wording is captured.
+To keep client repositories out: install at `user` scope and
+`claude plugin disable loanword` where it does not belong, or use
+`mode: active` so only your own wording is captured.
 
-## Anki export
+## Export to Anki
 
-`/loanword:build` and `GET /export.csv` write `export/loanword.csv` into the
-plugin data directory.
+The **Export for Anki** button in the trainer downloads a CSV. Every build also
+writes `export/loanword.csv` into the data directory.
 
 1. Anki → **File → Import**
 2. Field separator: semicolon `;`
-3. Fields in order: `front`, `back`, `example`, `tags`
-4. Leave **Allow HTML in fields** off, treat the first line as a header
+3. Fields in order: `front`, `back`, `reading`, `example`, `tags`
+4. Treat the first line as a header
 
-Tags look like `loanword lang:en from:es cefr:B1 cat:process project:api-server`.
-The export covers every deck; `GET /export.csv?deck=current` narrows it to the
-open pair.
+Tags look like `loanword lang:en from:es cefr:B1 cat:process project:api`.
 
-`.apkg` with the FSRS schedule preserved is v0.2.
+## Stop-lists
 
-## Your own frequency list
-
-Words from the frequency list never become cards. Only English ships with one:
-[`data/freq/en.txt`](data/freq/en.txt). Drop `<code>.txt` next to it, one word
-per line. No file means no filter.
+Words from the stop-list never become cards. Every language in the picker ships
+with one, in [`data/freq/`](data/freq/) — see the
+[README there](data/freq/README.md) for where they came from and how to swap in
+a counted frequency list instead.
 
 ## Development
 
 ```
 npm ci
-npm test
-node scripts/i18n.mjs audit          # dictionaries complete and well-formed
-node scripts/obsidian.mjs ~/Vault    # mirror the deck into an Obsidian vault
+npm test                             # unit, storage, migration, analytics, HTTP
+npm run test:perf                    # 50k cards, 500k reviews, against the budget
+npm run i18n                         # dictionaries complete and well-formed
+npm run tokens                       # export the palette to docs/design/tokens.json
 claude plugin validate . --strict
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
 
-Storage is JSONL, deliberate up to ~50k cards: 10 000 cards is ~2.5 MB, a full
-read is 10–30 ms, and the hooks never open the card file. SQLite is a v0.3
-decision triggered by file size.
+Storage is one SQLite file, `loanword.db`: the deck, the FSRS schedule, every
+review, every session, the junk log and the retired wordings. Copy it while the
+trainer is closed and you have a backup. Decks written by an earlier version
+migrate themselves on first start; `node scripts/migrate.mjs --rollback` puts
+the old files back.
 
-Assets are vendored so the UI works offline:
+The capture hooks write only `queue.<code>.jsonl` and never open the database —
+they read plain-text snapshots of the known words and of the fronts worth
+watching for. That is what keeps `UserPromptSubmit` fast, and what lets several
+languages capture at once without waiting on each other.
 
-- [Lucide](https://lucide.dev) icons (ISC) — `ui/icons.svg` holds only the
-  symbols used. Rebuild from `lucide-static` if you add one.
-- [General Sans](https://fontshare.com/fonts/general-sans) by Indian Type
-  Foundry (ITF Free Font License, `ui/fonts/GeneralSans-FFL.txt`).
+Schema changes go through the numbered ladder in
+[`scripts/db.mjs`](scripts/db.mjs): the deck is copied into `backup/` before the
+first step runs, and every step is its own transaction.
+
+Design tokens are generated from `ui/app.css` into `docs/design/tokens.json`
+by `npm run tokens`; the landing page at loanwords.com builds from the same
+export. Assets are vendored so the UI works offline: [Lucide](https://lucide.dev)
+icons (ISC) in `ui/icons.svg`, [General Sans](https://fontshare.com/fonts/general-sans)
+by Indian Type Foundry (ITF Free Font License).
 
 ## Contact
 
-Built by **[@levan_fewnix](https://x.com/levan_fewnix)** on X. The trainer
-carries the same link under Settings → Loanword.
-
-MIT.
+Built by **[@levan_fewnix](https://x.com/levan_fewnix)** on X. MIT.

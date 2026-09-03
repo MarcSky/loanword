@@ -44,6 +44,8 @@ export const paths = {
   log: join(DATA, 'log.txt'),
   logRotated: join(DATA, 'log.txt.1'),
   lock: join(DATA, 'build.lock'),
+  filingLock: join(DATA, 'categories.lock'),
+  filingProgress: join(DATA, 'categories.progress'),
   db: join(DATA, 'loanword.db'),
   pending: join(DATA, 'pending'),
   peekState: join(DATA, 'peek.json'),
@@ -54,13 +56,16 @@ export const paths = {
 
 const safe = (code) => String(code || '').toLowerCase().replace(/[^a-z]/g, '').slice(0, 2) || 'xx';
 
+export const LEECH_LAPSES = 6;
+
 export const queueFile = (target) => join(DATA, `queue.${safe(target)}.jsonl`);
 export const lockFile = (target) => join(DATA, `build.${safe(target)}.lock`);
+export const progressFile = (target) => join(DATA, `build.${safe(target)}.progress`);
 export const knownFile = (target) => join(DATA, `known.${safe(target)}.txt`);
 export const frontsFile = (target) => join(DATA, `fronts.${safe(target)}.txt`);
 export const wildFile = (target) => join(DATA, `wild.${safe(target)}.jsonl`);
 export const peekFile = (target) => join(DATA, `peek.${safe(target)}.jsonl`);
 
-export const CATEGORIES = ['engineering', 'process', 'collaboration', 'phrasing', 'connectors', 'everyday'];
+export { ALL_CATEGORIES as CATEGORIES } from './categories.mjs';
 
 export const CEFR_LEVELS = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];

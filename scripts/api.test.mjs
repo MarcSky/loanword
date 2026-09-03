@@ -235,6 +235,39 @@ test('a session is planned around the length it was asked for', async () => {
   assert.ok(['type', 'reverse', 'flashcards'].includes(body.production), 'the plan names the production step');
 });
 
+test('the state and the stats endpoint read one and the same deck', async () => {
+  const state = await get('/state');
+  const alone = await get('/stats');
+  assert.equal(alone.status, 200);
+  assert.deepEqual(
+    { ...alone.body, activity: null, weekly: null },
+    { ...state.body.stats, activity: null, weekly: null },
+    'the deck is read once per request and shared, not loaded twice',
+  );
+  assert.equal(state.body.stats.total, state.body.cards.length);
+});
+
+test('the four cards nobody has opened yet are what a session presents first', async () => {
+  const { status, body } = await post('/session/start', { minutes: 10 });
+  assert.equal(status, 200);
+  assert.ok(body.counts.new > 0, 'a deck of unseen cards is not an empty session');
+  assert.ok(
+    body.steps.some((step) => step.mode === 'present' && !step.seen),
+    'an unseen card arrives as a first look, not as a quiz',
+  );
+});
+
+test('a card is quizzed only after it was learned in the deck', async () => {
+  for (let index = 0; index < CARDS.length; index++) {
+    const { status } = await post('/grade', { id: id(index), rating: 3, mode: 'learn' });
+    assert.equal(status, 200);
+  }
+  const after = await post('/session/start', { minutes: 10 });
+  assert.equal(after.status, 200, 'cards on their learning steps are ready for a quiz at once');
+  assert.ok(after.body.steps.every((step) => step.seen));
+  assert.equal(after.body.counts.new, 0);
+});
+
 test('the plan never repeats a domain twice in a row', async () => {
   const { body } = await post('/session/start', { minutes: 15 });
   for (let index = 1; index < body.steps.length; index++) {
@@ -243,9 +276,11 @@ test('the plan never repeats a domain twice in a row', async () => {
 });
 
 test('a session can be scoped to one domain', async () => {
-  const { body } = await post('/session/start', { minutes: 10, category: 'engineering' });
-  assert.ok(body.steps.every((step) => step.category === 'engineering'));
-  assert.equal(body.category, 'engineering');
+  const probe = await post('/session/start', { minutes: 10 });
+  const category = probe.body.steps[0].category;
+  const { body } = await post('/session/start', { minutes: 10, category });
+  assert.ok(body.steps.every((step) => step.category === category));
+  assert.equal(body.category, category);
 });
 
 test('excluding what was just studied gives a different set', async () => {
@@ -532,6 +567,38 @@ test('a clone is previewed before it is started, and refused when it makes no se
   assert.equal(refused.status, 400);
 });
 
+test('the sync dialog is offered every deck it could copy from, with what is actually new', async () => {
+  const { status, body } = await get('/clone/sources?to=ka');
+  assert.equal(status, 200);
+  assert.equal(body.to, 'ka');
+  assert.equal(body.native, 'ru');
+  assert.deepEqual(
+    body.sources.map((source) => source.code),
+    ['en'],
+    'the deck being copied into is never offered as its own source',
+  );
+  assert.equal(body.sources[0].total, 6);
+  assert.equal(body.sources[0].fresh, 6, 'nothing has been copied yet');
+});
+
+test('a sync copies from several decks at once, and refuses a source that is not there', async () => {
+  const missing = await post('/clone', { sources: ['en', 'zz'], to: 'ka' });
+  assert.equal(missing.status, 400);
+  assert.match(missing.body.error, /zz/);
+  const untouched = await get('/clone/sources?to=ka');
+  assert.equal(untouched.body.sources[0].fresh, 6, 'a refused sync queues nothing at all');
+
+  const { status, body } = await post('/clone', { sources: ['en'], to: 'ka', categories: ['engineering'] });
+  assert.equal(status, 200);
+  assert.equal(body.queued, 2);
+  assert.deepEqual(body.from, ['en']);
+  const left = await get('/clone/sources?to=ka');
+  assert.equal(left.body.sources[0].fresh, 4, 'what is already queued stops counting as new');
+
+  const empty = await post('/clone', { sources: [], to: 'ka' });
+  assert.equal(empty.status, 400);
+});
+
 test('starting a clone queues the concepts and switches the trainer to the new deck', async () => {
   const { status, body } = await post('/clone', { from: 'en', to: 'ka', categories: ['process', 'connectors'] });
   assert.equal(status, 200);
@@ -611,4 +678,202 @@ test('production practice refuses a sentence that uses nothing', async () => {
   assert.equal(refused.status, 400);
   const alsoRefused = await post('/produce', { sentence: 'I wrote something', words: ['roll back'] });
   assert.equal(alsoRefused.status, 400, 'two words or it is not production');
+});
+
+test('sorting a card as known is remembered and shows on the card', async () => {
+  const on = await post('/known', { id: id(2), on: true });
+  assert.equal(on.status, 200);
+  assert.deepEqual(on.body, { ok: true, known: true });
+  let { body } = await get('/state');
+  assert.equal(body.cards.find((card) => card.id === id(2)).isKnown, true);
+  assert.equal(body.cards.filter((card) => card.isKnown).length, 1, 'nobody else was touched');
+
+  const off = await post('/known', { id: id(2), on: false });
+  assert.deepEqual(off.body, { ok: true, known: false });
+  ({ body } = await get('/state'));
+  assert.equal(body.cards.find((card) => card.id === id(2)).isKnown, false);
+
+  const missing = await post('/known', { id: 'nope', on: true });
+  assert.equal(missing.status, 404);
+});
+
+test('the export can be narrowed to the decks the learner picks', async () => {
+  const everything = await fetch(`${BASE}/export.csv`);
+  assert.equal(everything.status, 200);
+  const all = (await everything.text()).trim().split('\n');
+  assert.ok(all.length > 1, 'a header and at least one card');
+
+  const georgian = await (await fetch(`${BASE}/export.csv?decks=ru%3Eka`)).text();
+  assert.equal(georgian.trim().split('\n').length, 1, 'the Georgian deck has no built cards yet, so only the header');
+
+  const english = await (await fetch(`${BASE}/export.csv?decks=ru%3Een`)).text();
+  assert.equal(english.trim().split('\n').length, all.length, 'and the English deck is the whole export');
+  assert.ok(english.includes('lang:en'));
+
+  const nonsense = await (await fetch(`${BASE}/export.csv?decks=ru%3Ezz`)).text();
+  assert.equal(nonsense.trim().split('\n').length, 1, 'a deck that does not exist exports nothing');
+});
+
+test('the deck reports the meanings it carries twice, and loses the group once one is thrown away', async () => {
+  const quiet = await get('/duplicates');
+  assert.equal(quiet.status, 200);
+  assert.deepEqual(quiet.body.groups, [], 'the fixture deck starts clean');
+
+  const deck = db.deckId('ru', 'en');
+  db.insertCards(
+    [
+      {
+        deck_id: deck,
+        front: 'gaining traction',
+        back: 'набирает популярность',
+        keywords: ['gaining traction'],
+        example: 'It is gaining traction.',
+        category: 'process',
+        cefr: 'B2',
+        created_at: new Date().toISOString(),
+      },
+      {
+        deck_id: deck,
+        front: 'gain popularity',
+        back: 'Набирает популярность ',
+        keywords: ['gain popularity'],
+        example: 'They gain popularity fast.',
+        category: 'process',
+        cefr: 'B2',
+        created_at: new Date().toISOString(),
+      },
+    ],
+    ['aaaaaaaa01', 'aaaaaaaa02'],
+  );
+
+  const found = await get('/duplicates');
+  assert.equal(found.body.groups.length, 1);
+  assert.equal(found.body.groups[0].meaning, 'набирает популярность');
+  assert.deepEqual(
+    found.body.groups[0].cards.map((card) => card.front),
+    ['gaining traction', 'gain popularity'],
+  );
+
+  assert.deepEqual(
+    found.body.groups[0].cards.map((card) => card.repeat),
+    [false, false],
+    'two different words for one meaning are not repeats of each other',
+  );
+
+  const thrown = await post('/delete', { id: 'aaaaaaaa02', reason: 'duplicate' });
+  assert.equal(thrown.status, 200);
+  const after = await get('/duplicates');
+  assert.deepEqual(after.body.groups, [], 'one card left means one meaning, not a duplicate');
+});
+
+test('switching a category off moves the cards it held into everyday', async () => {
+  const before = await get('/state');
+  const held = before.body.cards.filter((card) => card.category === 'collaboration');
+  assert.ok(held.length > 0, 'the deck has something to lose');
+
+  const { status, body } = await post('/settings', {
+    categories: ['engineering', 'process', 'phrasing', 'connectors', 'everyday'],
+  });
+  assert.equal(status, 200);
+  assert.equal(body.refiled, held.length, 'the browser is told how many cards moved');
+  assert.ok(!body.categories.includes('collaboration'));
+
+  const after = await get('/state');
+  for (const card of held) {
+    const now = after.body.cards.find((entry) => entry.id === card.id);
+    assert.equal(now.category, 'everyday', `${card.front} was left filed under a category that is gone`);
+  }
+  assert.ok(
+    after.body.categories.length >= 1 && after.body.categories.includes('everyday'),
+    'a deck is never left without a category to file into',
+  );
+
+  const back = await post('/settings', {
+    categories: ['engineering', 'process', 'collaboration', 'phrasing', 'connectors', 'everyday'],
+  });
+  assert.equal(back.body.refiled, 0, 'putting the category back moves nothing on its own');
+});
+
+test('one word written twice is reported as the repeat it is', async () => {
+  const deck = db.deckId('ru', 'en');
+  db.insertCards(
+    [
+      {
+        deck_id: deck,
+        front: 'hamburger menu',
+        back: 'гамбургер меню',
+        keywords: ['hamburger menu'],
+        example: 'Tap the hamburger menu.',
+        category: 'frontend',
+        cefr: 'B1',
+        created_at: new Date().toISOString(),
+      },
+      {
+        deck_id: deck,
+        front: 'hamburger menus',
+        back: 'меню-гамбургер',
+        keywords: ['hamburger menus'],
+        example: 'Both hamburger menus open the same drawer.',
+        category: 'frontend',
+        cefr: 'B1',
+        created_at: new Date().toISOString(),
+      },
+    ],
+    ['aaaaaaaa11', 'aaaaaaaa12'],
+  );
+
+  const { body } = await get('/duplicates');
+  const group = body.groups.find((entry) => entry.cards.some((card) => card.id === 'aaaaaaaa11'));
+  assert.ok(group, 'the two wordings are one meaning, whatever the word order');
+  assert.deepEqual(
+    group.cards.map((card) => card.repeat),
+    [false, true],
+    'the first one written stays, the later wording is the repeat',
+  );
+
+  for (const id of ['aaaaaaaa11', 'aaaaaaaa12']) await post('/delete', { id, reason: 'duplicate' });
+});
+
+test('the interface can start a build and is told whether one began', async () => {
+  const { status, body } = await post('/build', {});
+  assert.equal(status, 200);
+  assert.equal(body.ok, true);
+  assert.equal(typeof body.started, 'boolean');
+  assert.ok(Array.isArray(body.targets), 'and it gets the queue back to draw a bar with');
+  assert.ok(body.targets.every((row) => typeof row.queued === 'number' && typeof row.done === 'number'));
+});
+
+test('a deck can be deleted, and the trainer moves to one that is left', async () => {
+  const gone = await post('/deck/delete', { native: 'ru', target: 'zz' });
+  assert.equal(gone.status, 404);
+
+  db.insertCards(
+    [
+      {
+        deck_id: db.deckId('ru', 'sv'),
+        front: 'tack',
+        back: 'спасибо',
+        keywords: ['tack'],
+        example: 'Tack så mycket.',
+        category: 'everyday',
+        cefr: 'A1',
+        created_at: new Date().toISOString(),
+      },
+    ],
+    ['bbbbbbbb01'],
+  );
+  await post('/settings', { native: 'ru', target: 'sv' });
+  const before = await get('/state');
+  assert.equal(before.body.config.target, 'sv');
+
+  const { status, body } = await post('/deck/delete', { native: 'ru', target: 'sv' });
+  assert.equal(status, 200);
+  assert.equal(body.removed, 1);
+  assert.notEqual(body.config.target, 'sv', 'the trainer does not sit on a deck that is gone');
+  assert.ok(!(body.config.targets || []).includes('sv'), 'and it stops capturing into it');
+
+  const after = await get('/state');
+  assert.ok(!after.body.pairs.some((pair) => pair.target === 'sv' && pair.total > 0));
+  const restored = await post('/restore', { id: 'bbbbbbbb01' });
+  assert.equal(restored.status, 200, 'the cards are only put aside, so one can come back');
 });

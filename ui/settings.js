@@ -1,7 +1,9 @@
 import {
   $,
   ACTIONS,
-  CATEGORY,
+  ALL_CATEGORIES,
+  CORE,
+  FIELDS,
   LANGUAGES,
   LEVELS,
   MODE_LABEL,
@@ -10,23 +12,38 @@ import {
   api,
   app,
   applyTheme,
+  categoriesForField,
+  categoriesOf,
+  decks,
+  dialogHead,
   esc,
+  flagOf,
   icon,
   languageName,
   levelBlurb,
   refresh,
   registerScreen,
   render,
+  meta,
+  modal,
   saveSetting,
   t,
+  tintOf,
+  tn,
   toast,
 } from './core.js';
-import { deckChips } from './overview.js';
+import { captureSwitches, deckChips, watchBuild } from './overview.js';
 
 const THEMES = [
   { value: 'light', icon: 'sun' },
   { value: 'dark', icon: 'moon-stars' },
   { value: 'system', icon: 'monitor' },
+];
+
+const MODELS = [
+  ['haiku', 'Haiku · fast'],
+  ['sonnet', 'Sonnet · careful'],
+  ['opus', 'Opus · slowest'],
 ];
 
 const PEEK_POOLS = [
@@ -44,12 +61,15 @@ const EXERCISES = [
   ['reverse', 'Reverse', 'From your language to the one you are learning.'],
 ];
 
-export const HELP = {
+const HELP = {
   decks: () => [t('Language profiles'), t('Each pair is its own deck, with its own cards and its own schedule. Opening another one never touches the first. The switch says whether today’s prompts are captured into that language; every language left on fills its own queue, and they never wait on each other.')],
   ui: () => [t('Interface language'), t('Separate from what you are learning. Changing your target language never changes this.')],
   clone: () => [t('Copying a deck'), t('The concepts travel: your own phrasing, the domain, the level, the star. The new side is written fresh and starts from zero — no schedule is ever copied, and the deck you copy from is not touched.')],
+  topics: () => [t('Categories'), t('Every card is filed under one category, and the ones you pick here are the only ones the builder may use. Pick a field to set them all at once, or choose by hand. Three are always on: set phrases, connectors and everyday words. Drop a category and the cards it held move to Everyday — file them again to place them properly.')],
+  capture: () => [t('Capture into'), t('Which languages today’s prompts are turned into cards for. The queue and the build are per language, so two decks that teach the same language fill from the same capture — turning it off stops both.')],
   mode: () => [t('What gets captured'), t('<b>Active</b> takes your own prompts and shows how a native speaker would have put it. <b>Passive</b> takes unfamiliar words out of the assistant’s replies. <b>Both</b> does each.')],
   level: () => [t('Floor level'), t('Words below this CEFR level never become cards. Leave it open if you want everything.')],
+  model: () => [t('Which model writes your cards'), t('Every card is written by a Claude you already have: the trainer runs <code>claude -p</code> on this machine, so nothing is sent anywhere else and no API key is needed. <b>Haiku</b> is fast and cheap and enough for words in a language close to yours. <b>Sonnet</b> is worth it for translating between languages that share no script, and for judging level. <b>Opus</b> for the stubborn cases. The same model answers your one sentence of your own.')],
   autoBuild: () => [t('Building at session end'), t('When a work session leaves ten or more captured records behind, the cards are built in the background.')],
   echo: () => [t('Echo'), t('<b>One line</b> opens every reply with the phrasing a native speaker would have used. <b>Weave</b> also asks Claude to work your ten weakest words into the answer. Both spend a line of every response.')],
   dailyLimit: () => [t('New cards per day'), t('A cap on unseen cards only. Reviews that are due are never held back — those are the ones that decay.')],
@@ -92,45 +112,199 @@ function setting(title, control, { help = '', hint = '' } = {}) {
   </div>`;
 }
 
-function cloneBlock(cfg) {
-  const sources = (app.pairs || []).filter(
-    (pair) => pair.native === cfg.native && pair.target !== cfg.target && pair.total > 0,
-  );
-  if (!sources.length) return '';
-  const starter = app.cards.length ? null : app.starter;
+const sourceKey = (source) => source.deck || source.code;
 
-  return `<form class="clone" data-clone>
-    <div class="clone-head">
-      <span>${esc(t('Copy into {lang}', { lang: languageName(cfg.target) }))}</span>
-      ${helpDot('clone')}
-    </div>
-    <label class="field">
-      <span class="field-label">${esc(t('From'))}</span>
-      <select class="select" name="from">
-        ${sources
-          .map(
-            (pair) =>
-              `<option value="${pair.target}">${esc(languageName(pair.target))} · ${pair.total}</option>`,
-          )
-          .join('')}
-      </select>
-    </label>
-    <div class="filters" role="group" aria-label="${esc(t('Filter by category'))}">
-      ${Object.keys(CATEGORY)
-        .map(
-          (key) => `<label class="chip chip-sm"><input type="checkbox" name="category" value="${key}"
-            ${starter?.categories.includes(key) ? 'checked' : ''}> ${esc(t(CATEGORY[key].label))}</label>`,
-        )
-        .join('')}
-    </div>
-    <div class="filters" role="group" aria-label="${esc(t('Filter by CEFR level'))}">
-      ${LEVELS.map(
-        (level) => `<label class="chip chip-sm"><input type="checkbox" name="level" value="${level}"
-          ${starter?.levels.includes(level) ? 'checked' : ''}> ${level}</label>`,
+function syncSources() {
+  return (app.sync?.sources || []).filter((source) => source.fresh > 0);
+}
+
+function syncRow(source) {
+  const key = source.deck || source.code;
+  const picked = app.sync.picked.has(key);
+  return `<div class="sync-row" ${source.fresh ? '' : 'data-empty'}>
+    <button class="switch" role="switch" data-act="sync-toggle" data-value="${key}"
+      aria-checked="${picked}" aria-label="${esc(languageName(source.code))}"
+      ${source.fresh ? '' : 'aria-disabled="true"'}></button>
+    <span class="flag">${flagOf(source.code)}</span>
+    <span class="sync-lang">${esc(languageName(source.code))}
+      ${
+        source.translated
+          ? `<i class="sync-from">${esc(t('from {lang}', { lang: languageName(source.native) }))}</i>`
+          : ''
+      }</span>
+    <span class="sync-n">${
+      source.fresh ? esc(tn(source.fresh, 'new card', 'new cards')) : esc(t('nothing new'))
+    }</span>
+  </div>`;
+}
+
+async function saveCategories(keys, field = 'custom') {
+  const saved = await api('/settings', { categories: keys, field }).catch((error) => {
+    toast(error.message || t('Could not save'), 'error');
+    return null;
+  });
+  if (!saved) return;
+  app.config = saved;
+  if (saved.refiled) toast(t('{n} cards moved to Everyday', { n: saved.refiled }));
+  else toast(t('Saved'));
+  await refresh();
+}
+
+function topicChips() {
+  const counts = new Map();
+  for (const card of app.cards) counts.set(card.category, (counts.get(card.category) || 0) + 1);
+
+  return categoriesOf(app.config.categories)
+    .map((key) => {
+      const info = meta(key);
+      const locked = CORE.includes(key);
+      const held = counts.get(key) || 0;
+      return `<span class="chip topic-chip" style="${tintOf(key)}" ${locked ? `title="${esc(t('Always on'))}"` : ''}>
+        <span class="dot">${icon(info.icon)}</span>${esc(info.label)}
+        ${held ? `<b class="topic-n">${held}</b>` : ''}
+        ${
+          locked
+            ? `<span class="topic-lock">${icon('check-circle', 'icon-sm icon')}</span>`
+            : `<button class="chip-x" data-act="topics-remove" data-value="${key}"
+                aria-label="${esc(t('Remove {name}', { name: info.label }))}">${icon('x', 'icon-sm icon')}</button>`
+        }
+      </span>`;
+    })
+    .join('');
+}
+
+function renderTopics() {
+  const box = $('#topics-body');
+  const chosen = app.topics;
+  if (!chosen || !box) return;
+  const on = new Set(chosen.keys);
+
+  box.innerHTML = `
+    ${dialogHead(t('What do you work on?'), 'topics-close')}
+    <p class="lede" style="font-size:.9375rem">${esc(
+      t('Pick a field and the trainer files your words under it. You can change the list below by hand.'),
+    )}</p>
+
+    <div class="fields">
+      ${FIELDS.map(
+        ([key, label]) => `<button class="chip" data-act="topics-field" data-value="${key}"
+          aria-pressed="${chosen.field === key}">${esc(t(label))}</button>`,
       ).join('')}
     </div>
-    <button class="btn btn-primary" type="submit">${icon('cards-three', 'icon-sm icon')} ${esc(t('Copy'))}</button>
-  </form>`;
+
+    <div class="topic-grid">
+      ${ALL_CATEGORIES.map((key) => {
+        const info = meta(key);
+        const locked = CORE.includes(key);
+        return `<button class="chip topic" data-act="topics-toggle" data-value="${key}"
+          aria-pressed="${on.has(key)}" ${locked ? 'aria-disabled="true"' : ''}
+          style="${tintOf(key)}" title="${esc(locked ? t('Always on') : info.label)}">
+          <span class="dot">${icon(info.icon)}</span>${esc(info.label)}
+        </button>`;
+      }).join('')}
+    </div>
+
+    <div class="sync-foot">
+      <span class="field-hint" style="margin-inline-end:auto">${esc(
+        tn(categoriesOf(chosen.keys).length, 'category', 'categories'),
+      )}</span>
+      ${
+        app.cards.length
+          ? `<button class="btn" data-act="topics-rebuild" ${chosen.busy ? 'disabled' : ''}>
+              ${icon('arrows-clockwise', 'icon-sm icon')}
+              ${esc(t('File my cards again'))}
+            </button>`
+          : ''
+      }
+      <button class="btn btn-primary" data-act="topics-close">${esc(t('Done for now'))}</button>
+    </div>`;
+}
+
+function renderPair() {
+  const box = $('#pair-body');
+  const asked = app.adding;
+  if (!asked || !box) return;
+  const clash = asked.native === asked.target;
+
+  box.innerHTML = `
+    ${dialogHead(t('Add a language'), 'pair-close')}
+    <p class="lede" style="font-size:.9375rem">${esc(
+      t('A deck is a pair: the language you write in and the one you are learning. They can never be the same.'),
+    )}</p>
+
+    <div class="lang-pair" style="margin-top:16px">
+      <label class="field">
+        <span class="field-label">${esc(t('You write prompts in'))}</span>
+        <select class="select" id="pair-native">${langOptions(asked.native, asked.target)}</select>
+      </label>
+      <button class="swap" data-act="pair-swap" aria-label="${esc(t('Swap the two languages'))}">
+        ${icon('arrows-left-right', 'icon-sm icon')}
+      </button>
+      <label class="field">
+        <span class="field-label">${esc(t('You are learning'))}</span>
+        <select class="select" id="pair-target">${langOptions(asked.target, asked.native)}</select>
+      </label>
+    </div>
+
+    <p class="field-hint" style="margin-top:10px">${esc(
+      t('{from} → {to}', { from: languageName(asked.native), to: languageName(asked.target) }),
+    )}</p>
+
+    <div class="sync-foot" style="margin-top:18px">
+      <button class="btn" data-act="pair-close">${esc(t('Cancel'))}</button>
+      <button class="btn btn-primary" data-act="pair-add" ${clash || asked.busy ? 'disabled' : ''}>
+        ${icon('plus', 'icon-sm icon')} ${esc(t('Start this deck'))}
+      </button>
+    </div>`;
+}
+
+function renderDrop() {
+  const asked = app.dropping;
+  const box = $('#drop-body');
+  if (!asked || !box) return;
+  const lang = languageName(asked.target);
+  box.innerHTML = `
+    <div class="section-head" style="margin:0 0 8px">
+      <h2>${esc(t('Delete the {lang} deck?', { lang }))}</h2>
+    </div>
+    <p class="lede" style="font-size:.9375rem">${esc(
+      t('{cards} leave your deck, along with what the schedule knew about them. Your review history stays.', {
+        cards: tn(asked.total, 'card', 'cards'),
+      }),
+    )}</p>
+    <p class="field-hint">${esc(t('{from} → {to}', { from: languageName(asked.native), to: lang }))}</p>
+    <div class="sync-foot">
+      <button class="btn" data-act="deck-drop-cancel">${esc(t('Cancel'))}</button>
+      <button class="btn btn-danger" data-act="deck-drop-confirm" ${asked.busy ? 'disabled' : ''}>
+        ${icon('trash', 'icon-sm icon')} ${esc(t('Delete it'))}
+      </button>
+    </div>`;
+}
+
+function renderSync() {
+  const state = app.sync;
+  const box = $('#sync-body');
+  if (!state || !box) return;
+  const chosen = syncSources().filter((source) => state.picked.has(sourceKey(source)));
+  const total = chosen.reduce((sum, source) => sum + source.fresh, 0);
+
+  box.innerHTML = `
+    ${dialogHead(t('Copy into {lang}', { lang: languageName(app.config.target) }), 'sync-close')}
+    <p class="lede" style="font-size:.9375rem">${esc(HELP.clone()[1])}</p>
+    ${
+      state.loading
+        ? `<div class="skeleton" style="height:140px;margin-top:16px"></div>`
+        : state.sources.length
+          ? `<div class="sync-list">${state.sources.map(syncRow).join('')}</div>`
+          : `<p class="field-hint" style="margin-top:16px">${esc(t('nothing new'))}</p>`
+    }
+    <div class="sync-foot">
+      <button class="btn" data-act="sync-close">${esc(t('Cancel'))}</button>
+      <button class="btn btn-primary" data-act="sync-run" ${total && !state.busy ? '' : 'disabled'}>
+        ${icon('arrows-clockwise', 'icon-sm icon')}
+        ${esc(total ? `${t('Copy')} · ${tn(total, 'new card', 'new cards')}` : t('Copy'))}
+      </button>
+    </div>`;
 }
 
 const choices = (setting_, values, current) =>
@@ -149,27 +323,33 @@ function renderSettings() {
 
     <div class="settings">
       <section class="panel settings-group"><h2 class="title">${esc(t('Languages'))}</h2>
-      <div class="lang-pair">
-        <label class="field">
-          <span class="field-label">${esc(t('You write prompts in'))}</span>
-          <select class="select" data-setting="native">${langOptions(cfg.native)}</select>
-        </label>
-        <button class="swap" data-act="swap-langs" aria-label="${esc(t('Swap the two languages'))}">
-          ${icon('arrows-left-right', 'icon-sm icon')}
-        </button>
-        <label class="field">
-          <span class="field-label">${esc(t('You are learning'))}</span>
-          <select class="select" data-setting="target">${langOptions(cfg.target, cfg.native)}</select>
-        </label>
-      </div>
 
       <div class="decks-head">
         <span>${esc(t('Your decks'))}</span>
         ${helpDot('decks')}
       </div>
+      <p class="field-hint" style="margin:-4px 0 10px">${esc(t('Click a deck to study it.'))}</p>
       <div class="decks">${deckChips()}</div>
+      <button class="btn" style="margin-top:12px" data-act="pair-open">
+        ${icon('plus', 'icon-sm icon')} ${esc(t('Add a language'))}
+      </button>
 
-      ${cloneBlock(cfg)}
+      <div class="decks-head">
+        <span>${esc(t('Capture into'))}</span>
+        ${helpDot('capture')}
+      </div>
+      <p class="field-hint" style="margin:-4px 0 10px">${esc(
+        t('One switch per language you are learning. Decks that teach the same language share it.'),
+      )}</p>
+      <div class="decks">${captureSwitches()}</div>
+
+      ${
+        (app.pairs || []).some((pair) => pair.total > 0 && !(pair.native === cfg.native && pair.target === cfg.target))
+          ? `<button class="btn" style="margin:14px 0 4px" data-act="sync-open">
+              ${icon('arrows-clockwise', 'icon-sm icon')} ${esc(t('Copy into {lang}', { lang: languageName(cfg.target) }))}
+            </button>`
+          : ''
+      }
 
       ${setting(t('Interface language'), `<select class="select" data-setting="uiLang">
           ${['en', ...(app.uiLanguages || [])]
@@ -180,6 +360,29 @@ function renderSettings() {
             )
             .join('')}
         </select>`, { help: 'ui' })}
+
+      </section><section class="panel settings-group"><h2 class="title">${esc(t('Categories'))}</h2>
+
+      <div class="decks-head">
+        <span>${esc(t('What you work on'))}</span>
+        ${helpDot('topics')}
+      </div>
+      <p class="field-hint" style="margin:-4px 0 10px">${esc(
+        t('The only categories the builder may use. Drop one and its cards move to Everyday.'),
+      )}</p>
+      <div class="topic-chips">${topicChips()}</div>
+      <div class="topic-actions">
+        <button class="btn" data-act="topics-open">
+          ${icon('plus', 'icon-sm icon')} ${esc(t('Add a category'))}
+        </button>
+        ${
+          app.cards.length
+            ? `<button class="btn" data-act="topics-rebuild">
+                ${icon('arrows-clockwise', 'icon-sm icon')} ${esc(t('File my cards again'))}
+              </button>`
+            : ''
+        }
+      </div>
 
       </section><section class="panel settings-group"><h2 class="title">${esc(t('Capture'))}</h2>
       ${setting(
@@ -204,6 +407,7 @@ function renderSettings() {
           aria-label="${esc(t('Build at session end'))}"></button>`,
         { help: 'autoBuild' },
       )}
+      ${setting(t('Which model writes your cards'), choices('model', MODELS, cfg.model || 'haiku'), { help: 'model' })}
       ${setting(
         t('Echo the native phrasing'),
         choices('echo', [['off', 'Off'], ['line', 'One line'], ['weave', 'Weave my weakest words in']], cfg.echo || 'off'),
@@ -227,7 +431,14 @@ function renderSettings() {
       )}
       ${setting(
         t('Days a week'),
-        `<input class="input" type="number" min="1" max="7" step="1" value="${cfg.weeklyGoal ?? 5}" data-setting="weeklyGoal">`,
+        `<div class="segmented" role="group" aria-label="${esc(t('Days a week'))}">
+          ${[1, 2, 3, 4, 5, 6, 7]
+            .map(
+              (days) => `<button data-act="set-goal" data-value="${days}"
+                aria-pressed="${(cfg.weeklyGoal ?? 5) === days}">${days}</button>`,
+            )
+            .join('')}
+        </div>`,
         { help: 'weeklyGoal' },
       )}
       ${setting(
@@ -355,6 +566,10 @@ Object.assign(ACTIONS, {
     await saveSetting('studyMode', value);
     render();
   },
+  'set-goal': async (value) => {
+    await saveSetting('weeklyGoal', Number(value));
+    render();
+  },
   'set-minutes': async (value) => {
     await saveSetting('sessionMinutes', Number(value));
     render();
@@ -383,15 +598,6 @@ Object.assign(ACTIONS, {
     await saveSetting('theme', next);
     if (app.route === 'settings') render();
   },
-  'swap-langs': async () => {
-    const { native, target } = app.config;
-    app.config = await api('/settings', { native: target, target: native });
-    app.category = '';
-    app.level = '';
-    app.session = null;
-    await refresh();
-    toast(t('Now {from} → {to}', { from: languageName(app.config.native), to: languageName(app.config.target) }));
-  },
   'open-deck': async (value) => {
     const [native, target] = String(value).split('>');
     if (native === app.config.native && target === app.config.target) return;
@@ -404,28 +610,175 @@ Object.assign(ACTIONS, {
   },
 });
 
-document.addEventListener('submit', async (event) => {
-  const form = event.target.closest('[data-clone]');
-  if (!form) return;
-  event.preventDefault();
-  const data = new FormData(form);
-  const button = form.querySelector('button[type=submit]');
-  if (button) button.disabled = true;
-  try {
-    const out = await api('/clone', {
-      from: data.get('from'),
-      to: app.config.target,
-      categories: data.getAll('category'),
-      levels: data.getAll('level'),
-    });
-    toast(t('{n} cards queued for {lang}', { n: out.queued, lang: languageName(out.to) }));
-    await refresh();
-  } catch (error) {
-    toast(error.message || t('Could not copy that deck'), 'error');
-    if (button) button.disabled = false;
-  }
+modal('sync', () => {
+  app.sync = null;
+});
+modal('drop', () => {
+  app.dropping = null;
+});
+modal('pair', () => {
+  app.adding = null;
+});
+modal('topics', () => {
+  app.topics = null;
+  render();
+});
+
+document.addEventListener('change', (event) => {
+  const asked = app.adding;
+  if (!asked || !event.target.id) return;
+  if (event.target.id === 'pair-native') app.adding = { ...asked, native: event.target.value };
+  else if (event.target.id === 'pair-target') app.adding = { ...asked, target: event.target.value };
+  else return;
+  renderPair();
+});
+
+Object.assign(ACTIONS, {
+  'topics-open': () => {
+    app.topics = { keys: categoriesOf(app.config.categories), field: app.config.field || '' };
+    $('#topics').showModal();
+    renderTopics();
+  },
+  'topics-close': () => $('#topics').close(),
+  'topics-rebuild': async () => {
+    const chosen = app.topics;
+    if (!chosen || chosen.busy) return;
+    chosen.busy = true;
+    renderTopics();
+    try {
+      const out = await api('/categories/rebuild', {});
+      $('#topics').close();
+      toast(out.started ? t('Filing your cards again') : t('Nothing to file right now'));
+      watchBuild();
+    } catch (error) {
+      chosen.busy = false;
+      renderTopics();
+      toast(error.message || t('Could not start the build'), 'error');
+    }
+  },
+  'topics-field': async (key) => {
+    app.topics = { keys: categoriesForField(key), field: key };
+    renderTopics();
+    await saveCategories(app.topics.keys, key);
+    renderTopics();
+  },
+  'topics-remove': async (key) => {
+    if (CORE.includes(key)) return;
+    const keys = categoriesOf(app.config.categories).filter((entry) => entry !== key);
+    app.topics = { keys: categoriesOf(keys), field: 'custom' };
+    await saveCategories(app.topics.keys);
+  },
+  'topics-toggle': async (key) => {
+    const chosen = app.topics;
+    if (!chosen || CORE.includes(key)) return;
+    const on = new Set(chosen.keys);
+    if (on.has(key)) on.delete(key);
+    else on.add(key);
+    app.topics = { keys: categoriesOf([...on]), field: 'custom' };
+    renderTopics();
+    await saveCategories(app.topics.keys);
+    renderTopics();
+  },
+  'pair-open': () => {
+    const taken = new Set((app.pairs || []).map((pair) => pair.target));
+    const free = LANGUAGES.map(([code]) => code).filter((code) => code !== app.config.native && !taken.has(code));
+    app.adding = { native: app.config.native, target: free[0] || app.config.target, busy: false };
+    $('#pair').showModal();
+    renderPair();
+  },
+  'pair-close': () => $('#pair').close(),
+  'pair-swap': () => {
+    const asked = app.adding;
+    if (!asked) return;
+    app.adding = { ...asked, native: asked.target, target: asked.native };
+    renderPair();
+  },
+  'pair-add': async () => {
+    const asked = app.adding;
+    if (!asked || asked.busy || asked.native === asked.target) return;
+    asked.busy = true;
+    renderPair();
+    try {
+      app.config = await api('/settings', { native: asked.native, target: asked.target });
+      $('#pair').close();
+      app.category = '';
+      app.level = '';
+      app.session = null;
+      app.duplicates = null;
+      await refresh();
+      toast(t('Now {from} → {to}', { from: languageName(app.config.native), to: languageName(app.config.target) }));
+    } catch (error) {
+      asked.busy = false;
+      renderPair();
+      toast(error.message || t('Could not switch that'), 'error');
+    }
+  },
+  'deck-drop': (value) => {
+    const [native, target] = String(value).split('>');
+    const pair = decks().find((entry) => entry.native === native && entry.target === target);
+    app.dropping = { native, target, total: pair?.total || 0, busy: false };
+    $('#drop').showModal();
+    renderDrop();
+  },
+  'deck-drop-cancel': () => $('#drop').close(),
+  'deck-drop-confirm': async () => {
+    const asked = app.dropping;
+    if (!asked || asked.busy) return;
+    asked.busy = true;
+    renderDrop();
+    try {
+      const out = await api('/deck/delete', { native: asked.native, target: asked.target });
+      $('#drop').close();
+      toast(tn(out.removed, 'card removed', 'cards removed'));
+      app.duplicates = null;
+      await refresh();
+    } catch (error) {
+      asked.busy = false;
+      renderDrop();
+      toast(error.message || t('Could not delete that deck'), 'error');
+    }
+  },
+  'sync-open': async () => {
+    app.sync = { sources: [], picked: new Set(), loading: true, busy: false };
+    $('#sync').showModal();
+    renderSync();
+    try {
+      const out = await api('/clone/sources');
+      app.sync.sources = out.sources || [];
+      app.sync.picked = new Set(app.sync.sources.filter((source) => source.fresh).map(sourceKey));
+    } catch (error) {
+      toast(error.message || t('Could not copy that deck'), 'error');
+    }
+    app.sync.loading = false;
+    renderSync();
+  },
+  'sync-toggle': (key) => {
+    const state = app.sync;
+    if (!state || state.busy) return;
+    if (!state.sources.some((source) => sourceKey(source) === key && source.fresh)) return;
+    if (state.picked.has(key)) state.picked.delete(key);
+    else state.picked.add(key);
+    renderSync();
+  },
+  'sync-close': () => $('#sync').close(),
+  'sync-run': async () => {
+    const state = app.sync;
+    if (!state || state.busy || !state.picked.size) return;
+    state.busy = true;
+    renderSync();
+    try {
+      const out = await api('/clone', { sources: [...state.picked], to: app.config.target });
+      $('#sync').close();
+      toast(t('{cards} queued for {lang}', { cards: tn(out.queued, 'card', 'cards'), lang: languageName(out.to) }));
+      await refresh();
+      watchBuild();
+    } catch (error) {
+      state.busy = false;
+      renderSync();
+      toast(error.message || t('Could not copy that deck'), 'error');
+    }
+  },
 });
 
 registerScreen('settings', renderSettings);
 
-export { renderSettings };

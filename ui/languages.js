@@ -60,6 +60,15 @@ const PICKABLE = new Set(LANGUAGES.map((entry) => entry.code));
 
 export const isPickable = (value) => PICKABLE.has(codeOf(value));
 
+const FLAGS = {
+  en: '🇬🇧', es: '🇪🇸', pt: '🇧🇷', fr: '🇫🇷', de: '🇩🇪', it: '🇮🇹', nl: '🇳🇱', pl: '🇵🇱', ru: '🇷🇺', uk: '🇺🇦',
+  cs: '🇨🇿', sv: '🇸🇪', no: '🇳🇴', da: '🇩🇰', fi: '🇫🇮', tr: '🇹🇷', el: '🇬🇷', he: '🇮🇱', ar: '🇸🇦', fa: '🇮🇷',
+  ur: '🇵🇰', hi: '🇮🇳', bn: '🇧🇩', th: '🇹🇭', am: '🇪🇹', hy: '🇦🇲', ja: '🇯🇵', ko: '🇰🇷', zh: '🇨🇳', ka: '🇬🇪',
+  vi: '🇻🇳', id: '🇮🇩', ro: '🇷🇴', hu: '🇭🇺', bg: '🇧🇬',
+};
+
+export const flagOf = (code) => FLAGS[String(code || '').toLowerCase()] || '🏳️';
+
 export const languageName = (value) => languageOf(value)?.name || String(value || '').toUpperCase();
 
 export const scriptOf = (value) => languageOf(value)?.script || 'latin';

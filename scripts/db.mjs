@@ -1,13 +1,25 @@
+import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { DATA, CATEGORIES, CEFR_LEVELS, paths } from './store-paths.mjs';
+import { DATA, CATEGORIES, CEFR_LEVELS, LEECH_LAPSES, paths } from './store-paths.mjs';
 
 const require = createRequire(import.meta.url);
 
 export const DB_FILE = join(DATA, 'loanword.db');
-export const SCHEMA_VERSION = 6;
-export const LEECH_LAPSES = 6;
+export const SCHEMA_VERSION = 9;
+
+export const wordsOf = (text) =>
+  String(text ?? '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim()
+    .split(' ')
+    .filter(Boolean);
+
+export const conceptKey = (text) =>
+  createHash('sha1').update(wordsOf(text).sort().join(' ')).digest('hex').slice(0, 10);
+export { LEECH_LAPSES };
 
 const NODE_SQLITE_HELP =
   'Loanword needs Node 22.16 or newer: this build has no node:sqlite. ' +
@@ -70,12 +82,15 @@ CREATE TABLE IF NOT EXISTS cards (
   starred    INTEGER NOT NULL DEFAULT 0,
   deleted_at TEXT,
   reading    TEXT NOT NULL DEFAULT '',
-  origin_id  TEXT
+  origin_id  TEXT,
+  known      INTEGER NOT NULL DEFAULT 0,
+  concept    TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS cards_deck        ON cards(deck_id, deleted_at);
 CREATE INDEX IF NOT EXISTS cards_deck_cat    ON cards(deck_id, category, deleted_at);
 CREATE INDEX IF NOT EXISTS cards_deck_cefr   ON cards(deck_id, cefr, deleted_at);
 CREATE INDEX IF NOT EXISTS cards_origin      ON cards(deck_id, origin_id);
+CREATE INDEX IF NOT EXISTS cards_concept     ON cards(deck_id, concept);
 
 CREATE TABLE IF NOT EXISTS known_words (
   target TEXT NOT NULL,
@@ -225,11 +240,29 @@ const MIGRATIONS = {
     if (!columns.has('origin_id')) handle.exec('ALTER TABLE cards ADD COLUMN origin_id TEXT');
     handle.exec('CREATE INDEX IF NOT EXISTS cards_origin ON cards(deck_id, origin_id)');
   },
+
+  7: (handle) => {
+    const columns = new Set(handle.prepare('PRAGMA table_info(cards)').all().map((row) => row.name));
+    if (!columns.has('known')) handle.exec('ALTER TABLE cards ADD COLUMN known INTEGER NOT NULL DEFAULT 0');
+  },
+
+  8: (handle) => {
+    const columns = new Set(handle.prepare('PRAGMA table_info(cards)').all().map((row) => row.name));
+    if (!columns.has('concept')) handle.exec("ALTER TABLE cards ADD COLUMN concept TEXT NOT NULL DEFAULT ''");
+    handle.exec('CREATE INDEX IF NOT EXISTS cards_concept ON cards(deck_id, concept)');
+    const fill = handle.prepare('UPDATE cards SET concept = ? WHERE id = ?');
+    for (const row of handle.prepare('SELECT id, back FROM cards').all()) fill.run(conceptKey(row.back), row.id);
+  },
+
+  9: (handle) => {
+    const fill = handle.prepare('UPDATE cards SET concept = ? WHERE id = ?');
+    for (const row of handle.prepare('SELECT id, back FROM cards').all()) fill.run(conceptKey(row.back), row.id);
+  },
 };
 
 const stamp = () => new Date().toISOString().replace(/[:.]/g, '-');
 
-export function backupDatabase(handle, file) {
+function backupDatabase(handle, file) {
   const dir = join(paths.backups, stamp());
   mkdirSync(dir, { recursive: true });
   const to = join(dir, 'loanword.db');
@@ -254,7 +287,7 @@ function versionOf(handle) {
   return columns.has('category') ? 3 : 2;
 }
 
-export let lastBackup = null;
+let lastBackup = null;
 
 function climb(handle, file) {
   const from = versionOf(handle);
@@ -355,8 +388,8 @@ export function localDay(value = new Date()) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
-export const localHour = (value = new Date()) => new Date(value).getHours();
-export const localWeekday = (value = new Date()) => new Date(value).getDay();
+const localHour = (value = new Date()) => new Date(value).getHours();
+const localWeekday = (value = new Date()) => new Date(value).getDay();
 
 export function deckId(native, target) {
   const found = get('SELECT id FROM decks WHERE native = ? AND target = ?', native, target);
@@ -382,7 +415,7 @@ export function deckPairsWithCounts() {
 const plain = (rows) => rows.map((row) => ({ ...row }));
 
 const CARD_COLUMNS =
-  'id, deck_id, type, front, back, keywords, example, pos, cefr, note, category, project, source, ts, created_at, starred, reading, origin_id';
+  'id, deck_id, type, front, back, keywords, example, pos, cefr, note, category, project, source, ts, created_at, starred, reading, origin_id, known, concept';
 
 const NO_KEYWORDS = [];
 
@@ -401,6 +434,8 @@ function hydrate(row) {
   row.keywords = keywords;
   row.starred = !!row.starred;
   row.isFavorite = row.starred;
+  row.isKnown = !!row.known;
+  delete row.known;
   return row;
 }
 
@@ -409,7 +444,7 @@ export function insertCards(rows, ids) {
   const insert = stmt(`
     INSERT OR IGNORE INTO cards
       (${CARD_COLUMNS}, deleted_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`);
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`);
   let added = 0;
   for (let i = 0; i < rows.length; i++) {
     const card = rows[i];
@@ -432,6 +467,8 @@ export function insertCards(rows, ids) {
       card.starred ? 1 : 0,
       card.reading || '',
       card.origin_id || null,
+      card.known ? 1 : 0,
+      card.concept || conceptKey(card.back),
     ).changes;
     added += Number(changes);
   }
@@ -485,6 +522,62 @@ export function rewriteCard(id, patch) {
 }
 
 export const setStar = (id, on) => run('UPDATE cards SET starred = ? WHERE id = ?', on ? 1 : 0, id);
+
+export function conceptsShared(deck) {
+  const rows = all(
+    `SELECT ${CARD_COLUMNS} FROM cards
+     WHERE deck_id = ? AND deleted_at IS NULL AND concept != ''
+       AND concept IN (
+         SELECT concept FROM cards
+         WHERE deck_id = ? AND deleted_at IS NULL AND concept != ''
+         GROUP BY concept HAVING COUNT(*) > 1)
+     ORDER BY concept, created_at, id`,
+    deck,
+    deck,
+  ).map(hydrate);
+
+  const groups = new Map();
+  for (const row of rows) {
+    if (!groups.has(row.concept)) groups.set(row.concept, { concept: row.concept, meaning: row.back, cards: [] });
+    groups.get(row.concept).cards.push(row);
+  }
+  return [...groups.values()];
+}
+
+export function refileToFallback(allowed, fallback = 'everyday') {
+  const keys = [...new Set([...allowed, fallback])];
+  const holes = keys.map(() => '?').join(',');
+  return Number(
+    run(
+      `UPDATE cards SET category = ? WHERE deleted_at IS NULL AND category NOT IN (${holes})`,
+      fallback,
+      ...keys,
+    ).changes,
+  );
+}
+
+export function conceptFronts(deck) {
+  const map = new Map();
+  for (const row of all(
+    "SELECT concept, front FROM cards WHERE deck_id = ? AND deleted_at IS NULL AND concept != ''",
+    deck,
+  )) {
+    if (!map.has(row.concept)) map.set(row.concept, []);
+    map.get(row.concept).push(row.front);
+  }
+  return map;
+}
+
+export const conceptsOfDeck = (deck) =>
+  new Set(
+    all("SELECT DISTINCT concept FROM cards WHERE deck_id = ? AND deleted_at IS NULL AND concept != ''", deck).map(
+      (row) => row.concept,
+    ),
+  );
+
+export const setCategory = (id, category) => run('UPDATE cards SET category = ? WHERE id = ?', category, id);
+
+export const setKnown = (id, on) => run('UPDATE cards SET known = ? WHERE id = ?', on ? 1 : 0, id);
 
 export const knownWordsOf = (target) =>
   new Set(all('SELECT word FROM known_words WHERE target = ?', target).map((row) => row.word));
@@ -604,6 +697,7 @@ const slice = (id) =>
 
 export function logReview(row) {
   const when = row.ts ? new Date(row.ts) : new Date();
+  const filed = row.category == null || row.cefr == null ? slice(row.card_id) : NO_SLICE;
   return Number(
     run(
       `INSERT INTO reviews (card_id, deck_id, session_id, ts, day, hour, weekday, rating, mode,
@@ -620,8 +714,8 @@ export function logReview(row) {
       localWeekday(when),
       row.rating,
       row.mode || 'flashcards',
-      row.category ?? slice(row.card_id).category,
-      row.cefr ?? slice(row.card_id).cefr,
+      row.category ?? filed.category,
+      row.cefr ?? filed.cefr,
       row.was_new ? 1 : 0,
       Math.max(0, Math.min(600_000, Math.round(Number(row.duration_ms) || 0))),
       Number(row.elapsed_days) || 0,
@@ -689,6 +783,12 @@ export function junkCard(id, deck, reason, front) {
     localDay(now),
     String(reason || '').slice(0, 200),
     String(front || '').slice(0, 200),
+  );
+}
+
+export function deleteDeckCards(deck, now = new Date()) {
+  return Number(
+    run('UPDATE cards SET deleted_at = ? WHERE deck_id = ? AND deleted_at IS NULL', now.toISOString(), deck).changes,
   );
 }
 

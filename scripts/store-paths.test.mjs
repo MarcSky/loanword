@@ -75,8 +75,9 @@ test('a deck on disk is a directory that actually holds one', () => {
 
 test('the two closed vocabularies the whole plugin agrees on', () => {
   assert.deepEqual(CEFR_LEVELS, ['A1', 'A2', 'B1', 'B2', 'C1', 'C2']);
-  assert.equal(CATEGORIES.length, 6);
+  assert.ok(CATEGORIES.length > 40, 'every domain the catalogue offers is a name a card may carry');
   assert.ok(CATEGORIES.includes('everyday'), 'there is always a fallback domain');
+  assert.ok(CATEGORIES.includes('engineering'), 'and the ones the plugin started with');
   assert.equal(new Set(CATEGORIES).size, CATEGORIES.length);
 });
 

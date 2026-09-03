@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  frontOf,
   CHOICES,
   REVEALING,
   SWIPE_THRESHOLD,
@@ -185,4 +186,20 @@ test('speaking is offered on every card, whatever the exercise', () => {
   for (const mode of ['present', 'flashcards', 'reverse', 'learn', 'type', 'cloze']) {
     assert.deepEqual(studyAction('s', at({ mode })), { act: 'speak' }, mode);
   }
+});
+
+test('the same picker can offer the word instead of the meaning', () => {
+  const card = { id: 'a', front: 'roll back', back: 'откатить', category: 'engineering', pos: 'verb' };
+  const pool = [
+    card,
+    { id: 'b', front: 'ship it', back: 'выкатить', category: 'engineering', pos: 'verb' },
+    { id: 'c', front: 'push back', back: 'возразить', category: 'engineering', pos: 'verb' },
+    { id: 'd', front: 'the deadline', back: 'срок сдачи', category: 'process', pos: 'noun' },
+    { id: 'e', front: 'roll back', back: 'откатить назад', category: 'process', pos: 'verb' },
+  ];
+  const choices = buildChoices(card, pool, (list) => list, frontOf);
+  assert.equal(choices.length, CHOICES);
+  assert.ok(choices.includes('roll back'), 'the answer is the word this time');
+  assert.equal(new Set(choices).size, choices.length, 'the twin front never becomes a second right answer');
+  for (const choice of choices) assert.ok(pool.some((entry) => entry.front === choice));
 });

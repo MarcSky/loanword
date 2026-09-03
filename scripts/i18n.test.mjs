@@ -7,7 +7,7 @@ const ALL = keys();
 test('every string the interface renders is discoverable', () => {
   assert.ok(ALL.length > 100, `expected the full interface, found ${ALL.length} keys`);
 
-  assert.ok(ALL.includes('Start session'));
+  assert.ok(ALL.includes('Start quiz'));
   assert.ok(ALL.includes('{n} due right now'));
   assert.ok(ALL.includes('card|cards'));
   assert.ok(ALL.includes('Engineering'), 'keys reached through a variable are listed too');

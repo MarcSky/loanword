@@ -1,5 +1,3 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
-  <path d="M9 3H6.5A2.5 2.5 0 0 0 4 5.5v13A2.5 2.5 0 0 0 6.5 21H9" stroke="#1f1f1f" stroke-width="2" stroke-linecap="round"/>
-  <path d="M15 3h2.5A2.5 2.5 0 0 1 20 5.5v13a2.5 2.5 0 0 1-2.5 2.5H15V3Z" fill="#6b68ff"/>
-  <rect x="8" y="11" width="8" height="2" rx="1" fill="#6b68ff"/>
+  <g fill="#2f5cff"><circle cx="5" cy="6" r="1"/><circle cx="8.5" cy="6" r="1"/><circle cx="12" cy="6" r="1"/><circle cx="15.5" cy="6" r="1"/><circle cx="19" cy="6" r="1"/><circle cx="5" cy="10" r="1"/><circle cx="8.5" cy="10" r="1.35"/><circle cx="12" cy="10" r="1"/><circle cx="15.5" cy="10" r="1"/><circle cx="19" cy="10" r="1"/><circle cx="5" cy="14" r="1"/><circle cx="8.5" cy="14" r="1"/><circle cx="12" cy="14" r="1.35"/><circle cx="15.5" cy="14" r="1"/><circle cx="19" cy="14" r="1"/><circle cx="5" cy="18" r="1"/><circle cx="8.5" cy="18" r="1"/><circle cx="12" cy="18" r="1"/><circle cx="15.5" cy="18" r="1.35"/><circle cx="19" cy="18" r="1"/></g>
 </svg>

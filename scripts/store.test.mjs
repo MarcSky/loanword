@@ -18,7 +18,6 @@ const {
   commit,
   config,
   cardsForPair,
-  deckPairs,
   fallbackPair,
   normalizeCategory,
   normalizeCefr,
@@ -46,13 +45,15 @@ const {
   paths,
   decksOnDisk,
   facing,
+  SamePairError,
+  sidedByRecord,
   readJson,
   readJsonl,
   resolveData,
   retireKey,
+  sameWord,
   tildify,
   writeJson,
-  ymd,
 } = await import('./store.mjs');
 
 const db = await import('./db.mjs');
@@ -155,11 +156,6 @@ test('tildify hides the username and leaves foreign paths alone', () => {
   assert.equal(tildify(undefined), undefined);
 });
 
-test('ymd is a stable calendar key', () => {
-  assert.equal(ymd(new Date('2026-08-17T23:59:59Z')), '2026-08-17');
-  assert.match(ymd(), /^\d{4}-\d{2}-\d{2}$/);
-});
-
 test('migration drops malformed rows and de-duplicates by content', () => {
   wipeDeck();
   writeFileSync(
@@ -256,6 +252,48 @@ test('commit is idempotent for identical cards', () => {
   const before = loadCards().length;
   commit([{ type: 'word', front: 'quorum', back: 'quórum' }]);
   assert.equal(loadCards().length, before, 'same content, same id, one card');
+});
+
+test('one word in two inflections is the same word, two words for one meaning are not', () => {
+  assert.equal(sameWord('hamburger meniu', 'hamburgeris meniu'), true);
+  assert.equal(sameWord('Hamburger-meniu', 'hamburger meniu'), true);
+  assert.equal(sameWord('stor', 'diger'), false, 'synonyms are two cards, not one');
+  assert.equal(sameWord('roll back', 'roll back the migration'), false, 'a longer phrase is its own card');
+  assert.equal(sameWord('a', 'an'), false, 'a one-letter stem proves nothing');
+  assert.equal(sameWord('', 'anything'), false);
+});
+
+test('commit refuses another wording of a card the deck already holds', () => {
+  const pair = { native: 'ru', target: 'ka' };
+  const first = commit([{ front: 'ჰამბურგერ მენიუ', back: 'гамбургер меню' }], pair);
+  assert.equal(first.added, 1);
+
+  const again = commit(
+    [
+      { front: 'ჰამბურგერის მენიუ', back: 'меню-гамбургер' },
+      { front: 'ბურგერნიკი', back: 'гамбургер меню' },
+    ],
+    pair,
+  );
+  assert.equal(again.added, 1, 'the inflected repeat is dropped, the other word for it is kept');
+  assert.equal(again.dropped, 1);
+  assert.equal(again.cards[0].front, 'ბურგერნიკი');
+
+  const fronts = cardsForPair(pair).map((card) => card.front);
+  assert.deepEqual(fronts.sort(), ['ბურგერნიკი', 'ჰამბურგერ მენიუ']);
+});
+
+test('two spellings of one meaning in a single batch land as one card', () => {
+  const pair = { native: 'ru', target: 'hu' };
+  const out = commit(
+    [
+      { front: 'visszagörgetés', back: 'откатить' },
+      { front: 'visszagörgetése', back: 'Откатить!' },
+    ],
+    pair,
+  );
+  assert.equal(out.added, 1);
+  assert.equal(out.dropped, 1);
 });
 
 test('an unknown card type is normalised rather than trusted', () => {
@@ -394,7 +432,7 @@ test('cards are stamped with the pair they were built for', () => {
   saveSettings({ target: 'pl' });
   commit([{ type: 'word', front: 'wdrożenie', back: 'despliegue' }]);
 
-  const pairs = deckPairs().sort((a, b) => a.target.localeCompare(b.target));
+  const pairs = db.deckPairsWithCounts().sort((a, b) => a.target.localeCompare(b.target));
   assert.deepEqual(pairs, [
     { native: 'es', target: 'en', total: 1, due: 0 },
     { native: 'es', target: 'pl', total: 1, due: 0 },
@@ -798,12 +836,12 @@ test('bucket stats keep every bucket, including the empty ones', () => {
   assert.equal(rows[1].seen, 0, 'a card with no schedule counts as unseen');
 });
 
-test('ymd takes a date, an ISO string, or nothing at all', () => {
-  assert.equal(ymd(new Date('2026-08-19T09:19:22Z')), '2026-08-19');
-  assert.equal(ymd('2026-08-19T09:19:22.494Z'), '2026-08-19', 'card timestamps arrive as strings');
-  assert.equal(ymd(''), '', 'an absent timestamp is blank, not "Invalid Date"');
-  assert.equal(ymd('not a date'), '');
-  assert.match(ymd(), /^\d{4}-\d{2}-\d{2}$/);
+test('the calendar key takes a date, an ISO string, or nothing at all', () => {
+  assert.equal(db.localDay(new Date('2026-08-19T09:19:22')), '2026-08-19');
+  assert.equal(db.localDay('2026-08-19T09:19:22.494'), '2026-08-19', 'card timestamps arrive as strings');
+  assert.equal(db.localDay(''), '', 'an absent timestamp is blank, not "Invalid Date"');
+  assert.equal(db.localDay('not a date'), '');
+  assert.match(db.localDay(), /^\d{4}-\d{2}-\d{2}$/);
 });
 
 test('a build that produced no cards leaves the queue untouched', () => {
@@ -974,3 +1012,58 @@ function glob(dir) {
     return [];
   }
 }
+
+test('the side a card faces is never guessed between two languages in one script', () => {
+  const pair = { native: 'en', target: 'es' };
+  for (const [front, back] of [
+    ['para diferentes tamaños', 'for different sizes'],
+    ['ponerse al día', 'to catch up'],
+    ['en el encabezado del menú', 'in the menu header'],
+    ['sesión', 'a session; a lesson'],
+    ['statistics', 'estadísticas'],
+  ]) {
+    const out = facing({ front, back, ...pair });
+    assert.equal(out.front, front, `${front} kept its side`);
+    assert.equal(out.back, back);
+  }
+});
+
+test('a native side that landed on the front is still turned round when the scripts differ', () => {
+  const pair = { native: 'ru', target: 'ka' };
+  const right = facing({ front: 'გამარჯობა', back: 'привет', ...pair });
+  assert.equal(right.front, 'გამარჯობა', 'a card that is already right is left alone');
+
+  const wrong = facing({ front: 'привет', back: 'გამარჯობა', ...pair });
+  assert.equal(wrong.front, 'გამარჯობა', 'and one written backwards is put right');
+  assert.equal(wrong.back, 'привет');
+});
+
+test('a copied card never wears the phrase it was copied from as its front', () => {
+  const record = { phrase: 'statistics', phrase_lang: 'en' };
+  const fixed = sidedByRecord({ front: 'statistics', back: 'estadísticas' }, record, 'es');
+  assert.equal(fixed.front, 'estadísticas', 'the front is the language being learned');
+  assert.equal(fixed.back, 'statistics');
+
+  const untouched = sidedByRecord({ front: 'estadísticas', back: 'statistics' }, record, 'es');
+  assert.equal(untouched.front, 'estadísticas', 'a card written correctly is left as it is');
+
+  const inTarget = sidedByRecord({ front: 'sesión', back: 'a session' }, { phrase: 'sesión', phrase_lang: 'es' }, 'es');
+  assert.equal(inTarget.front, 'sesión', 'a phrase already in the target language may be the front');
+
+  assert.equal(sidedByRecord({ front: 'x', back: 'y' }, null, 'es').front, 'x');
+  assert.equal(sidedByRecord({ front: 'x', back: 'y' }, { phrase: '  ' }, 'es').front, 'x');
+});
+
+test('the language you write in can never also be the one you are learning', () => {
+  const before = config();
+  assert.throws(() => saveSettings({ target: before.native }), SamePairError);
+  assert.throws(() => saveSettings({ native: before.target }), SamePairError, 'either direction is refused');
+  assert.throws(() => saveSettings({ native: 'fi', target: 'fi' }), SamePairError);
+  assert.equal(config().native, before.native, 'and nothing is written when it is refused');
+  assert.equal(config().target, before.target);
+
+  const saved = saveSettings({ native: 'ru', target: 'sv' });
+  assert.equal(saved.native, 'ru');
+  assert.equal(saved.target, 'sv');
+  saveSettings({ native: before.native, target: before.target });
+});

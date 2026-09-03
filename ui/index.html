@@ -19,11 +19,7 @@
   <nav class="sidebar" id="sidebar" aria-label="Sections">
     <div class="sb-head">
       <a class="mark" href="#/overview" title="Loanword" aria-label="Loanword">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <circle cx="12" cy="12" r="9"/>
-          <ellipse cx="12" cy="12" rx="4" ry="9"/>
-          <path d="M3 12h18"/>
-        </svg>
+        <img src="favicon.svg" width="24" height="24" alt="">
       </a>
       <span class="sb-brand">Loanword</span>
       <button class="sb-toggle" data-act="rail" aria-expanded="true" aria-controls="sidebar" aria-label="Collapse sidebar">
@@ -47,6 +43,7 @@
     <section class="page" id="page-overview" data-route="overview" aria-label="Overview"></section>
     <section class="page" id="page-deck" data-route="deck" aria-label="Deck"></section>
     <section class="page study" id="page-study" data-route="study" aria-label="Study"></section>
+    <section class="page practice" id="page-practice" data-route="practice" aria-label="Practice"></section>
     <section class="page" id="page-analytics" data-route="analytics" aria-label="Analytics"></section>
     <section class="page" id="page-settings" data-route="settings" aria-label="Settings"></section>
   </main>
@@ -74,6 +71,34 @@
     </div>
     <dl id="shortcut-list" style="display:grid;grid-template-columns:auto 1fr;gap:10px 16px;font-size:.875rem"></dl>
   </div>
+</dialog>
+
+<dialog id="topics" class="modal">
+  <div class="panel" id="topics-body"></div>
+</dialog>
+
+<dialog id="pair" class="modal">
+  <div class="panel" id="pair-body"></div>
+</dialog>
+
+<dialog id="card" class="modal">
+  <div class="panel" id="card-body"></div>
+</dialog>
+
+<dialog id="drop" class="modal">
+  <div class="panel" id="drop-body"></div>
+</dialog>
+
+<dialog id="twins" class="modal">
+  <div class="panel" id="twins-body"></div>
+</dialog>
+
+<dialog id="export" class="modal">
+  <div class="panel" id="export-body"></div>
+</dialog>
+
+<dialog id="sync" class="modal">
+  <div class="panel" id="sync-body"></div>
 </dialog>
 
 <dialog id="help" class="modal">

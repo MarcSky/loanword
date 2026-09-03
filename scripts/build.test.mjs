@@ -8,9 +8,28 @@ const DATA = mkdtempSync(join(tmpdir(), 'loanword-build-'));
 process.env.CLAUDE_PLUGIN_DATA = DATA;
 process.env.LOANWORD_NO_BUILD = '1';
 
-const { BATCH_RECORDS, brief, buildBeforeServing, buildInBackground, chunk, locked, parseCards, promptFor } =
-  await import('./build.mjs');
-const { paths } = await import('./store.mjs');
+const {
+  BATCH_RECORDS,
+  brief,
+  buildBeforeServing,
+  buildInBackground,
+  runDetached,
+  cardsSoFar,
+  chunk,
+  heldBy,
+  jsonArray,
+  progressIn,
+  locked,
+  parseCards,
+  promptFor,
+  modelFor,
+  readProgress,
+  replyText,
+  running,
+  STREAM_ARGS,
+  unknownFlag,
+} = await import('./build.mjs');
+const { lockFile, paths, progressFile, writeJson } = await import('./store.mjs');
 
 test('the queue is split into batches, with the remainder kept', () => {
   assert.deepEqual(chunk([1, 2, 3, 4, 5], 2), [[1, 2], [3, 4], [5]]);
@@ -54,7 +73,7 @@ test('an unreadable reply raises rather than committing nonsense', () => {
 });
 
 test('a second build stands down while one is running', () => {
-  writeFileSync(paths.lock, '1234');
+  writeFileSync(paths.lock, String(process.pid));
   assert.equal(locked(), true);
   rmSync(paths.lock);
   assert.equal(locked(), false, 'and the lock is gone once it is released');
@@ -70,6 +89,10 @@ test('a lock left behind by a dead process does not block builds forever', () =>
 test('nothing captured means nothing to build', () => {
   writeFileSync(paths.queue, '');
   assert.equal(buildInBackground(), false);
+});
+
+test('one place decides whether a background run may spawn at all', () => {
+  assert.equal(runDetached(import.meta.url), false, 'the build and the filing run share this switch');
 });
 
 test('only an empty deck is worth making the user wait for', () => {
@@ -184,14 +207,14 @@ test('the build status reports what is queued and what is running, per language'
   assert.equal(english.queued, 1);
   assert.equal(english.building, false);
 
-  writeFileSync(joinPath(DATA, 'build.ka.lock'), '999');
+  writeFileSync(joinPath(DATA, 'build.ka.lock'), String(process.pid));
   assert.equal(queueSizes().find((row) => row.target === 'ka').building, true);
   assert.equal(queueSizes().find((row) => row.target === 'en').building, false, 'one lock is not the other');
   rmSync(joinPath(DATA, 'build.ka.lock'), { force: true });
 });
 
 test('a locked language stands down instead of building twice', async () => {
-  writeFileSync(joinPath(DATA, 'build.en.lock'), '999');
+  writeFileSync(joinPath(DATA, 'build.en.lock'), String(process.pid));
   const result = await buildOne('en', {});
   assert.match(result.skipped, /already running/);
   assert.equal(readJsonl(queueFile('en')).length, 1, 'and the queue is left for the build that holds the lock');
@@ -201,4 +224,99 @@ test('a locked language stands down instead of building twice', async () => {
 test.after(() => {
   db.close();
   rmSync(DATA, { recursive: true, force: true });
+});
+
+test('the build says how far it has got while the cards are still being written', () => {
+  assert.equal(cardsSoFar(''), 0);
+  assert.equal(cardsSoFar('[{"fro'), 0, 'half a key is not a card');
+  assert.equal(cardsSoFar('[{"front":"roll back","back":"откатить"},{ "front" : "ship it"'), 2, 'a card counts the moment its front arrives');
+
+  const target = 'is';
+  writeJson(progressFile(target), { target, total: 59, done: 12, startedAt: '2026-09-03T10:00:00.000Z' });
+  const seen = readProgress(target);
+  assert.equal(seen.total, 59);
+  assert.equal(seen.done, 12);
+  rmSync(progressFile(target), { force: true });
+  assert.equal(readProgress(target), null, 'a finished build leaves nothing behind to report');
+});
+
+test('the reply is read back from a stream, and from plain output when there is no stream', () => {
+  const stream = [
+    '{"type":"system","subtype":"init"}',
+    'a hook printed this, and it is not JSON',
+    '{"type":"stream_event","event":{"type":"content_block_delta","delta":{"text":"[{\\"front\\":\\"roll back\\","}}}',
+    '{"type":"stream_event","event":{"type":"content_block_delta","delta":{"text":"\\"back\\":\\"откатить\\"}]"}}}',
+    '{"type":"result","subtype":"success","result":"the deltas win over this"}',
+  ].join('\n');
+  assert.equal(replyText(stream), '[{"front":"roll back","back":"откатить"}]');
+  assert.deepEqual(parseCards(replyText(stream)), [{ front: 'roll back', back: 'откатить' }]);
+
+  assert.equal(replyText('{"type":"result","subtype":"success","result":"[{\\"front\\":\\"a\\"}]"}'), '[{"front":"a"}]');
+  assert.equal(
+    replyText('{"type":"assistant","message":{"content":[{"type":"text","text":"[{}]"}]}}'),
+    '[{}]',
+    'the finished message answers when nothing streamed',
+  );
+  assert.equal(replyText('[{"front":"plain"}]'), '[{"front":"plain"}]', 'plain output passes straight through');
+});
+
+test('an older command line falls back to a build without progress', () => {
+  assert.equal(unknownFlag({ stderr: 'error: unknown option --include-partial-messages' }), true);
+  assert.equal(unknownFlag({ stderr: 'rate limited' }), false);
+  assert.equal(unknownFlag({}), false);
+  assert.ok(STREAM_ARGS.includes('stream-json'));
+});
+
+test('a lock whose process is gone is not a build in progress', () => {
+  const target = 'lv';
+  writeFileSync(lockFile(target), String(process.pid));
+  writeJson(progressFile(target), { target, total: 10, done: 3, batch: 1, batches: 1, startedAt: 'now' });
+  assert.equal(locked(target), true, 'our own process is alive, so the lock stands');
+
+  writeFileSync(lockFile(target), '999999');
+  assert.equal(locked(target), false, 'a dead pid means the build died with it');
+  assert.equal(readProgress(target), null, 'and the progress it left behind is cleared');
+
+  writeFileSync(lockFile(target), 'not a pid');
+  assert.equal(locked(target), false);
+  assert.equal(running(process.pid), true);
+  assert.equal(running(999999), false);
+});
+
+test('the model that writes the cards comes from the settings, with a fallback', () => {
+  assert.equal(modelFor({}), 'haiku');
+  assert.equal(modelFor({ model: 'sonnet' }), 'sonnet');
+  assert.equal(modelFor({ model: 'opus' }), 'opus');
+  assert.equal(modelFor({ model: 'gpt-4' }), 'haiku', 'a name we do not offer never reaches the command line');
+});
+
+test('the batch tells the lexicographer which categories this learner studies', () => {
+  const prompt = promptFor([{ text: 'x' }], { native: 'ru', target: 'es', categories: ['marketing', 'seo'] });
+  assert.match(prompt, /CATEGORIES = phrasing, connectors, everyday, marketing, seo/);
+  assert.doesNotMatch(prompt.split('## This batch')[1], /engineering/, 'a category not chosen is not offered');
+
+  const bare = promptFor([{ text: 'x' }], { native: 'ru', target: 'es' });
+  assert.match(bare, /CATEGORIES = engineering, process, collaboration, phrasing, connectors, everyday/);
+  assert.match(brief(), /`everyday` — general vocabulary/, 'the three that never change stay in the brief');
+});
+
+test('a lock is held by a living process, whatever wrote it', () => {
+  const plain = joinPath(DATA, 'plain.lock');
+  const structured = joinPath(DATA, 'structured.lock');
+  const progress = joinPath(DATA, 'held.progress');
+
+  writeFileSync(plain, String(process.pid));
+  assert.equal(heldBy(plain), true, 'a build writes its pid as text');
+
+  writeJson(structured, { pid: process.pid });
+  assert.equal(heldBy(structured), true, 'the filing pass writes it as JSON');
+
+  writeJson(progress, { total: 5, done: 1 });
+  writeFileSync(structured, JSON.stringify({ pid: 999999 }));
+  assert.equal(heldBy(structured, progress), false, 'a dead pid releases the lock');
+  assert.equal(progressIn(progress), null, 'and takes its progress with it');
+  assert.equal(progressIn(joinPath(DATA, 'nothing.json')), null);
+
+  rmSync(plain, { force: true });
+  assert.equal(heldBy(plain), false, 'no lock, no build');
 });

@@ -37,11 +37,24 @@ than words, because that writing system does not put spaces between words. Read
 each sentence, pick the one word or collocation in it worth learning, and build
 the card around that. Never make a card whose `front` is a whole sentence.
 
-For each `source=clone` record: `text` is a phrase the learner already knows in
-another language, `example` is the example it carried there. Write the same
-concept in TARGET as a fresh card — `front` in TARGET, `back` is the `text` you
-were given, unchanged — with a new example of your own. Copy the record's
+For each `source=clone` record: `text` is a phrase the learner already knows,
+written in the language named by `lang`; `phrase` is how the deck it came from
+said the same thing, in the language named by `phrase_lang`; `example` is the
+example it carried there. Write the same concept as a fresh card for this pair —
+`front` in TARGET, with a new example of your own — and copy the record's
 `origin` value into the card's `origin` field, verbatim.
+
+The `back` depends on `lang`:
+
+- **`lang` is NATIVE** — the usual case. `back` is the `text` you were given,
+  unchanged, character for character. The trainer matches meanings by that text,
+  so rewording it makes the same idea look like a new one.
+- **`lang` is any other language** — the learner has changed the language they
+  write in. Translate the concept into NATIVE yourself and put that in `back`.
+  Use `phrase` as the second witness of what is meant: two languages saying the
+  same thing pin the sense down better than one. `front` is still written fresh
+  in TARGET; when `phrase_lang` is not TARGET, `phrase` is a clue and never a
+  side of the card.
 
 For each `source=rewrite` record: the card at `origin` is not working. `text` is
 its NATIVE side and `wrong` is the TARGET side that failed. Return one card with
@@ -61,12 +74,27 @@ four-choice mode offer a distractor in the language of the answer, which gives
 the answer away on sight. Never swap the two sides, whichever record the card
 came from. `example` and `keywords` are TARGET as well.
 
+Before you write each card, read your own two sides back: `front` must be the
+phrase in TARGET and `back` its meaning in NATIVE. If they are the other way
+round, swap them before you answer. A record may hand you text in a third
+language, or in NATIVE, or in TARGET — none of that changes which side goes
+where. In particular, never copy a record's `phrase` into `front` unless
+`phrase_lang` is TARGET: it is there to tell you what the card means, not what
+to write.
+
 ## Quality
 
 These rules decide whether a card is worth a learner's morning:
 
 - **Lemma, not inflection.** `front` carries the dictionary form: the infinitive,
   the singular, the base adjective. `alerts` is not a card when `alert` is one.
+- **`back` is the word, not the situation.** It carries the dictionary sense
+  that survives outside this sentence, the one the learner can reuse anywhere:
+  `prune` means *to trim, to cut away the excess*, never *to delete old data*,
+  however true the second is of the blocks in the sentence. What
+  the word does in this particular context belongs in `example`, and only
+  there. If the only meaning you can name is a paraphrase of the sentence, you
+  have not found the word's meaning yet.
 - **No brackets, ever.** No `[]`, `()`, `{}` in `front` — no glosses, no
   alternatives, no parts of speech in parentheses. Put that in `note`.
 - **Fix the typo, then judge the word.** Captured text is typed in a hurry.
@@ -110,15 +138,18 @@ skip the record.
 
 ## Fields
 
-Every card carries a `category`, chosen from exactly these six:
+Every card carries a `category`, and the batch lists the ones this learner
+studies under `CATEGORIES`. Use one of those keys exactly as written — never a
+label, a translation, a plural or a name of your own. Three are always offered
+and mean the same thing in every deck:
 
-- `engineering` — code, systems, debugging, infrastructure, review.
-- `process` — planning, estimates, deadlines, releases, specs, tickets.
-- `collaboration` — meetings, feedback, disagreement, asking, thanking.
 - `phrasing` — set phrases, idioms and collocations whose meaning is not the
   sum of their words.
 - `connectors` — discourse glue: however, in terms of, that said, provided that.
-- `everyday` — general vocabulary, and the fallback when none of the five fits.
+- `everyday` — general vocabulary, and the fallback when nothing else fits.
+
+The rest name a subject: put the card where a learner would look for it, and
+fall back to `everyday` rather than forcing a fit.
 
 `cefr` is one of A1, A2, B1, B2, C1, C2, placed against what the level actually
 means in TARGET's own framework (CEFR, or HSK / JLPT / TOPIK / TORFL where that

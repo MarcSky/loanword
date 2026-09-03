@@ -1,12 +1,11 @@
 import { fsrs, generatorParameters } from 'ts-fsrs';
 import * as db from './db.mjs';
-import { CATEGORIES, CEFR_LEVELS, config, masteryOf } from './store.mjs';
+import { CATEGORIES, CEFR_LEVELS, LEARNED_STABILITY_DAYS, config, enabledCategories, masteryOf } from './store.mjs';
 
 const engine = fsrs(generatorParameters({ enable_fuzz: false }));
 
-export const DAY_MS = 86_400_000;
+const DAY_MS = 86_400_000;
 
-export const dayKey = db.localDay;
 
 export function shiftDay(days, from = new Date()) {
   const date = new Date(from);
@@ -82,12 +81,11 @@ export function retention(deck, days) {
   return row.total ? row.good / row.total : 0;
 }
 
-export const LEARNED_DAYS = 21;
 
 const narrowed = (filter) =>
   clean(filter.category, CATEGORIES).length > 0 || clean(filter.cefr, CEFR_LEVELS).length > 0;
 
-export function deckTotals(deck, filter = {}, now = new Date()) {
+function deckTotals(deck, filter = {}, now = new Date()) {
   if (!narrowed(filter)) {
     const cards = db.get(
       'SELECT COUNT(*) AS total FROM cards WHERE deck_id = ? AND deleted_at IS NULL',
@@ -100,8 +98,8 @@ export function deckTotals(deck, filter = {}, now = new Date()) {
               SUM(MIN(stability / ?, 1.0)) AS mastery_sum
        FROM fsrs_state WHERE deck_id = ?`,
       now.toISOString(),
-      LEARNED_DAYS,
-      LEARNED_DAYS,
+      LEARNED_STABILITY_DAYS,
+      LEARNED_STABILITY_DAYS,
       deck,
     );
     const total = cards.total || 0;
@@ -126,8 +124,8 @@ export function deckTotals(deck, filter = {}, now = new Date()) {
      FROM cards c LEFT JOIN fsrs_state s ON s.card_id = c.id
      WHERE ${where}`,
     now.toISOString(),
-    LEARNED_DAYS,
-    LEARNED_DAYS,
+    LEARNED_STABILITY_DAYS,
+    LEARNED_STABILITY_DAYS,
     ...params,
   );
 }
@@ -293,8 +291,8 @@ function bucket(deck, column, keys, filter) {
      WHERE ${where}
      GROUP BY c.${column}`,
     now,
-    LEARNED_DAYS,
-    LEARNED_DAYS,
+    LEARNED_STABILITY_DAYS,
+    LEARNED_STABILITY_DAYS,
     ...params,
   );
 
@@ -330,7 +328,7 @@ function bucket(deck, column, keys, filter) {
   });
 }
 
-export const categories = (deck, filter = {}) => bucket(deck, 'category', CATEGORIES, filter);
+export const categories = (deck, filter = {}) => bucket(deck, 'category', enabledCategories(), filter);
 
 export const cefr = (deck, filter = {}) => bucket(deck, 'cefr', CEFR_LEVELS, filter);
 
@@ -344,9 +342,9 @@ export function memory(deck, filter = {}) {
             SUM(CASE WHEN s.card_id IS NOT NULL AND s.stability < ? AND s.state = 1 THEN 1 ELSE 0 END) AS learning
      FROM cards c LEFT JOIN fsrs_state s ON s.card_id = c.id
      WHERE ${where}`,
-    LEARNED_DAYS,
-    LEARNED_DAYS,
-    LEARNED_DAYS,
+    LEARNED_STABILITY_DAYS,
+    LEARNED_STABILITY_DAYS,
+    LEARNED_STABILITY_DAYS,
     ...params,
   );
   const total = row.total || 0;

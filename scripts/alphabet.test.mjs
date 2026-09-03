@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { alphabetRecord, hasAlphabet, lettersOf, offerAlphabet } from './alphabet.mjs';
+import { alphabetRecord, lettersOf, offerAlphabet } from './alphabet.mjs';
 
 test('Georgian is thirty-three letters, in order, with nothing archaic', () => {
   const letters = lettersOf('ka');
@@ -25,8 +25,8 @@ test('a language with no alphabet to learn says so instead of guessing', () => {
   assert.deepEqual(lettersOf('zh'), [], 'Chinese has no alphabet, and a starter deck would be a lie');
   assert.deepEqual(lettersOf('en'), [], 'nobody learning English needs the Latin letters');
   assert.deepEqual(lettersOf(''), []);
-  assert.equal(hasAlphabet('ka'), true);
-  assert.equal(hasAlphabet('zh'), false);
+  assert.ok(lettersOf('ka').length > 0);
+  assert.equal(lettersOf('zh').length, 0);
 });
 
 test('an alphabet record carries every letter and asks for letter cards', () => {

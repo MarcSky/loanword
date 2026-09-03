@@ -172,9 +172,9 @@ test('committed words are not captured a second time', () => {
 
 const stats = () => JSON.parse(run([join(HERE, 'serve.mjs'), '--stats']));
 
-test('brand-new cards are due immediately', () => {
+test('brand-new cards wait to be learned; nothing is due before that', () => {
   assert.equal(stats().total, 2);
-  assert.equal(stats().due_now, 2);
+  assert.equal(stats().due_now, 0);
   assert.equal(stats().streak, 0);
 });
 
@@ -185,7 +185,7 @@ test('grading schedules the card into the future and counts the streak', async (
   try {
     await once(server.stdout, 'data');
 
-    const { cards } = await (await fetch(`${base}/due`)).json();
+    const { cards } = await (await fetch(`${base}/state`)).json();
     assert.equal(cards.length, 2);
     assert.ok(cards.every((c) => c.isNew));
 

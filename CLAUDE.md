@@ -79,6 +79,11 @@ make push-with-new-tag text="what changed"
   returns. It reads plain-text snapshots, never SQLite.
 - A schema change is a numbered step in the ladder in `db.mjs`, never an edit to
   an existing one.
+- Every SQL change ships with comprehensive tests: a new column or query gets
+  tests for the migration from the previous version, the read path, the write
+  path, and every endpoint that serves the rows. Run `npm test` before
+  reporting done, and start the trainer on a copy of a real deck when the
+  change touches `cards` or `fsrs_state`.
 - Every language in `ui/languages.js` needs a stop-list in `data/freq/`; the
   tests refuse a picker entry without one.
 - `plugin.json` and `package.json` versions are bumped together by the Makefile.

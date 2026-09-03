@@ -17,6 +17,8 @@ export const BUDGET_MS = {
   composition: 150,
   perCardMicros: 20,
   start: 2000,
+  test: 100,
+  state: 2000,
 };
 
 const LOG_REPORTS = new Set(['summary', 'calendar', 'grades', 'activity', 'sessions', 'forecast']);
@@ -172,6 +174,64 @@ test('the deck loads at a cost per card that does not creep', options, () => {
     `${perCard.toFixed(2)} µs per card, budget ${BUDGET_MS.perCardMicros} µs`,
   );
   assert.ok(state < 200, `loading the schedule took ${state.toFixed(2)} ms`);
+});
+
+test('a full test is written inside the budget, however big the deck is', options, async () => {
+  const { TYPES, buildTest } = await import('./exam.mjs');
+  const cards = db.cardsOfDeck(DECK);
+  assert.equal(cards.length, CARDS);
+
+  const start = performance.now();
+  const questions = buildTest(cards, { count: 50, types: [...TYPES], answerWith: 'both' });
+  const ms = performance.now() - start;
+  console.log(`  a 50-question test           ${ms.toFixed(0)} ms`);
+  assert.ok(questions.length > 0, 'the deck is big enough to ask about');
+  assert.ok(
+    ms < BUDGET_MS.test,
+    `writing a test took ${ms.toFixed(0)} ms, budget ${BUDGET_MS.test} ms — the distractor pool is probably unbounded again`,
+  );
+});
+
+test('the state the trainer polls is answered inside the budget', options, async () => {
+  const { createServer } = await import('node:http');
+  const { spawn } = await import('node:child_process');
+  db.close();
+
+  const port = await new Promise((resolve, reject) => {
+    const probe = createServer();
+    probe.on('error', reject);
+    probe.listen(0, '127.0.0.1', () => {
+      const { port: found } = probe.address();
+      probe.close(() => resolve(found));
+    });
+  });
+
+  const child = spawn('node', [join(HERE, 'serve.mjs'), '--no-open', '--idle=0'], {
+    env: { ...process.env, CLAUDE_PLUGIN_DATA: DATA, LOANWORD_PORT: String(port), LOANWORD_NO_BUILD: '1' },
+    stdio: 'ignore',
+  });
+
+  try {
+    const base = `http://127.0.0.1:${port}`;
+    for (let attempt = 0; attempt < 200; attempt++) {
+      const alive = await fetch(`${base}/settings`).then(() => true).catch(() => false);
+      if (alive) break;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+
+    await fetch(`${base}/state`).then((reply) => reply.json());
+    const start = performance.now();
+    const body = await fetch(`${base}/state`).then((reply) => reply.json());
+    const ms = performance.now() - start;
+    console.log(`  a full /state                ${ms.toFixed(0)} ms`);
+    assert.equal(body.cards.length, CARDS, 'the whole deck came back');
+    assert.ok(
+      ms < BUDGET_MS.state,
+      `/state took ${ms.toFixed(0)} ms, budget ${BUDGET_MS.state} ms — the deck is probably being read twice again`,
+    );
+  } finally {
+    child.kill('SIGTERM');
+  }
 });
 
 test('the server starts inside the budget against a full deck', options, () => {

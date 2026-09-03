@@ -10,7 +10,8 @@ import { createEmptyCard, fsrs, generatorParameters, Rating } from 'ts-fsrs';
 import * as analytics from './analytics.mjs';
 import { alphabetRecord, offerAlphabet } from './alphabet.mjs';
 import { ask, buildBeforeServing, buildInBackground, queueSizes } from './build.mjs';
-import { planClone, selectForClone, suggestStarter } from './clone.mjs';
+import * as filing from './reclassify.mjs';
+import { conceptsInto, copiedInto, planClone, selectForClone, sourcePair, suggestStarter } from './clone.mjs';
 import * as db from './db.mjs';
 import { toCsv, writeCsv } from './export-anki.mjs';
 import { languages as dictionaries } from './i18n.mjs';
@@ -21,6 +22,7 @@ import { clozeOf, planSession } from './session.mjs';
 import * as speech from './speech.mjs';
 import {
   CATEGORIES,
+  enabledCategories,
   CEFR_LEVELS,
   DATA,
   PLUGIN_ROOT,
@@ -42,10 +44,13 @@ import {
   peekFile,
   queueFile,
   readJsonl,
+  sameWord,
   saveKnownWords,
+  SamePairError,
   saveSettings,
   tildify,
   wildFile,
+  writeLines,
   writeSnapshots,
 } from './store.mjs';
 
@@ -61,6 +66,7 @@ export const JUNK_REASONS = {
   'already-known': { retire: true },
   'too-rare': { retire: true },
   'wrong-translation': { retire: false, rewrite: true },
+  duplicate: { retire: true },
 };
 
 if (!db.sqliteAvailable()) {
@@ -96,21 +102,24 @@ function reviveCard(stored) {
   };
 }
 
+const LEARNING_STATES = new Set([1, 3]);
+
 function deck(now = new Date(), cfg = config()) {
   const id = currentDeck(cfg);
   const cards = db.cardsOfDeck(id);
   const state = db.stateOfDeck(id);
 
-  const scheduled = cards.filter((card) => state.has(card.id) && new Date(state.get(card.id).due) <= now);
-  const room = Math.max(0, cfg.dailyLimit - db.newCardsToday(id));
-  const unseen = cards.filter((card) => !state.has(card.id)).slice(0, room);
+  const due = cards.filter((card) => {
+    const entry = state.get(card.id);
+    if (!entry) return false;
+    return new Date(entry.due) <= now || LEARNING_STATES.has(Number(entry.state));
+  });
 
-  return { id, state, cards, due: [...scheduled, ...unseen] };
+  return { id, state, cards, due };
 }
 
-function stats() {
-  const cfg = config();
-  const { id, state, cards, due } = deck(new Date(), cfg);
+function stats(cfg = config(), loaded = deck(new Date(), cfg)) {
+  const { id, state, cards, due } = loaded;
   const seen = cards.filter((card) => state.has(card.id));
 
   const counts = new Map(
@@ -144,7 +153,7 @@ function stats() {
       ? cards.reduce((sum, card) => sum + masteryOf(state.get(card.id)), 0) / cards.length
       : 0,
     activity,
-    categories: bucketStats(CATEGORIES, cards, state, (card) => card.category),
+    categories: bucketStats(enabledCategories(cfg), cards, state, (card) => card.category),
     levels: bucketStats(CEFR_LEVELS, cards, state, (card) => card.cefr),
     hardest: seen
       .map((card) => ({
@@ -604,26 +613,28 @@ const server = createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/state') {
       const cfg = config();
       ingestWild(cfg);
-      const { state, cards, due } = deck(new Date(), cfg);
+      const loaded = deck(new Date(), cfg);
+      const { state, cards, due } = loaded;
       const dueIds = new Set(due.map((card) => card.id));
       const now = new Date();
       const builds = queueSizes(cfg);
       return json(res, {
         config: cfg,
-        categories: CATEGORIES,
+        categories: enabledCategories(cfg),
         levels: CEFR_LEVELS,
 
         pairs: db.deckPairsWithCounts(),
         uiLanguages: dictionaries(),
 
         targets: builds,
+        filing: filing.readProgress(),
         queued: builds.reduce((sum, row) => sum + row.queued, 0),
         building: builds.some((row) => row.building),
         speech: speech.status(activeTargets(cfg)),
         peekMatches: peekCandidates(readJsonl(peekFile(cfg.target)), cfg.peekPick).length,
         alphabet: offerAlphabet({ native: cfg.native, target: cfg.target, cards }),
         starter: suggestStarter({ native: cfg.native, target: cfg.target, cards }),
-        stats: stats(),
+        stats: stats(cfg, loaded),
         cards: cards.map((card) => {
           const entry = state.get(card.id);
           return {
@@ -664,19 +675,32 @@ const server = createServer(async (req, res) => {
     if (req.method === 'POST' && url.pathname === '/settings') {
       const payload = await payloadOf(req, res);
       if (!payload) return;
-      const cfg = config();
-      if (payload.target && payload.target === cfg.native) {
+      let saved;
+      try {
+        saved = saveSettings(payload);
+      } catch (error) {
+        if (!(error instanceof SamePairError)) throw error;
         return json(res, { error: 'the language you write in cannot also be a deck you learn' }, 400);
       }
-      const saved = saveSettings(payload);
       adoptQueue(saved.target);
-      return json(res, saved);
+      const refiled = payload.categories ? db.refileToFallback(enabledCategories(saved)) : 0;
+      if (refiled) log(`categories narrowed, ${refiled} card(s) moved to everyday`);
+      return json(res, { ...saved, refiled });
     }
 
     if (req.method === 'GET' && url.pathname === '/stats') return json(res, stats());
 
     if (req.method === 'GET' && url.pathname === '/build/status') {
-      return json(res, { targets: queueSizes() });
+      return json(res, { targets: queueSizes(), filing: filing.readProgress() });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/categories/rebuild') {
+      const cfg = config();
+      const deckId = db.deckIdIfAny(cfg.native, cfg.target);
+      const cards = deckId === null ? 0 : db.cardsOfDeck(deckId).length;
+      if (!cards) return json(res, { error: 'nothing in this deck to file' }, 409);
+      const started = filing.rebuildInBackground();
+      return json(res, { ok: true, started, cards, filing: filing.readProgress() });
     }
 
     if (req.method === 'POST' && url.pathname === '/build') {
@@ -704,8 +728,7 @@ const server = createServer(async (req, res) => {
       const to = url.searchParams.get('to') || cfg.target;
       const source = db.deckIdIfAny(cfg.native, from);
       if (source === null) return json(res, { error: 'no such deck' }, 404);
-      const destination = db.deckIdIfAny(cfg.native, to);
-      const skip = destination === null ? new Set() : db.originsOfDeck(destination);
+      const skip = copiedInto(cfg.native, to);
       const filter = filterOf(url);
       const wanted = selectForClone(db.cardsOfDeck(source), {
         categories: filter.category,
@@ -715,19 +738,65 @@ const server = createServer(async (req, res) => {
       return json(res, { from, to, count: wanted.length, already: skip.size });
     }
 
+    if (req.method === 'GET' && url.pathname === '/clone/sources') {
+      const cfg = config();
+      const to = url.searchParams.get('to') || cfg.target;
+      const skip = copiedInto(cfg.native, to);
+      const concepts = conceptsInto(cfg.native, to);
+      const sources = db
+        .deckPairsWithCounts()
+        .filter((pair) => pair.total > 0 && !(pair.native === cfg.native && pair.target === to))
+        .map((pair) => {
+          const home = pair.native === cfg.native;
+          return {
+            code: pair.target,
+            deck: `${pair.native}>${pair.target}`,
+            native: pair.native,
+            translated: !home,
+            total: pair.total,
+            fresh: selectForClone(db.cardsOfDeck(db.deckIdIfAny(pair.native, pair.target)), {
+              skip,
+              concepts: home ? concepts : new Set(),
+            }).length,
+          };
+        });
+      return json(res, { to, native: cfg.native, sources });
+    }
+
     if (req.method === 'POST' && url.pathname === '/clone') {
       const payload = await payloadOf(req, res);
       if (!payload) return;
+      const cfg = config();
+      const to = String(payload.to || '');
+      const asked = Array.isArray(payload.sources) ? payload.sources : [payload.from];
+      const list = [...new Set(asked.map((code) => String(code || '').toLowerCase()).filter(Boolean))];
+      if (!list.length) return json(res, { error: 'a clone needs a source deck' }, 400);
+      for (const from of list) {
+        const pair = sourcePair(from, cfg.native);
+        if (pair.native === cfg.native && pair.target === to) {
+          return json(res, { error: 'a deck cannot be cloned onto itself' }, 400);
+        }
+        if (db.deckIdIfAny(pair.native, pair.target) === null) {
+          return json(res, { error: `no ${pair.native}>${pair.target} deck to copy from` }, 400);
+        }
+      }
       try {
-        const plan = planClone({
-          from: String(payload.from || ''),
-          to: String(payload.to || ''),
-          categories: Array.isArray(payload.categories) ? payload.categories : [],
-          levels: Array.isArray(payload.levels) ? payload.levels : [],
-        });
-        const saved = saveSettings({ target: plan.to });
+        const plans = list.map((from) =>
+          planClone({
+            from,
+            to,
+            categories: Array.isArray(payload.categories) ? payload.categories : [],
+            levels: Array.isArray(payload.levels) ? payload.levels : [],
+          }),
+        );
+        const saved = saveSettings({ target: to });
         buildInBackground();
-        return json(res, { ...plan, config: saved });
+        return json(res, {
+          ...plans[plans.length - 1],
+          from: list,
+          queued: plans.reduce((sum, plan) => sum + plan.queued, 0),
+          config: saved,
+        });
       } catch (error) {
         return json(res, { error: error.message }, 400);
       }
@@ -769,6 +838,65 @@ const server = createServer(async (req, res) => {
       if (!knownId(payload.id)) return json(res, { error: 'unknown card id' }, 404);
       db.setStar(payload.id, payload.on !== false);
       return json(res, { ok: true, favorite: payload.on !== false });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/deck/delete') {
+      const payload = await payloadOf(req, res);
+      if (!payload) return;
+      const native = String(payload.native || '').toLowerCase();
+      const target = String(payload.target || '').toLowerCase();
+      const deckId = db.deckIdIfAny(native, target);
+      if (deckId === null) return json(res, { error: 'no such deck' }, 404);
+
+      const removed = db.deleteDeckCards(deckId);
+      const left = db.deckPairsWithCounts().filter((pair) => pair.total > 0);
+      const teaches = left.some((pair) => pair.target === target);
+      const cfg = config();
+      const patch = {};
+      if (!teaches) {
+        patch.targets = (cfg.targets || []).filter((code) => code !== target);
+        patch.paused = (cfg.paused || []).filter((code) => code !== target);
+        writeLines(queueFile(target), []);
+      }
+      if (cfg.native === native && cfg.target === target) {
+        const next = left[0];
+        if (next) {
+          patch.native = next.native;
+          patch.target = next.target;
+        }
+      }
+      const saved = Object.keys(patch).length ? saveSettings(patch) : cfg;
+      log(`deck deleted ${JSON.stringify({ native, target, removed })}`);
+      return json(res, { ok: true, removed, native, target, config: saved });
+    }
+
+    if (req.method === 'GET' && url.pathname === '/duplicates') {
+      const cfg = config();
+      const groups = db.conceptsShared(currentDeck(cfg)).map((group) => ({
+        concept: group.concept,
+        meaning: group.meaning,
+        cards: group.cards.map((card, index) => ({
+          id: card.id,
+          repeat: group.cards.slice(0, index).some((earlier) => sameWord(earlier.front, card.front)),
+          front: card.front,
+          back: card.back,
+          example: card.example,
+          reading: card.reading,
+          cefr: card.cefr,
+          category: card.category,
+          created_at: card.created_at,
+          isFavorite: card.starred,
+        })),
+      }));
+      return json(res, { native: cfg.native, target: cfg.target, groups });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/known') {
+      const payload = await payloadOf(req, res);
+      if (!payload) return;
+      if (!knownId(payload.id)) return json(res, { error: 'unknown card id' }, 404);
+      db.setKnown(payload.id, payload.on !== false);
+      return json(res, { ok: true, known: payload.on !== false });
     }
 
     if (req.method === 'POST' && url.pathname === '/delete') {
@@ -830,12 +958,12 @@ const server = createServer(async (req, res) => {
       const minutes = [5, 10, 15].includes(Number(payload.minutes)) ? Number(payload.minutes) : cfg.sessionMinutes;
       const exclude = new Set((Array.isArray(payload.exclude) ? payload.exclude : []).filter(knownId));
 
-      const wanted = due.filter(
-        (card) =>
-          !exclude.has(card.id) &&
-          (!category || card.category === category) &&
-          (!level || card.cefr === level),
-      );
+      const asked = (card) =>
+        !exclude.has(card.id) &&
+        (!category || card.category === category) &&
+        (!level || card.cefr === level);
+      const wanted = due.filter(asked);
+      const unseen = cards.filter((card) => !state.has(card.id) && asked(card));
       const enough = cards.length >= 4;
       const shape = (card) => {
         const entry = state.get(card.id);
@@ -854,8 +982,8 @@ const server = createServer(async (req, res) => {
       };
 
       const plan = planSession({
-        due: wanted.filter((card) => state.has(card.id)).map(shape),
-        fresh: wanted.filter((card) => !state.has(card.id)).map(shape),
+        due: wanted.map(shape),
+        fresh: unseen.map(shape),
         minutes,
         newLimit: Math.max(0, cfg.dailyLimit - db.newCardsToday(deckId)),
         exercises: cfg.exercises,
@@ -971,8 +1099,16 @@ const server = createServer(async (req, res) => {
 
     if (req.method === 'GET' && url.pathname === '/export.csv') {
       const cfg = config();
-
-      const cards = url.searchParams.get('deck') === 'current' ? deck(new Date(), cfg).cards : loadCards();
+      const wanted = new Set(
+        (url.searchParams.get('decks') || '')
+          .split(',')
+          .map((pair) => pair.trim().toLowerCase())
+          .filter(Boolean),
+      );
+      const cards =
+        url.searchParams.get('deck') === 'current'
+          ? deck(new Date(), cfg).cards
+          : loadCards().filter((card) => !wanted.size || wanted.has(`${card.native}>${card.target}`));
       const csv = toCsv(cards, cfg);
       writeCsv(csv);
       res.writeHead(200, {

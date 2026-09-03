@@ -1,6 +1,6 @@
 export const CHOICES = 4;
 export const SWIPE_THRESHOLD = 96;
-export const SWIPE_SLOPE = 1;
+const SWIPE_SLOPE = 1;
 
 const lower = (value) => String(value ?? '').toLowerCase().trim();
 
@@ -21,12 +21,15 @@ export function similarity(card, other) {
   return score;
 }
 
-export function rankDistractors(card, pool) {
-  const seen = new Set([lower(card.back)]);
+export const backOf = (card) => card.back;
+export const frontOf = (card) => card.front;
+
+export function rankDistractors(card, pool, answerOf = backOf) {
+  const seen = new Set([lower(answerOf(card))]);
   const unique = [];
   for (const other of pool) {
     if (!other || other.id === card.id) continue;
-    const key = lower(other.back);
+    const key = lower(answerOf(other));
     if (!key || seen.has(key)) continue;
     seen.add(key);
     unique.push(other);
@@ -37,8 +40,8 @@ export function rankDistractors(card, pool) {
     .map((entry) => entry.other);
 }
 
-export function buildChoices(card, pool, shuffle = (list) => list) {
-  const ranked = rankDistractors(card, pool);
+export function buildChoices(card, pool, shuffle = (list) => list, answerOf = backOf) {
+  const ranked = rankDistractors(card, pool, answerOf);
   const wanted = CHOICES - 1;
   const picks = shuffle(ranked.slice(0, wanted * 2)).slice(0, wanted);
   if (picks.length < wanted) {
@@ -47,7 +50,7 @@ export function buildChoices(card, pool, shuffle = (list) => list) {
       if (!picks.includes(other)) picks.push(other);
     }
   }
-  return shuffle([card.back, ...picks.map((other) => other.back)]);
+  return shuffle([answerOf(card), ...picks.map(answerOf)]);
 }
 
 export function swipeVerdict({ dx = 0, dy = 0, width = 0, threshold = SWIPE_THRESHOLD } = {}) {

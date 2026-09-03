@@ -1,16 +1,21 @@
 import {
   $,
   ACTIONS,
-  CATEGORY,
   LEVELS,
+  ago,
   api,
   app,
   categoryChips,
+  categoryKeys,
   emptyState,
+  dialogHead,
   esc,
+  groupByCategory,
   icon,
+  languageName,
   levelChips,
   meta,
+  modal,
   meta as categoryMeta,
   pct,
   registerScreen,
@@ -23,7 +28,7 @@ import {
   levelBlurb,
   langAttrs,
 } from './core.js';
-import { canSpeak, speak } from './speak.js';
+import { sayButton } from './speak.js';
 
 const VIEWS = [
   { mode: 'list', icon: 'list', label: 'List' },
@@ -38,7 +43,7 @@ const STATUSES = [
   ['learned', 'Learned'],
 ];
 
-export function deckCards() {
+function deckCards() {
   const { category, level, status, query } = app.deck;
   const needle = query.trim().toLowerCase();
   return app.cards.filter((card) => {
@@ -62,16 +67,8 @@ const masteryMeter = (card) =>
 const starButton = (card) => `<button class="star" data-act="favorite" data-value="${card.id}"
   aria-pressed="${!!card.isFavorite}"
   aria-label="${esc(card.isFavorite ? t('Remove from favourites') : t('Add to favourites'))}">
-  ${icon('star', 'icon-sm icon')}
+  ${icon(card.isFavorite ? 'star-fill' : 'star', 'icon-sm icon')}
 </button>`;
-
-const speakButton = (card) =>
-  canSpeak(app.config.target)
-    ? `<button class="star" data-act="say-card" data-value="${card.id}"
-        aria-label="${esc(t('Say {word} out loud', { word: card.front }))}">
-        ${icon('speaker-high', 'icon-sm icon')}
-      </button>`
-    : '';
 
 const leechPill = (card) =>
   card.leech
@@ -110,7 +107,7 @@ function editRow(card) {
         placeholder="${esc(t('Example'))}">
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <select class="edit" name="category" style="width:auto" aria-label="${esc(t('Domain'))}">
-          ${Object.keys(CATEGORY)
+          ${categoryKeys()
             .map(
               (key) =>
                 `<option value="${key}" ${card.category === key ? 'selected' : ''}>${esc(meta(key).label)}</option>`,
@@ -130,11 +127,12 @@ function editRow(card) {
   </li>`;
 }
 
-export function wordRow(card) {
+function wordRow(card) {
   if (app.deck.editing === card.id) return editRow(card);
-  return `<li class="row" style="${tintOf(card.category)}">
+  return `<li class="row" style="${tintOf(card.category)}" data-act="card-open" data-value="${card.id}"
+    role="button" tabindex="0" aria-label="${esc(card.front)}">
     <span class="row-actions">
-      ${starButton(card)}${speakButton(card)}${editButton(card)}${rewriteButton(card)}${deleteButton(card)}
+      ${starButton(card)}${sayButton(card)}${editButton(card)}${rewriteButton(card)}${deleteButton(card)}
     </span>
     <span class="row-front" ${langAttrs(app.config.target)}>${esc(card.front)}${
       card.reading ? `<i class="reading-inline" lang="und" dir="ltr">${esc(card.reading)}</i>` : ''
@@ -147,8 +145,9 @@ export function wordRow(card) {
 }
 
 export function wordList(cards) {
-  const groups = Object.keys(CATEGORY)
-    .map((key) => ({ key, cards: cards.filter((card) => card.category === key) }))
+  const buckets = groupByCategory(cards);
+  const groups = categoryKeys()
+    .map((key) => ({ key, cards: buckets.get(key) || [] }))
     .filter((group) => group.cards.length);
 
   if (groups.length <= 1) return `<ul class="rows">${cards.map(wordRow).join('')}</ul>`;
@@ -168,7 +167,7 @@ export function wordList(cards) {
     .join('');
 }
 
-export function wordTable(cards) {
+function wordTable(cards) {
   const { sort = 'front', dir = 'asc' } = app.deck;
   const head = [
     ['front', t('Word')],
@@ -200,7 +199,7 @@ export function wordTable(cards) {
         const info = categoryMeta(card.category);
         const status = card.isNew ? t('never seen') : card.isDue ? t('due {when}', { when: relativeDay(card.due) }) : relativeDay(card.due);
         return `<tr style="${tintOf(card.category)}">
-          <td class="tbl-badge"><span class="badge-icon" title="${esc(info.label)}">${icon(`${info.icon}-duotone`)}</span></td>
+          <td class="tbl-badge"><span class="badge-icon" title="${esc(info.label)}">${icon(info.icon)}</span></td>
           <td class="tbl-front" ${langAttrs(app.config.target)}>${esc(card.front)}${
             card.reading ? `<i class="reading-inline" lang="und" dir="ltr">${esc(card.reading)}</i>` : ''
           }</td>
@@ -208,14 +207,14 @@ export function wordTable(cards) {
           <td>${levelPill(card)}${leechPill(card)}</td>
           <td class="tbl-meter">${masteryMeter(card)}<span class="n">${esc(pct(card.mastery))}</span></td>
           <td class="tbl-when" ${card.isDue ? 'data-due' : ''}>${esc(status)}</td>
-          <td class="tbl-actions"><span class="row-actions">${starButton(card)}${speakButton(card)}${editButton(card)}${rewriteButton(card)}${deleteButton(card)}</span></td>
+          <td class="tbl-actions"><span class="row-actions">${starButton(card)}${sayButton(card)}${editButton(card)}${rewriteButton(card)}${deleteButton(card)}</span></td>
         </tr>`;
       })
       .join('')}</tbody>
   </table></div>`;
 }
 
-export function wordCard(card) {
+function wordCard(card) {
   const info = categoryMeta(card.category);
   const status = card.isNew
     ? t('never seen')
@@ -234,7 +233,7 @@ export function wordCard(card) {
     <div class="word-foot">
       ${masteryMeter(card)}
       <span>${esc(status)}</span>
-      ${speakButton(card)}
+      ${starButton(card)}${sayButton(card)}
       ${editButton(card)}
       ${rewriteButton(card)}
       ${deleteButton(card)}
@@ -242,9 +241,188 @@ export function wordCard(card) {
   </article>`;
 }
 
+async function loadDuplicates() {
+  if (app.duplicates) return;
+  app.duplicates = { groups: [], loading: true };
+  try {
+    const out = await api('/duplicates');
+    app.duplicates = { groups: out.groups || [], loading: false };
+  } catch {
+    app.duplicates = { groups: [], loading: false };
+  }
+  if (app.route === 'deck') renderDeck();
+}
+
+const repeats = () =>
+  (app.duplicates?.groups || []).flatMap((group) => group.cards.filter((card) => card.repeat));
+
+function renderDuplicates() {
+  const box = $('#twins-body');
+  const groups = app.duplicates?.groups || [];
+  if (!box) return;
+  const again = repeats();
+
+  box.innerHTML = `
+    ${dialogHead(t('One meaning, more than one card'), 'twins-close')}
+    <p class="lede" style="font-size:.9375rem">${esc(
+      t('Two words for one meaning can both be worth learning. Throw away the one that is not.'),
+    )}</p>
+    ${
+      groups.length
+        ? `<div class="twins">${groups.map(twinGroup).join('')}</div>`
+        : `<p class="field-hint" style="margin-top:16px">${esc(t('Every meaning has exactly one card.'))}</p>`
+    }
+    <div class="sync-foot">
+      ${
+        again.length
+          ? `<button class="btn btn-danger" style="margin-inline-end:auto" data-act="twins-sweep"
+              ${app.duplicates?.sweeping ? 'disabled' : ''}>
+              ${icon('trash', 'icon-sm icon')} ${esc(t('Drop the repeats'))} · ${again.length}
+            </button>`
+          : ''
+      }
+      <button class="btn" data-act="twins-close">${esc(t('Done for now'))}</button>
+    </div>`;
+}
+
+function twinGroup(group) {
+  return `<div class="twin-group">
+    <div class="twin-meaning" ${langAttrs(app.config.native)}>${esc(group.meaning)}</div>
+    ${group.cards
+      .map(
+        (card) => `<div class="twin-card" ${card.repeat ? 'data-repeat' : ''}>
+          <span class="twin-front" ${langAttrs(app.config.target)}>${esc(card.front)}</span>
+          ${
+            card.repeat
+              ? `<span class="level" data-repeat>${esc(t('the same word again'))}</span>`
+              : card.cefr
+                ? `<span class="level">${esc(card.cefr)}</span>`
+                : ''
+          }
+          ${card.example ? `<span class="twin-example" ${langAttrs(app.config.target)}>${esc(card.example)}</span>` : ''}
+          <button class="star danger" data-act="twins-drop" data-value="${card.id}"
+            aria-label="${esc(t('Delete {word} for good', { word: card.front }))}">
+            ${icon('trash', 'icon-sm icon')}
+          </button>
+        </div>`,
+      )
+      .join('')}
+  </div>`;
+}
+
+function cardCard(card) {
+  const info = categoryMeta(card.category);
+  const words = (card.keywords || []).filter(
+    (word) => ![card.front, card.back].some((side) => String(side).toLowerCase() === String(word).toLowerCase()),
+  );
+  return `
+    <div class="section-head" style="margin:0 0 14px">
+      <span class="tag" style="${tintOf(card.category)}">${icon(info.icon)}${esc(info.label)}</span>
+      ${levelPill(card)}${leechPill(card)}
+      <button class="btn btn-quiet dialog-close" data-act="card-close" aria-label="${esc(t('Cancel'))}">
+        ${icon('x', 'icon-sm icon')}
+      </button>
+    </div>
+
+    <div class="card-front" ${langAttrs(app.config.target)}>${esc(card.front)}</div>
+    ${card.reading ? `<div class="reading" lang="und" dir="ltr">${esc(card.reading)}</div>` : ''}
+    <div class="card-back" ${langAttrs(app.config.native)}>${esc(card.back)}</div>
+    ${card.example ? `<p class="example" ${langAttrs(app.config.target)}>${esc(card.example)}</p>` : ''}
+    ${card.note ? `<p class="note">${icon('warning-circle', 'icon-sm icon')} ${esc(card.note)}</p>` : ''}
+    ${
+      words.length
+        ? `<div class="keywords" ${langAttrs(app.config.target)}>${words
+            .map((word) => `<span class="keyword">${esc(word)}</span>`)
+            .join('')}</div>`
+        : ''
+    }
+
+    ${
+      card.source
+        ? `<div class="card-source">
+            <div class="micro">${esc(t('Where it came from'))}</div>
+            <p ${langAttrs(app.config.native)}>${esc(card.source)}</p>
+            <div class="field-hint">${[card.project, card.ts ? ago(card.ts) : '']
+              .filter(Boolean)
+              .map((part) => esc(part))
+              .join(' · ')}</div>
+          </div>`
+        : ''
+    }
+
+    <div class="card-facts">
+      <div><span class="l">${esc(t('Mastery'))}</span><span class="v">${esc(pct(card.mastery))}</span></div>
+      <div><span class="l">${esc(t('Next'))}</span><span class="v">${esc(
+        card.isNew ? t('never seen') : relativeDay(card.due),
+      )}</span></div>
+      <div><span class="l">${esc(t('Reviews'))}</span><span class="v">${card.reps || 0}</span></div>
+      <div><span class="l">${esc(t('Lapses'))}</span><span class="v">${card.lapses || 0}</span></div>
+    </div>
+
+    <div class="sync-foot" style="justify-content:space-between">
+      <span style="display:flex;gap:8px">
+        ${starButton(card)}${sayButton(card)}${editButton(card)}${rewriteButton(card)}
+      </span>
+      <span style="display:flex;gap:8px">
+        <button class="btn btn-danger" data-act="card-drop" data-value="${card.id}">
+          ${icon('trash', 'icon-sm icon')} ${esc(t('Delete it'))}
+        </button>
+      </span>
+    </div>`;
+}
+
+function renderCard() {
+  const box = $('#card-body');
+  const card = app.opened && app.cards.find((entry) => entry.id === app.opened);
+  if (!box) return;
+  if (!card) return $('#card').close();
+  box.innerHTML = cardCard(card);
+}
+
+function renderExport() {
+  const box = $('#export-body');
+  const picked = app.export;
+  if (!box || !picked) return;
+  const decks = (app.pairs || []).filter((pair) => pair.total > 0);
+  const cards = decks
+    .filter((pair) => picked.has(`${pair.native}>${pair.target}`))
+    .reduce((sum, pair) => sum + pair.total, 0);
+
+  box.innerHTML = `
+    ${dialogHead(t('Export for Anki'), 'export-close')}
+    <p class="lede" style="font-size:.9375rem">${esc(t('CSV for Anki: File → Import, separator ;'))}</p>
+    <div class="sync-list">
+      ${decks
+        .map((pair) => {
+          const key = `${pair.native}>${pair.target}`;
+          const pairName = t('{from} → {to}', {
+            from: languageName(pair.native),
+            to: languageName(pair.target),
+          });
+          return `<div class="sync-row">
+            <button class="switch" role="switch" data-act="export-toggle" data-value="${key}"
+              aria-checked="${picked.has(key)}" aria-label="${esc(pairName)}"></button>
+            <span class="code">${esc(pair.native)}<i>→</i>${esc(pair.target)}</span>
+            <span class="sync-lang">${esc(pairName)}</span>
+            <span class="sync-n">${esc(tn(pair.total, 'card', 'cards'))}</span>
+          </div>`;
+        })
+        .join('')}
+    </div>
+    <div class="sync-foot">
+      <button class="btn" data-act="export-close">${esc(t('Cancel'))}</button>
+      <button class="btn btn-primary" data-act="export-run" ${cards ? '' : 'disabled'}>
+        ${icon('download-simple', 'icon-sm icon')}
+        ${esc(cards ? `${t('Export')} · ${tn(cards, 'card', 'cards')}` : t('Export'))}
+      </button>
+    </div>`;
+}
+
 function renderDeck() {
+  loadDuplicates();
   const cards = deckCards();
   const { status, query } = app.deck;
+  const fresh = cards.filter((card) => card.isNew).length;
 
   $('#page-deck').innerHTML = `
     <div class="page-head">
@@ -258,7 +436,15 @@ function renderDeck() {
           <input class="input" id="deck-search" type="search" placeholder="${esc(t('Search words, translations, examples'))}"
             value="${esc(query)}" aria-label="${esc(t('Search the deck'))}">
         </label>
+        ${
+          app.duplicates?.groups.length
+            ? `<button class="btn" data-act="twins-open">
+                ${icon('copy', 'icon-sm icon')} ${esc(tn(app.duplicates.groups.length, 'repeated meaning', 'repeated meanings'))}
+              </button>`
+            : ''
+        }
         <button class="btn" data-act="export" title="${esc(t('CSV for Anki: File → Import, separator ;'))}">${icon('download-simple', 'icon-sm icon')} ${esc(t('Export for Anki'))}</button>
+        ${fresh ? `<button class="btn btn-primary" data-act="practice-tab" data-value="learn">${icon('sparkle', 'icon-sm icon')} ${esc(t('Learn {n} new', { n: fresh }))}</button>` : ''}
       </div>
     </div>
 
@@ -318,7 +504,7 @@ function renderDeck() {
   if (editing) editing.focus();
 }
 
-export async function removeCard(card) {
+async function removeCard(card) {
   try {
     await api('/delete', { id: card.id, reason: 'deleted from the deck' });
     app.cards = app.cards.filter((other) => other.id !== card.id);
@@ -369,7 +555,80 @@ Object.assign(ACTIONS, {
     render();
   },
   export: () => {
-    location.href = '/export.csv';
+    const decks = (app.pairs || []).filter((pair) => pair.total > 0);
+    if (decks.length < 2) return (location.href = '/export.csv');
+    app.export = new Set(decks.map((pair) => `${pair.native}>${pair.target}`));
+    $('#export').showModal();
+    renderExport();
+  },
+  'export-toggle': (value) => {
+    if (!app.export) return;
+    if (app.export.has(value)) app.export.delete(value);
+    else app.export.add(value);
+    renderExport();
+  },
+  'export-close': () => $('#export').close(),
+  'card-open': (id) => {
+    app.opened = id;
+    $('#card').showModal();
+    renderCard();
+  },
+  'card-close': () => $('#card').close(),
+  'card-drop': async (id) => {
+    const card = app.cards.find((entry) => entry.id === id);
+    if (!card) return;
+    $('#card').close();
+    await removeCard(card);
+  },
+  'twins-open': () => {
+    $('#twins').showModal();
+    renderDuplicates();
+  },
+  'twins-close': () => $('#twins').close(),
+  'twins-drop': async (id) => {
+    const groups = app.duplicates?.groups || [];
+    const card = groups.flatMap((group) => group.cards).find((entry) => entry.id === id);
+    if (!card) return;
+    try {
+      await api('/delete', { id, reason: 'duplicate' });
+    } catch (error) {
+      return toast(error.message || t('Could not delete that card'), 'error');
+    }
+    app.cards = app.cards.filter((entry) => entry.id !== id);
+    app.duplicates = null;
+    await loadDuplicates();
+    renderDuplicates();
+    toast(
+      t('Removed from your deck'),
+      'ok',
+      `<button class="undo" data-act="undo-junk" data-value="${id}">${esc(t('Undo'))} <kbd>u</kbd></button>`,
+    );
+  },
+  'twins-sweep': async () => {
+    const state = app.duplicates;
+    const again = repeats();
+    if (!state || state.sweeping || !again.length) return;
+    state.sweeping = true;
+    renderDuplicates();
+
+    let gone = 0;
+    for (const card of again) {
+      try {
+        await api('/delete', { id: card.id, reason: 'duplicate' });
+        app.cards = app.cards.filter((entry) => entry.id !== card.id);
+        gone += 1;
+      } catch {}
+    }
+    app.duplicates = null;
+    await loadDuplicates();
+    renderDuplicates();
+    toast(gone ? tn(gone, 'card removed', 'cards removed') : t('Could not delete that card'), gone ? 'ok' : 'error');
+  },
+  'export-run': () => {
+    const picked = [...(app.export || [])];
+    if (!picked.length) return;
+    $('#export').close();
+    location.href = `/export.csv?decks=${encodeURIComponent(picked.join(','))}`;
   },
   discard: async (id) => {
     const card = app.cards.find((entry) => entry.id === id);
@@ -399,12 +658,6 @@ Object.assign(ACTIONS, {
       render();
       toast(error.message || t('Could not save that'), 'error');
     }
-  },
-  'say-card': async (id) => {
-    const card = app.cards.find((entry) => entry.id === id);
-    if (!card) return;
-    const ok = await speak(card.front, app.config.target);
-    if (!ok) toast(t('No offline voice for that language yet'), 'error');
   },
   'rewrite-card': async (id) => {
     try {
@@ -442,6 +695,15 @@ document.addEventListener('submit', async (event) => {
   } catch (error) {
     toast(error.message || t('Could not save'), 'error');
   }
+});
+
+modal('export', () => {
+  app.export = null;
+});
+modal('twins');
+
+modal('card', () => {
+  app.opened = null;
 });
 
 registerScreen('deck', renderDeck);

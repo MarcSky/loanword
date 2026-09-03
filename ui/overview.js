@@ -2,6 +2,8 @@ import {
   $,
   ACTIONS,
   MODE_LABEL,
+  api,
+  flagOf,
   app,
   byCategory,
   categoryChips,
@@ -23,6 +25,7 @@ import {
   t,
   tintOf,
   tn,
+  toast,
   weekDots,
 } from './core.js';
 import { heatmap, meter } from './charts.js';
@@ -30,34 +33,75 @@ import { kpi } from './analytics.js';
 import { greetingKey } from './shell.js';
 import { wordList } from './deck.js';
 
+function buildRow(row) {
+  const records = tn(row.queued, 'captured record', 'captured records');
+  if (!row.building) {
+    return `<span>${esc(t('{lang}: {records} waiting to become cards.', { lang: languageName(row.target), records }))}</span>`;
+  }
+  const total = row.total || row.queued;
+  const done = Math.min(row.done || 0, total);
+  return `<span class="build-line">
+    <span>${esc(t('{lang}: building your cards', { lang: languageName(row.target) }))}
+      <b>${done} / ${total}</b>
+      ${
+        row.batches > 1
+          ? `<i class="build-batch">${esc(t('batch {n} of {total}', { n: row.batch, total: row.batches }))}</i>`
+          : ''
+      }</span>
+    <span class="track"><i style="--p:${total ? (done / total).toFixed(4) : 0}"></i></span>
+  </span>`;
+}
+
+function filingRow() {
+  const filing = app.filing;
+  if (!filing) return '';
+  const done = Math.min(filing.done || 0, filing.total || 0);
+  return `<span class="build-line">
+    <span>${esc(t('Filing your cards again'))} <b>${done} / ${filing.total}</b>
+      ${
+        filing.batches > 1
+          ? `<i class="build-batch">${esc(t('batch {n} of {total}', { n: filing.batch, total: filing.batches }))}</i>`
+          : ''
+      }</span>
+    <span class="track"><i style="--p:${filing.total ? (done / filing.total).toFixed(4) : 0}"></i></span>
+  </span>`;
+}
+
 function buildBanner() {
   const rows = (app.targets || []).filter((row) => row.queued || row.building);
-  if (!rows.length) return '';
+  if (!rows.length && !app.filing) return '';
+  const running = rows.some((row) => row.building) || !!app.filing;
   return `<div class="banner">
-    <img class="art" src="art/queue-building.webp" alt="" style="width:36px;height:auto;border-radius:8px">
-    <span>${rows
-      .map((row) => {
-        const records = tn(row.queued, 'captured record', 'captured records');
-        return row.building
-          ? esc(t('{lang}: building your cards — {records}.', { lang: languageName(row.target), records }))
-          : esc(t('{lang}: {records} waiting to become cards.', { lang: languageName(row.target), records }));
-      })
-      .join('<br>')}</span>
+    ${running ? '<span class="spinner" aria-hidden="true"></span>' : icon('cards-three', 'icon')}
+    <span class="build-rows">${rows.map(buildRow).join('')}${filingRow()}</span>
+    ${
+      running
+        ? ''
+        : `<button class="btn" data-act="build-now">${icon('play', 'icon-sm icon')} ${esc(t('Build them now'))}</button>`
+    }
   </div>`;
 }
 
 function starterBanner() {
-  if (app.cards.length) return '';
+  const fresh = !app.config.field;
+  if (app.cards.length && !fresh) return '';
   const offers = [];
-  if (app.starter) {
-    const others = app.pairs.filter((pair) => pair.target !== app.config.target && pair.total > 0);
+  if (app.starter && !app.cards.length) {
+    const others = app.pairs.filter(
+      (pair) => pair.total > 0 && !(pair.native === app.config.native && pair.target === app.config.target),
+    );
     if (others.length) {
-      offers.push(`<button class="btn" data-act="go" data-value="settings">
+      offers.push(`<button class="btn" data-act="sync-open">
         ${icon('copy', 'icon-sm icon')} ${esc(t('Copy an existing deck into {lang}', { lang: languageName(app.config.target) }))}
       </button>`);
     }
   }
-  if (app.alphabet) {
+  if (fresh) {
+    offers.push(`<button class="btn" data-act="topics-open">
+      ${icon('squares-four', 'icon-sm icon')} ${esc(t('What do you work on?'))}
+    </button>`);
+  }
+  if (app.alphabet && !app.cards.length) {
     offers.push(`<button class="btn" data-act="start-alphabet">
       ${icon('sparkle', 'icon-sm icon')} ${esc(t('Learn the {n} letters first', { n: app.alphabet.letters }))}
     </button>`);
@@ -69,39 +113,67 @@ function starterBanner() {
   </div>`;
 }
 
+const buildKey = () =>
+  (app.targets || []).map((row) => `${row.target}:${row.building ? 1 : 0}:${row.queued}:${row.done || 0}`).join(',') +
+  `|${app.filing ? `${app.filing.done}/${app.filing.total}` : ''}`;
+
 export function watchBuild() {
   clearInterval(app.buildPoll);
-  if (!app.queued) return;
+  if (!app.queued && !app.building && !app.filing) return;
   app.buildPoll = setInterval(async () => {
-    const before = app.queued;
+    const before = buildKey();
     const { load } = await import('./core.js');
     await load().catch(() => {});
-    if (app.queued !== before || !app.queued) render();
-    if (!app.queued) clearInterval(app.buildPoll);
-  }, 15_000);
+    if (buildKey() !== before) render();
+    if (!app.queued && !app.building && !app.filing) clearInterval(app.buildPoll);
+  }, 2000);
 }
 
 export function deckChips() {
   const { native, target } = app.config;
-  const capturing = new Set((app.config.targets || []).filter((code) => !(app.config.paused || []).includes(code)));
   return decks()
     .map((pair) => {
       const open = pair.native === native && pair.target === target;
-      const on = capturing.has(pair.target);
       return `<div class="deck-row" ${open ? 'data-open' : ''}>
         <button class="deck-open" data-act="open-deck" data-value="${pair.native}>${pair.target}"
-          aria-pressed="${open}" aria-label="${esc(t('Study {lang}', { lang: languageName(pair.target) }))}">
+          aria-pressed="${open}"
+          aria-label="${esc(t('Study {lang} from {from}', { lang: languageName(pair.target), from: languageName(pair.native) }))}">
           <span class="code">${esc(pair.native)}<i>→</i>${esc(pair.target)}</span>
-          <span class="lang">${esc(languageName(pair.target))}</span>
-          <span class="n">${pair.total || 0}</span>
+          <span class="lang">${esc(languageName(pair.target))}
+            <i class="deck-from">${esc(t('from {lang}', { lang: languageName(pair.native) }))}</i>
+          </span>
+          <span class="n">${esc(tn(pair.total || 0, 'card', 'cards'))}</span>
+          ${open ? `<span class="tag" data-plain>${esc(t('open'))}</span>` : ''}
         </button>
-        <button class="switch" role="switch" data-act="toggle-capture" data-value="${pair.target}"
-          aria-checked="${on}"
-          aria-label="${esc(t('Capture into {lang}', { lang: languageName(pair.target) }))}"></button>
+        <button class="star danger" data-act="deck-drop" data-value="${pair.native}>${pair.target}"
+          aria-label="${esc(t('Delete the {lang} deck', { lang: languageName(pair.target) }))}">
+          ${icon('trash', 'icon-sm icon')}
+        </button>
       </div>`;
     })
     .join('');
 }
+
+export function captureSwitches() {
+  const capturing = new Set((app.config.targets || []).filter((code) => !(app.config.paused || []).includes(code)));
+  const languages = [...new Set(decks().map((pair) => pair.target))];
+  return languages
+    .map(
+      (code) => `<div class="capture-row">
+        <span class="flag">${flagOf(code)}</span>
+        <span class="capture-lang">${esc(languageName(code))}</span>
+        <button class="switch" role="switch" data-act="toggle-capture" data-value="${code}"
+          aria-checked="${capturing.has(code)}"
+          aria-label="${esc(t('Capture into {lang}', { lang: languageName(code) }))}"></button>
+      </div>`,
+    )
+    .join('');
+}
+
+const EMPTY_DECK_ART = {
+  src: 'empty-deck.webp',
+  alt: 'Flat line illustration: an empty index-card box on a desk beside a closed laptop, one blank card standing upright, thin black outline, blue and beige fills, white background, no text',
+};
 
 function newDeckState() {
   const elsewhere = app.pairs.filter(
@@ -111,10 +183,7 @@ function newDeckState() {
 
   if (carried) {
     return emptyState({
-      art: {
-        src: 'empty-deck.webp',
-        alt: 'Flat line illustration: an empty index-card box on a desk beside a closed laptop, one blank card standing upright, thin black outline, blue and beige fills, white background, no text',
-      },
+      art: EMPTY_DECK_ART,
       title: esc(
         t('Nothing in {from} → {to} yet', {
           from: languageName(app.config.native),
@@ -127,10 +196,7 @@ function newDeckState() {
   }
 
   return emptyState({
-    art: {
-      src: 'empty-deck.webp',
-      alt: 'Flat line illustration: an empty index-card box on a desk beside a closed laptop, one blank card standing upright, thin black outline, blue and beige fills, white background, no text',
-    },
+    art: EMPTY_DECK_ART,
     title: t('Your deck is still empty'),
     body: t('It fills as you work.'),
     action: `<button class="btn" data-act="go" data-value="settings">${icon('gear-six', 'icon-sm icon')} ${esc(t('Check your languages'))}</button>`,
@@ -141,7 +207,7 @@ function categoryTile(cat) {
   const info = meta(cat.key);
   return `<button class="cat" style="${tintOf(cat.key)}" data-act="overview-category" data-value="${cat.key}" data-tint="${info.tint}">
     <div class="cat-top">
-      <span class="badge-icon">${icon(`${info.icon}-duotone`, 'icon-lg icon')}</span>
+      <span class="badge-icon">${icon(info.icon, 'icon-lg icon')}</span>
       <span class="cat-name">${esc(info.label)}</span>
       ${cat.due ? `<span class="cat-due">${esc(t('{n} due', { n: cat.due }))}</span>` : ''}
     </div>
@@ -213,14 +279,16 @@ function goalCard(stats) {
 }
 
 function heroCard(totals, dueLine) {
+  const fresh = app.cards.filter((card) => card.isNew).length;
   return `<section class="panel hero-card">
     <div class="hero-copy">
       <span class="eyebrow-pill">${icon('translate', 'icon-sm icon')} ${esc(t('Learning {lang}', { lang: languageName(app.config.target) }))}</span>
       <h2 class="hero-title">${esc(totals.due ? t('{n} due right now', { n: totals.due }) : t('All caught up'))}</h2>
       <p class="hero-sub">${esc(dueLine)}</p>
-      <button class="btn btn-primary lg" data-act="start" data-value="${app.category}" ${totals.due ? '' : 'aria-disabled="true"'}>
-        ${icon('play', 'icon-sm icon')} ${esc(t('Start session'))}
-      </button>
+      <div class="hero-actions">
+        ${totals.due || fresh ? `<button class="btn btn-primary lg" data-act="start" data-value="${app.category}">${icon('play', 'icon-sm icon')} ${esc(t('Start quiz'))}</button>` : ''}
+        ${fresh ? `<button class="btn lg" data-act="practice-tab" data-value="learn">${icon('sparkle', 'icon-sm icon')} ${esc(t('Learn {n} new words', { n: fresh }))}</button>` : ''}
+      </div>
     </div>
     ${art('hero', 'Flat line illustration: a developer sitting cross-legged on a giant blank flashcard with a laptop, holding a smaller card up to the light; blue shirt, beige trousers, white background, no text', { width: 640, height: 400, cls: 'hero-art' })}
   </section>`;
@@ -238,7 +306,7 @@ function promoCard() {
       <p>${esc(t('Space reveals, 1 to 4 grade, d throws a card away. Five minutes is a session.'))}</p>
       <button class="btn" data-act="shortcuts">${icon('keyboard', 'icon-sm icon')} ${esc(t('Show me'))}</button>
     </div>
-    ${art('tutorial', 'Flat line illustration: a person floating weightless with headphones, one knee bent, a blank card drifting nearby; white outline on dark, blue shirt', { width: 280, height: 210, cls: 'promo-art' })}
+    ${art('tutorial', 'Flat line illustration: a person floating weightless with headphones, one knee bent, a blank card drifting nearby; white outline on dark, blue shirt', { width: 280, height: 210, cls: 'promo-art', fixed: true })}
     <button class="btn-icon promo-close" data-act="dismiss-tutorial" aria-label="${esc(t('Dismiss'))}">${icon('x', 'icon-sm icon')}</button>
   </section>`;
 }
@@ -343,6 +411,17 @@ Object.assign(ACTIONS, {
     await api('/settings', { paused: [...paused] });
     await refresh();
   },
+  'build-now': async () => {
+    try {
+      const out = await api('/build', {});
+      app.targets = out.targets || app.targets;
+      toast(out.started ? t('Building your cards') : t('Nothing to build right now'));
+      render();
+      watchBuild();
+    } catch (error) {
+      toast(error.message || t('Could not start the build'), 'error');
+    }
+  },
   'start-alphabet': async () => {
     const { api, refresh, toast } = await import('./core.js');
     try {
@@ -365,4 +444,3 @@ Object.assign(ACTIONS, {
 
 registerScreen('overview', renderOverview);
 
-export { renderOverview };

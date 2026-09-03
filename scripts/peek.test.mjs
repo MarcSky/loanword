@@ -2,8 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   DEFAULT_EVERY_MINUTES,
-  LEECH_LAPSES,
-  PEEK_PICKS,
   PEEK_POOLS,
   candidates,
   parsePick,
@@ -11,6 +9,7 @@ import {
   pickPeek,
   renderPeek,
 } from './peek.mjs';
+import { LEECH_LAPSES } from './store-paths.mjs';
 
 const row = (front, overrides = {}) => ({
   front,
@@ -54,7 +53,7 @@ test('the pick is a list, however it was written down', () => {
   assert.deepEqual(parsePick('astrology,D9'), [], 'anything it does not know is dropped');
   assert.deepEqual(parsePick(''), []);
   assert.deepEqual(parsePick(null), []);
-  assert.deepEqual(PEEK_PICKS.slice(0, 4), PEEK_POOLS);
+  assert.deepEqual(parsePick(PEEK_POOLS.join(',')), PEEK_POOLS);
 });
 
 test('the modes the first version shipped still mean something', () => {

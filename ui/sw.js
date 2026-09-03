@@ -1,4 +1,4 @@
-const CACHE = 'loanword-shell-v4';
+const CACHE = 'loanword-shell-v7';
 
 const SHELL = [
   '/',
@@ -9,20 +9,26 @@ const SHELL = [
   'languages.js',
   'answer.js',
   'quiz.js',
+  'plan.js',
+  'categories.js',
   'speak.js',
   'charts.js',
   'overview.js',
   'deck.js',
   'study.js',
+  'exam.js',
+  'practice.js',
   'analytics.js',
   'settings.js',
   'shell.js',
   'icons.svg',
   'favicon.svg',
   'manifest.webmanifest',
+  'art/offline-error.webp',
+  'art/offline-error-dark.webp',
 ];
 
-const LIVE = /^\/(state|due|stats|settings|grade|session|cloze|intervals|speech|build|clone|alphabet|produce|rewrite|delete|restore|favorite|card|export(\.csv)?|api|stop|i18n)(\/|\?|$)/;
+const LIVE = /^\/(state|due|stats|settings|grade|session|cloze|intervals|speech|build|clone|alphabet|produce|rewrite|delete|restore|favorite|known|card|export(\.csv)?|api|stop|i18n)(\/|\?|$)/;
 
 const VENDOR = 'vendor/webawesome/';
 
@@ -68,7 +74,7 @@ self.addEventListener('fetch', (event) => {
       .catch(() =>
         caches
           .match(request, { ignoreSearch: true })
-          .then((hit) => hit || caches.match('index.html')),
+          .then((hit) => hit || (request.mode === 'navigate' ? caches.match('index.html') : Response.error())),
       ),
   );
 });

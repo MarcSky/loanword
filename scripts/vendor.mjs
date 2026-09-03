@@ -21,7 +21,7 @@ export function imports(source) {
   return [...source.matchAll(IMPORT)].map((match) => match[1]).filter((spec) => spec.startsWith('.'));
 }
 
-export function graph(root = DIST, entries = ENTRIES) {
+function graph(root = DIST, entries = ENTRIES) {
   const seen = new Set();
   const queue = [...entries];
   while (queue.length) {

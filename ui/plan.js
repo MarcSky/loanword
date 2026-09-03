@@ -1,8 +1,8 @@
 export const AGAIN_GAP = 3;
 export const AGAIN_GAP_MAX = 5;
 
-export const PRESENT_GAP = 3;
-export const PRESENT_GAP_MAX = 5;
+const PRESENT_GAP = 3;
+const PRESENT_GAP_MAX = 5;
 
 export const PASS_RATE_FLOOR = 0.8;
 export const PASS_WINDOW = 20;

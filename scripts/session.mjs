@@ -1,38 +1,24 @@
-export {
-  AGAIN_GAP,
-  AGAIN_GAP_MAX,
-  PASS_RATE_FLOOR,
-  PASS_WINDOW,
-  PRESENT_GAP,
-  PRESENT_GAP_MAX,
-  followUp,
-  holdNewCards,
-  passRate,
-  progressAt,
-  requeue,
-  shouldHoldNewCards,
-  shuffle,
-} from '../ui/plan.js';
+export * from '../ui/plan.js';
 
 import { shuffle } from '../ui/plan.js';
 
 export const PRESENT_COST = 2;
 
-export const WARMUP = { 5: 2, 10: 3, 15: 3 };
+const WARMUP = { 5: 2, 10: 3, 15: 3 };
 
 export const WARMUP_RETRIEVABILITY = 0.9;
 
-export const NEW_FRACTION = { 5: 0.2, 10: 0.25, 15: 0.3 };
+const NEW_FRACTION = { 5: 0.2, 10: 0.25, 15: 0.3 };
 
-export const SECONDS_PER_REVIEW = 10;
-export const SECONDS_PER_NEW = 15;
-export const OVERHEAD_SECONDS = 10;
+const SECONDS_PER_REVIEW = 10;
+const SECONDS_PER_NEW = 15;
+const OVERHEAD_SECONDS = 10;
 
 export const PRODUCTION_STABILITY_DAYS = 7;
 
 
 export const MODES = ['flashcards', 'learn', 'cloze', 'type', 'reverse'];
-export const LETTER_MODES = ['flashcards', 'type'];
+const LETTER_MODES = ['flashcards', 'type'];
 
 export const warmupFor = (minutes) => WARMUP[minutes] ?? 3;
 export const newFractionFor = (minutes) => NEW_FRACTION[minutes] ?? 0.25;
@@ -42,8 +28,6 @@ export function coreSteps(minutes, share = newFractionFor(minutes)) {
   return Math.max(1, Math.floor((minutes * 60 - OVERHEAD_SECONDS) / perStep));
 }
 
-export const stepsFor = (minutes) => warmupFor(minutes) + coreSteps(minutes);
-
 const has = (list, mode) => !list || !list.length || list.includes(mode);
 
 export function productionMode(exercises = MODES) {
@@ -51,8 +35,8 @@ export function productionMode(exercises = MODES) {
   return 'flashcards';
 }
 
-export const TYPABLE_WORDS = 4;
-export const TYPABLE_CHARS = 24;
+const TYPABLE_WORDS = 4;
+const TYPABLE_CHARS = 24;
 
 export const typable = (front) => {
   const text = String(front || '').trim();
@@ -178,7 +162,7 @@ export function planSession({
   const newCards = shuffle(fresh, random).slice(0, Math.max(0, newWanted));
 
   const room = Math.max(0, core - newCards.length * PRESENT_COST);
-  const body = weave(reviews.slice(0, room), newCards, warmup[warmup.length - 1] || null);
+  const body = weave(spread(reviews.slice(0, room)), newCards, warmup[warmup.length - 1] || null);
 
   const ordered = [...warmup, ...body];
   const steps = ordered.map((card, index) => ({

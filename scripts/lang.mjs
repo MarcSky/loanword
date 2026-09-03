@@ -66,7 +66,7 @@ const MIN_WORD_BY_SCRIPT = {
   hebrew: 3,
 };
 
-export { SCRIPT_MAJORITY, isUnspaced, scriptOf };
+export { isUnspaced, scriptOf };
 
 export const scriptPattern = (script) => SCRIPT_PATTERNS[script] || null;
 

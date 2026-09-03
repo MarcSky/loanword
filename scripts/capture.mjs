@@ -34,8 +34,8 @@ export const MAX_TRANSCRIPT_BYTES = 32 * 1024 * 1024;
 export const AUTO_BUILD_THRESHOLD = 10;
 export const MAX_WORDS_PER_SESSION = 40;
 export const MAX_PROMPT_CHARS = 400;
-export const CODE_RATIO = 0.5;
-export const ECHO_WEAVE_WORDS = 10;
+const CODE_RATIO = 0.5;
+const ECHO_WEAVE_WORDS = 10;
 
 export const MIN_PHRASE_WORDS = 3;
 const MAX_ACRONYM_LENGTH = 6;
@@ -181,7 +181,7 @@ export function captureSession(event, cfg, meta, cached) {
   return fresh.length ? { ...meta, source: 'session', lang: cfg.target, words: fresh } : null;
 }
 
-export function echoWords(target, limit = ECHO_WEAVE_WORDS) {
+function echoWords(target, limit = ECHO_WEAVE_WORDS) {
   return readLines(frontsFile(target))
     .map((line) => {
       const [front, score] = line.split('\t');

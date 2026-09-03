@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 import { PLUGIN_ROOT } from './store-paths.mjs';
 
 export const CSS_FILE = join(PLUGIN_ROOT, 'ui', 'app.css');
-export const TOKENS_FILE = join(process.env.LOANWORD_DOCS || join(PLUGIN_ROOT, '..', 'docs'), 'design', 'tokens.json');
+const TOKENS_FILE = join(process.env.LOANWORD_DOCS || join(PLUGIN_ROOT, '..', 'docs'), 'design', 'tokens.json');
 
 const BLOCKS = [
   ['light', /^:root\s*\{$/],

@@ -10,6 +10,7 @@ import {
   isPickable,
   isRtl,
   isUnspaced,
+  flagOf,
   languageName,
   languageOf,
   scriptOf,
@@ -89,4 +90,12 @@ test('an unknown code is unknown, not silently Latin-named', () => {
   assert.equal(languageName('ka'), 'ქართული');
   assert.equal(codeOf('EN-gb'), 'en');
   assert.equal(codeOf(null), '');
+});
+
+test('every language in the picker has a flag for the interface switcher', () => {
+  for (const { code } of LANGUAGES) {
+    assert.notEqual(flagOf(code), '🏳️', `${code} has no flag`);
+  }
+  assert.equal(flagOf('ru'), '🇷🇺');
+  assert.equal(flagOf('xx'), '🏳️', 'an unknown code gets the neutral flag, never a wrong country');
 });

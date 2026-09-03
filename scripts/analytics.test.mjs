@@ -154,7 +154,7 @@ test('the weekly streak counts days studied out of seven, not a run', () => {
   assert.equal(streak.week.length, 7);
   assert.equal(streak.goal, 5);
   assert.equal(streak.days, 5, 'six, three, two and one days ago, plus today');
-  assert.equal(streak.week[6].day, analytics.dayKey());
+  assert.equal(streak.week[6].day, db.localDay());
 });
 
 test('a missed day does not reset the week', () => {
@@ -167,7 +167,7 @@ test('a missed day does not reset the week', () => {
 test('the calendar fills every day in the window, gaps included', () => {
   const calendar = analytics.calendar(DECK, { days: 10 });
   assert.equal(calendar.days.length, 10);
-  assert.equal(calendar.days[9].day, analytics.dayKey());
+  assert.equal(calendar.days[9].day, db.localDay());
   assert.ok(calendar.days.some((entry) => entry.reviews === 0), 'a quiet day is a zero, not a missing point');
   assert.equal(calendar.peak, Math.max(...calendar.days.map((entry) => entry.reviews)));
 });
@@ -176,7 +176,7 @@ test('the calendar counts minutes from the answer times it recorded', () => {
   const today = analytics.calendar(DECK, { days: 2 }).days.at(-1);
   assert.ok(today.new >= 1, 'a first sight is counted as new');
   assert.ok(today.minutes >= 1, 'answer times roll up into minutes');
-  assert.equal(today.day, analytics.dayKey());
+  assert.equal(today.day, db.localDay());
 });
 
 test('the forecast reaches the requested horizon and marks what is overdue', () => {

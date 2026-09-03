@@ -237,7 +237,7 @@ const REVIEWS_V3 = REVIEWS_V2.replace(
   "mode TEXT NOT NULL DEFAULT 'flashcards', category TEXT NOT NULL DEFAULT '', cefr TEXT NOT NULL DEFAULT '',",
 );
 
-async function fixture(name, version) {
+async function fixture(name, version, cards = [['abcdef0001', 'roll back', 'откатить']]) {
   const { DatabaseSync } = await import('node:sqlite');
   const file = join(DATA, `${name}.db`);
   rmSync(file, { force: true });
@@ -246,11 +246,10 @@ async function fixture(name, version) {
   handle.exec(version === 2 ? REVIEWS_V2 : REVIEWS_V3);
   handle.prepare('INSERT INTO schema_version (version) VALUES (?)').run(version);
   handle.prepare('INSERT INTO decks (native, target) VALUES (?, ?)').run('ru', 'en');
-  handle
-    .prepare(
-      `INSERT INTO cards (id, deck_id, front, back, created_at) VALUES ('abcdef0001', 1, 'roll back', 'откатить', '2026-01-01')`,
-    )
-    .run();
+  const insert = handle.prepare(
+    'INSERT INTO cards (id, deck_id, front, back, created_at) VALUES (?, 1, ?, ?, ?)',
+  );
+  for (const [id, front, back] of cards) insert.run(id, front, back, '2026-01-01');
   handle.close();
   return file;
 }
@@ -335,4 +334,154 @@ test('a flat v0.1 list is imported too, rather than being dropped on the floor',
   assert.deepEqual([...db.knownWordsOf('')].sort(), ['deadline', 'quorum']);
   db.close();
   db.open();
+});
+
+test('a card can be sorted as known, and unsorted again', () => {
+  db.open();
+  db.insertCards([card('known-1', { deck_id: deck() })], ['known-1']);
+  assert.equal(db.cardById('known-1').isKnown, false, 'new cards are not known');
+  db.setKnown('known-1', true);
+  assert.equal(db.cardById('known-1').isKnown, true);
+  assert.equal('known' in db.cardById('known-1'), false, 'the raw column never leaks');
+  db.setKnown('known-1', false);
+  assert.equal(db.cardsOfDeck(deck()).find((row) => row.id === 'known-1').isKnown, false);
+});
+
+test('an old deck is given the concept of every card it already holds', async () => {
+  db.close();
+  const file = await fixture('concepts', 3);
+  const handle = db.open(file);
+
+  const row = handle.prepare('SELECT back, concept FROM cards WHERE id = ?').get('abcdef0001');
+  assert.equal(row.back, 'откатить');
+  assert.equal(row.concept, db.conceptKey('откатить'), 'the migration fills in what the column was added for');
+  assert.notEqual(row.concept, '');
+  db.close();
+  db.open();
+});
+
+test('the concept of a phrase ignores case, padding and inner spacing', () => {
+  assert.equal(db.conceptKey('Привет  мир '), db.conceptKey('привет мир'));
+  assert.notEqual(db.conceptKey('привет'), db.conceptKey('пока'));
+  assert.equal(db.conceptKey(null), db.conceptKey(''));
+});
+
+test('one tokenizer splits a phrase for both the concept and the wording check', () => {
+  assert.deepEqual(db.wordsOf('Гамбургер-меню!'), ['гамбургер', 'меню']);
+  assert.deepEqual(db.wordsOf('  roll   back  '), ['roll', 'back'], 'padding and inner spacing are noise');
+  assert.deepEqual(db.wordsOf(null), []);
+  assert.deepEqual(db.wordsOf('ჰამბურგერ მენიუ'), ['ჰამბურგერ', 'მენიუ'], 'every script splits the same way');
+});
+
+test('the concept of a phrase ignores punctuation and the order of the words', () => {
+  assert.equal(db.conceptKey('меню-гамбургер'), db.conceptKey('гамбургер меню'));
+  assert.equal(db.conceptKey('«грубая» оценка!'), db.conceptKey('оценка грубая'));
+  assert.notEqual(db.conceptKey('гамбургер меню'), db.conceptKey('гамбургер'), 'a missing word is a different meaning');
+});
+
+test('an old deck whose concepts predate the wording rules is keyed again', async () => {
+  db.close();
+  const file = await fixture('reconcepts', 3, [
+    ['abcdef0011', 'hamburger meniu', 'гамбургер меню'],
+    ['abcdef0012', 'hamburgeris meniu', 'меню-гамбургер'],
+  ]);
+  const handle = db.open(file);
+
+  const rows = handle.prepare('SELECT id, concept FROM cards WHERE id LIKE ?').all('abcdef001%');
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].concept, rows[1].concept, 'the ladder ends with both wordings on one meaning');
+  assert.equal(rows[0].concept, db.conceptKey('гамбургер меню'));
+  db.close();
+  db.open();
+});
+
+test('a review is filed under the category and level of its card when it is not told them', () => {
+  db.open();
+  const deck = db.deckId('ru', 'et');
+  db.insertCards([card('logged-1', { deck_id: deck, category: 'engineering', cefr: 'B2' })], ['logged-1']);
+
+  db.logReview({ card_id: 'logged-1', deck_id: deck, ts: new Date().toISOString(), rating: 3 });
+  db.logReview({ card_id: 'logged-1', deck_id: deck, ts: new Date().toISOString(), rating: 3, category: null, cefr: null });
+  db.logReview({ card_id: 'logged-1', deck_id: deck, ts: new Date().toISOString(), rating: 3, category: 'legal', cefr: 'C1' });
+
+  const rows = db.all('SELECT category, cefr FROM reviews WHERE card_id = ?', 'logged-1').map((row) => ({ ...row }));
+  assert.deepEqual(rows.slice(0, 2), [
+    { category: 'engineering', cefr: 'B2' },
+    { category: 'engineering', cefr: 'B2' },
+  ], 'a missing or null field is read off the card');
+  assert.deepEqual(rows[2], { category: 'legal', cefr: 'C1' }, 'what the caller states is kept');
+});
+
+test('a deck can hand back the wordings it holds for each meaning', () => {
+  db.open();
+  const deck = db.deckId('ru', 'da');
+  db.insertCards(
+    [
+      card('fronts-1', { deck_id: deck, front: 'hamburger meniu', back: 'гамбургер меню' }),
+      card('fronts-2', { deck_id: deck, front: 'burgermenu', back: 'меню-гамбургер' }),
+      card('fronts-3', { deck_id: deck, front: 'roll back', back: 'откатить' }),
+    ],
+    ['fronts-1', 'fronts-2', 'fronts-3'],
+  );
+
+  const fronts = db.conceptFronts(deck);
+  assert.deepEqual(fronts.get(db.conceptKey('гамбургер меню')).sort(), ['burgermenu', 'hamburger meniu']);
+  assert.deepEqual(fronts.get(db.conceptKey('откатить')), ['roll back']);
+  assert.equal(db.conceptFronts(db.deckId('ru', 'nl')).size, 0);
+});
+
+test('narrowing the categories moves the cards left outside them to everyday', () => {
+  db.open();
+  const deck = db.deckId('ru', 'no');
+  db.insertCards(
+    [
+      card('refile-1', { deck_id: deck, category: 'marketing' }),
+      card('refile-2', { deck_id: deck, category: 'engineering' }),
+      card('refile-3', { deck_id: deck, category: 'everyday' }),
+    ],
+    ['refile-1', 'refile-2', 'refile-3'],
+  );
+
+  const moved = db.refileToFallback(['engineering', 'phrasing', 'connectors', 'everyday']);
+  assert.equal(moved, 1, 'only the card whose category is gone is touched');
+  assert.equal(db.cardById('refile-1').category, 'everyday');
+  assert.equal(db.cardById('refile-2').category, 'engineering', 'a category still on the list is left alone');
+  assert.equal(db.cardById('refile-3').category, 'everyday');
+  assert.equal(db.refileToFallback(['engineering', 'phrasing', 'connectors', 'everyday']), 0, 'a second pass has nothing to do');
+});
+
+test('a deck reports the meanings it already carries', () => {
+  db.open();
+  const deck = db.deckId('ru', 'sv');
+  db.insertCards([card('concept-a', { deck_id: deck, back: 'привет' }), card('concept-b', { deck_id: deck, back: 'спасибо' })], [
+    'concept-a',
+    'concept-b',
+  ]);
+  const concepts = db.conceptsOfDeck(deck);
+  assert.equal(concepts.size, 2);
+  assert.ok(concepts.has(db.conceptKey('Привет')));
+  assert.equal(db.conceptsOfDeck(db.deckId('ru', 'fi')).size, 0);
+});
+
+test('a deck can list the meanings it carries more than once', () => {
+  db.open();
+  const deck = db.deckId('ru', 'pt');
+  db.insertCards(
+    [
+      card('twin-1', { deck_id: deck, front: 'gaining traction', back: 'набирает популярность' }),
+      card('twin-2', { deck_id: deck, front: 'gain popularity', back: 'Набирает популярность ' }),
+      card('twin-3', { deck_id: deck, front: 'roll back', back: 'откатить' }),
+    ],
+    ['twin-1', 'twin-2', 'twin-3'],
+  );
+
+  const groups = db.conceptsShared(deck);
+  assert.equal(groups.length, 1, 'only the meaning that has two cards');
+  assert.equal(groups[0].concept, db.conceptKey('набирает популярность'));
+  assert.deepEqual(groups[0].cards.map((entry) => entry.id), ['twin-1', 'twin-2']);
+  assert.equal(groups[0].cards[0].keywords.length, 1, 'the cards come back hydrated, ready to show');
+
+  db.junkCard('twin-2', deck, 'duplicate', 'gain popularity');
+  assert.deepEqual(db.conceptsShared(deck), [], 'throwing one away closes the group');
+  assert.deepEqual(db.conceptsShared(db.deckId('ru', 'nb')), []);
 });

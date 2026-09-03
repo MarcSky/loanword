@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { CATEGORY } from './categories.mjs';
 import { MAP, SHARED, SPRITE, render, used } from './icons.mjs';
 
 const sprite = readFileSync(SPRITE, 'utf8');
@@ -11,7 +12,14 @@ test('every icon the interface names is in the map', () => {
 });
 
 test('the map holds nothing the interface or the landing page does not use', () => {
-  const dynamic = new Set(['house-fill', 'cards-three-fill', 'graduation-cap-fill', 'chart-bar-fill', 'gear-six-fill']);
+  const dynamic = new Set([
+    'house-fill',
+    'cards-three-fill',
+    'graduation-cap-fill',
+    'chart-bar-fill',
+    'gear-six-fill',
+    ...Object.values(CATEGORY).map((entry) => entry.icon),
+  ]);
   const live = used();
   const dead = Object.keys(MAP).filter(
     (id) => !live.has(id) && !dynamic.has(id) && !SHARED.has(id) && !live.has(id.replace(/-(fill|duotone)$/, '')),

@@ -1,1 +1,1 @@
-export { WIDE, greetingKey, railOpen, railState } from '../ui/shell.js';
+export * from '../ui/shell.js';

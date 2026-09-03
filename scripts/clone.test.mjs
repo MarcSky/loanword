@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -8,7 +8,16 @@ const DATA = mkdtempSync(join(tmpdir(), 'loanword-clone-'));
 process.env.CLAUDE_PLUGIN_DATA = DATA;
 
 const db = await import('./db.mjs');
-const { cloneRecord, planClone, selectForClone, suggestStarter, STARTER_CATEGORIES, STARTER_LEVELS } =
+const {
+  cloneRecord,
+  copiedInto,
+  planClone,
+  selectForClone,
+  sourcePair,
+  suggestStarter,
+  STARTER_CATEGORIES,
+  STARTER_LEVELS,
+} =
   await import('./clone.mjs');
 const { cardId, commit, config, queueFile, readJsonl, saveSettings } = await import('./store.mjs');
 
@@ -157,4 +166,117 @@ test('a new script on an empty deck is offered the everyday start', () => {
 test.after(() => {
   db.close();
   rmSync(DATA, { recursive: true, force: true });
+});
+
+test('one place knows what has already been copied, queue included', () => {
+  const native = 'ru';
+  const target = 'sv';
+  assert.equal(copiedInto(native, target).size, 0, 'a deck that does not exist has copied nothing');
+
+  const source = db.deckId(native, 'en');
+  db.insertCards(
+    [
+      { deck_id: source, front: 'ship it', back: 'выкатить', keywords: [], example: '', category: 'engineering', cefr: 'B1', created_at: new Date().toISOString() },
+    ],
+    ['copied-1'],
+  );
+  const waiting = db.cardsOfDeck(source).length;
+
+  const first = planClone({ native, from: 'en', to: target });
+  assert.equal(first.queued, waiting, 'every card in the source deck is queued once');
+  const copied = copiedInto(native, target);
+  assert.equal(copied.size, waiting, 'the queue counts, not just the cards already built');
+  assert.ok(copied.has('copied-1'));
+
+  const again = planClone({ native, from: 'en', to: target });
+  assert.equal(again.queued, 0, 'a second run finds nothing left to copy');
+  assert.equal(selectForClone(db.cardsOfDeck(source), { skip: copiedInto(native, target) }).length, 0);
+});
+
+test('the same meaning is copied into a deck once, whichever language it comes from', () => {
+  const native = 'ru';
+  const target = 'da';
+  const en = db.deckId(native, 'nl');
+  const ka = db.deckId(native, 'pl');
+  const card = (deck, front, back) => ({
+    deck_id: deck,
+    front,
+    back,
+    keywords: [],
+    example: `${front} in a sentence`,
+    category: 'everyday',
+    cefr: 'A1',
+    created_at: new Date().toISOString(),
+  });
+  db.insertCards([card(en, 'hello', 'привет'), card(en, 'thank you', 'спасибо')], ['dup-en-1', 'dup-en-2']);
+  db.insertCards(
+    [card(ka, 'გამარჯობა', 'Привет '), card(ka, 'მადლობა', 'спасибо'), card(ka, 'კარგი', 'хорошо')],
+    ['dup-ka-1', 'dup-ka-2', 'dup-ka-3'],
+  );
+
+  const first = planClone({ native, from: 'nl', to: target });
+  assert.equal(first.queued, 2);
+  assert.equal(first.duplicates, 0);
+
+  const second = planClone({ native, from: 'pl', to: target });
+  assert.equal(second.queued, 1, 'only the meaning the deck does not have yet');
+  assert.equal(second.duplicates, 2, 'and it says how many it recognised');
+
+  const queued = readJsonl(queueFile(target)).map((row) => row.text);
+  assert.deepEqual(queued, ['привет', 'спасибо', 'хорошо']);
+});
+
+test('two words for one meaning both survive a build — only clones are deduplicated', () => {
+  const target = 'nb';
+  const out = commit(
+    [
+      { front: 'stor', back: 'большой', keywords: ['stor'], example: 'Et stort hus.', category: 'everyday', cefr: 'A1' },
+      { front: 'diger', back: 'Большой', keywords: ['diger'], example: 'En diger stein.', category: 'everyday', cefr: 'B2' },
+    ],
+    { native: 'ru', target },
+  );
+  assert.equal(out.added, 2, 'capture is not the place to collapse synonyms');
+  const cards = db.cardsOfDeck(db.deckId('ru', target));
+  assert.equal(new Set(cards.map((entry) => entry.concept)).size, 1, 'but they share one concept');
+});
+
+test('a deck written from another language can still be the source', () => {
+  assert.deepEqual(sourcePair('ka', 'ru'), { native: 'ru', target: 'ka' });
+  assert.deepEqual(sourcePair('ru>ka', 'en'), { native: 'ru', target: 'ka' });
+  assert.deepEqual(sourcePair('RU>KA', 'en'), { native: 'ru', target: 'ka' });
+
+  const source = db.deckId('ru', 'fi');
+  db.insertCards(
+    [
+      {
+        deck_id: source,
+        front: 'kiitos',
+        back: 'спасибо',
+        keywords: ['kiitos'],
+        example: 'Kiitos avusta.',
+        category: 'everyday',
+        cefr: 'A1',
+        created_at: new Date().toISOString(),
+      },
+    ],
+    ['cross-1'],
+  );
+
+  const plan = planClone({ native: 'en', from: 'ru>fi', to: 'fi' });
+  assert.equal(plan.queued, 1);
+  assert.equal(plan.source, 'ru>fi');
+  assert.equal(plan.native, 'en', 'the deck being written is the English one');
+
+  const [record] = readJsonl(queueFile('fi'));
+  assert.equal(record.lang, 'ru', 'the builder is told which language the meaning is in');
+  assert.equal(record.text, 'спасибо');
+  assert.equal(record.phrase, 'kiitos', 'and it gets the phrase the old deck used as a second witness');
+  assert.equal(record.phrase_lang, 'fi');
+  assert.equal(record.origin, 'cross-1');
+});
+
+test('a deck is never copied onto itself, whichever way it is named', () => {
+  assert.throws(() => planClone({ native: 'ru', from: 'en', to: 'en' }), /onto itself/);
+  assert.throws(() => planClone({ native: 'ru', from: 'ru>en', to: 'en' }), /onto itself/);
+  assert.throws(() => planClone({ native: 'ru', from: 'ru>zz', to: 'sv' }), /no ru>zz deck/);
 });

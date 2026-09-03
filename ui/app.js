@@ -6,17 +6,19 @@ import {
   SHORTCUTS,
   app,
   applyTheme,
+  emptyState,
   esc,
   go,
   load,
   loadLanguage,
+  modal,
   readAnalyticsHash,
   render,
   saveSetting,
   t,
 } from './core.js';
 import { bindTips, hideTip } from './charts.js';
-import { railOpen } from './shell.js';
+import { railOpen, railState } from './shell.js';
 import { setRail } from './core.js';
 
 const storedRail = (() => {
@@ -26,14 +28,16 @@ const storedRail = (() => {
     return null;
   }
 })();
-document.documentElement.dataset.rail = railOpen(innerWidth, storedRail) ? 'open' : 'closed';
+document.documentElement.dataset.rail = railState(railOpen(innerWidth, storedRail));
 import './overview.js';
 import './deck.js';
 import './study.js';
+import './practice.js';
 import './analytics.js';
 import './settings.js';
 import { renderDeck } from './deck.js';
 import { studyKeys } from './study.js';
+import { practiceKeys } from './practice.js';
 import { loadAnalytics } from './analytics.js';
 import { watchBuild } from './overview.js';
 
@@ -53,6 +57,15 @@ Object.assign(ACTIONS, {
   shortcuts: () => $('#shortcuts').showModal(),
   'close-shortcuts': () => $('#shortcuts').close(),
   rail: () => setRail(document.documentElement.dataset.rail === 'closed'),
+  'pick-ui-lang': async (code) => {
+    const menu = $('#ui-switcher');
+    if (menu) menu.open = false;
+    if ((app.config.uiLang || 'en') === code) return;
+    await saveSetting('uiLang', code);
+    await loadLanguage();
+    renderShortcuts();
+    render();
+  },
   drawer: () => {
     $('#drawer').open = true;
   },
@@ -64,8 +77,9 @@ $('#drawer').addEventListener('click', (event) => {
 $('#drawer').addEventListener('wa-after-hide', () => $('.burger')?.focus());
 
 document.addEventListener('click', (event) => {
-  const switcher = $('#switcher');
-  if (switcher?.open && !event.target.closest('#switcher')) switcher.open = false;
+  for (const open of document.querySelectorAll('details.switcher[open]')) {
+    if (!open.contains(event.target)) open.open = false;
+  }
   const trigger = event.target.closest('[data-act]');
   if (!trigger || trigger.getAttribute('aria-disabled') === 'true') return;
   const handler = ACTIONS[trigger.dataset.act];
@@ -121,6 +135,15 @@ document.addEventListener('click', async (event) => {
 addEventListener('keydown', (event) => {
   const typing = /^(INPUT|SELECT|TEXTAREA)$/.test(event.target.tagName);
 
+  if ((event.key === 'Enter' || event.key === ' ') && !typing) {
+    const row = event.target.closest?.('[role="button"][data-act]');
+    if (row) {
+      event.preventDefault();
+      ACTIONS[row.dataset.act]?.(row.dataset.value);
+      return;
+    }
+  }
+
   if (event.key === '?' && !typing) return ACTIONS.shortcuts();
   if (event.key === 'Escape') {
     if ($('#help').open) return ACTIONS['close-help']();
@@ -128,6 +151,8 @@ addEventListener('keydown', (event) => {
     hideTip();
     if (app.deck.editing) return ACTIONS['edit-cancel']();
   }
+
+  if (app.route === 'practice' && practiceKeys(event)) return event.preventDefault();
 
   if (app.route === 'study' && !(typing && event.key !== 'Enter' && event.key !== 'Escape')) {
     if (studyKeys(event)) return;
@@ -164,11 +189,8 @@ matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
   if (app.config.theme === 'system' || !app.config.theme) applyTheme('system');
 });
 
-for (const id of ['shortcuts', 'help']) {
-  $(`#${id}`).addEventListener('click', (event) => {
-    if (event.target.id === id) $(`#${id}`).close();
-  });
-}
+modal('shortcuts');
+modal('help');
 
 bindTips(document);
 
@@ -190,9 +212,22 @@ try {
     await loadAnalytics();
     render();
   }
-} catch (error) {
-  $('#main').innerHTML = `<div class="page" data-active><div class="empty">
-    <h2>${t('The trainer could not reach its own server')}</h2>
-    <p>${esc(error.message)}. ${t('Restart it with <code>/loanword:review</code>.')}</p>
-  </div></div>`;
+} catch {
+  $('#main').innerHTML = `<div class="page" data-active>${emptyState({
+    art: {
+      src: 'offline-error.webp',
+      alt: 'Flat line illustration: a laptop with its cable unplugged, a person leaning in to look; thin black outline, blue and beige fills, white background, no text',
+    },
+    title: t('The trainer is not running'),
+    body: t('Start it with <code>loanword</code> in a terminal, or <code>/loanword:review</code> in Claude Code. This page reconnects on its own.'),
+  })}</div>`;
+  const again = setInterval(async () => {
+    try {
+      const reply = await fetch('/state', { cache: 'no-store' });
+      if (reply.ok) {
+        clearInterval(again);
+        location.reload();
+      }
+    } catch {}
+  }, 3000);
 }

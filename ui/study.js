@@ -1,15 +1,19 @@
 import {
   $,
   ACTIONS,
-  CATEGORY,
+  categoryKeys,
   GRADES,
   MODE_LABEL,
   SESSION_LENGTHS,
-  ago,
   api,
   app,
+  bindSwipe,
+  cardById,
+  emptyState,
   esc,
+  flyCard,
   go,
+  groupByCategory,
   icon,
   langAttrs,
   languageName,
@@ -19,23 +23,21 @@ import {
   refresh,
   registerScreen,
   ring,
+  setTitle,
   t,
   tintOf,
   tn,
   toast,
-  emptyState,
-  setTitle,
 } from './core.js';
 
 import { checkTyped, ratingFor } from './answer.js';
-import { buildChoices as pickChoices, flyDirection, studyAction, swipeTint, swipeVerdict } from './quiz.js';
+import { buildChoices as pickChoices, studyAction } from './quiz.js';
 import { followUp, holdNewCards, progressAt, requeue, shouldHoldNewCards, shuffle } from './plan.js';
 import { canSpeak, speak } from './speak.js';
 
 const PREVENTED = new Set(['present-next', 'check', 'grade-result', 'grade-answer', 'reveal']);
 
 const FLIP_MS = 340;
-const FLY_MS = 260;
 const UNDO_MS = 5000;
 
 const FLIPPING = new Set(['flashcards', 'reverse']);
@@ -48,15 +50,13 @@ export const JUNK_REASONS = [
   ['wrong-translation', 'The translation is wrong'],
 ];
 
-const cardOf = (id) => app.cards.find((card) => card.id === id) || null;
-
-export function currentStep() {
+function currentStep() {
   return app.session?.queue[app.session.index] || null;
 }
 
-export function currentCard() {
+function currentCard() {
   const step = currentStep();
-  return step ? cardOf(step.id) : null;
+  return step ? cardById(step.id) : null;
 }
 
 export function buildChoices(card) {
@@ -109,7 +109,7 @@ export async function startSession({ category = '', level = '', minutes, exclude
 }
 
 function goalScreen(page) {
-  const due = app.cards.filter((card) => card.isDue);
+  const due = app.cards.filter((card) => card.isDue || card.isNew);
   const chosen = app.config.sessionMinutes || 10;
 
   if (!due.length) {
@@ -128,8 +128,9 @@ function goalScreen(page) {
 
   const reviews = due.filter((card) => !card.isNew).length;
   const fresh = due.length - reviews;
-  const domains = Object.keys(CATEGORY)
-    .map((key) => ({ key, n: due.filter((card) => card.category === key).length }))
+  const byDomain = groupByCategory(due);
+  const domains = categoryKeys()
+    .map((key) => ({ key, n: (byDomain.get(key) || []).length }))
     .filter((domain) => domain.n);
 
   page.dataset.idle = '1';
@@ -511,7 +512,7 @@ function renderSummary(page, session) {
   </div>`;
 }
 
-export function renderStudy() {
+function renderStudy() {
   const session = app.session;
   const page = $('#page-study');
 
@@ -519,7 +520,7 @@ export function renderStudy() {
   if (session.index >= session.queue.length) return renderSummary(page, session);
 
   const step = currentStep();
-  const card = cardOf(step.id);
+  const card = cardById(step.id);
   if (!card) {
     session.index++;
     return renderStudy();
@@ -558,7 +559,7 @@ export function renderStudy() {
       <button class="star" data-act="favorite" data-value="${card.id}"
         aria-pressed="${!!card.isFavorite}"
         aria-label="${esc(card.isFavorite ? t('Remove from favourites') : t('Add to favourites'))}">
-        ${icon('star', 'icon-sm icon')}
+        ${icon(card.isFavorite ? 'star-fill' : 'star', 'icon-sm icon')}
       </button>
     </div>
     ${strip(session)}
@@ -583,7 +584,7 @@ export function renderStudy() {
 
     <div class="keys">${keyHints(session, mode)}</div>`;
 
-  bindSwipe(page, mode);
+  if (SWIPEABLE.has(mode) && session.revealed) bindSwipe(page.querySelector('.card-face'), grade);
 
   const input = $('#typed');
   if (input && !session.result) input.focus();
@@ -593,67 +594,6 @@ export function renderStudy() {
     session.spoken = session.index;
     speak(card.front, app.config.target);
   }
-}
-
-function bindSwipe(page, mode) {
-  if (reducedMotion() || !SWIPEABLE.has(mode)) return;
-  const session = app.session;
-  if (!session?.revealed) return;
-  const face = page.querySelector('.card-face');
-  if (!face) return;
-
-  let start = null;
-  const move = (event) => {
-    if (!start) return;
-    const dx = event.clientX - start.x;
-    const dy = event.clientY - start.y;
-    face.style.transform = `translateX(${dx}px) rotate(${dx / 28}deg)`;
-    const { tint, reach } = swipeTint(dx);
-    face.dataset.swipe = tint;
-    face.style.setProperty('--swipe', reach.toFixed(3));
-  };
-  const end = (event) => {
-    if (!start) return;
-    const dx = event.clientX - start.x;
-    const dy = event.clientY - start.y;
-    const width = face.getBoundingClientRect().width;
-    start = null;
-    face.releasePointerCapture?.(event.pointerId);
-    face.style.transition = '';
-    const rating = swipeVerdict({ dx, dy, width });
-    if (!rating) {
-      face.style.transform = '';
-      delete face.dataset.swipe;
-      face.style.removeProperty('--swipe');
-      return;
-    }
-    flyOut(face, rating);
-    grade(rating);
-  };
-
-  face.addEventListener('pointerdown', (event) => {
-    if (event.target.closest('button, input, a')) return;
-    start = { x: event.clientX, y: event.clientY };
-    face.setPointerCapture?.(event.pointerId);
-    face.style.transition = 'none';
-  });
-  face.addEventListener('pointermove', move);
-  face.addEventListener('pointerup', end);
-  face.addEventListener('pointercancel', () => {
-    start = null;
-    face.style.transition = '';
-    face.style.transform = '';
-    delete face.dataset.swipe;
-  });
-}
-
-function flyOut(face, rating) {
-  if (!face || reducedMotion()) return;
-  const way = flyDirection(rating);
-  face.style.transition = `transform ${FLY_MS}ms var(--ease), opacity ${FLY_MS}ms var(--ease)`;
-  face.style.transform = `translateX(${way * 130}%) rotate(${way * 18}deg)`;
-  face.style.opacity = '0';
-  face.dataset.swipe = way < 0 ? 'again' : 'good';
 }
 
 async function endSession() {
@@ -718,7 +658,7 @@ function advance(failed, follow = null) {
 export async function grade(rating) {
   const session = app.session;
   const step = currentStep();
-  const card = step && cardOf(step.id);
+  const card = step && cardById(step.id);
   if (!session || !card || session.busy) return;
   session.busy = true;
   try {
@@ -760,7 +700,7 @@ function choose(picked) {
 function check() {
   const session = app.session;
   const step = currentStep();
-  const card = step && cardOf(step.id);
+  const card = step && cardById(step.id);
   if (!session || !card || session.result) return;
   const input = $('#typed');
   session.typed = input ? input.value : session.typed;
@@ -906,7 +846,7 @@ Object.assign(ACTIONS, {
     advance(false, step);
   },
   speak: async (id) => {
-    const card = cardOf(id) || currentCard();
+    const card = cardById(id) || currentCard();
     if (!card) return;
     const session = app.session;
     const twice = session && session.spoken === session.index && card.example;
@@ -916,7 +856,7 @@ Object.assign(ACTIONS, {
   },
   grade: (value) => {
     const rating = Number(value);
-    if (!reducedMotion()) flyOut($('#page-study .card-face'), rating);
+    flyCard($('#page-study .card-face'), rating);
     grade(rating);
   },
   choose: (value) => choose(value),

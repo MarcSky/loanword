@@ -1,14 +1,12 @@
 #!/usr/bin/env node
 
-import { CEFR_LEVELS } from './store-paths.mjs';
+import { CEFR_LEVELS, LEECH_LAPSES } from './store-paths.mjs';
 import { scriptOf } from './languages.mjs';
 
 export const PEEK_POOLS = ['starred', 'slipping', 'leech', 'new'];
-export const PEEK_PICKS = [...PEEK_POOLS, ...CEFR_LEVELS];
 export const PEEK_ROWS = 120;
 export const DEFAULT_EVERY_MINUTES = 15;
-export const SLIPPING_BELOW = 0.9;
-export const LEECH_LAPSES = 6;
+const SLIPPING_BELOW = 0.9;
 
 const LEGACY = {
   off: [],

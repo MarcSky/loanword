@@ -4,18 +4,25 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { PLUGIN_ROOT, readJson } from './store.mjs';
+import { CATEGORY, FIELDS } from './categories.mjs';
 
 const UI = join(PLUGIN_ROOT, 'ui');
 const I18N_DIR = join(UI, 'i18n');
 
+const CATEGORY_LABELS = Object.values(CATEGORY).map((entry) => entry.label);
+const FIELD_LABELS = FIELDS.map(([, label]) => label);
+
 const INDIRECT = [
+  ...CATEGORY_LABELS,
+  ...FIELD_LABELS,
   'Engineering', 'Process', 'Collaboration', 'Phrasing', 'Connectors', 'Everyday',
   'list', 'grid',
   'Code, systems, debugging, review', 'Plans, estimates, releases, specs',
   'Meetings, feedback, asking, disagreeing', 'Set phrases and idioms that resist translation',
   'However, in terms of, that said, provided that', 'General vocabulary and everything unplaced',
   'Breakthrough', 'Waystage', 'Threshold', 'Vantage', 'Advanced', 'Mastery',
-  'Overview', 'Deck', 'Study', 'Settings', 'Flashcards', 'Learn',
+  'Overview', 'Deck', 'Study', 'Quiz', 'Settings', 'Flashcards', 'Learn', 'Practice', 'Test', 'Learn mode',
+  'True or false', 'Multiple choice', 'Matching', 'Written', 'Term', 'Definition', 'Both',
   'Again', 'Hard', 'Good', 'Easy', 'no idea', 'barely', 'got it', 'instant',
   'Everything', 'Favourites', 'Due now', 'Never seen', 'Learned',
   'active', 'passive', 'both', 'light', 'dark', 'system',
@@ -31,6 +38,7 @@ const INDIRECT = [
   'Reviews', 'New', 'Learned', 'In review', 'Learning', 'Relearning', 'Not started',
   'Not worth learning', 'I already know it', 'Too rare to bother', 'The translation is wrong',
   'Off', 'One line', 'Weave my weakest words in',
+  'Haiku · fast', 'Sonnet · careful', 'Opus · slowest',
   'On reveal', 'Also at the start of Type it',
   'The ones slipping away', 'My starred words', 'Starred first, then slipping',
   'got it', 'say it',
@@ -40,7 +48,7 @@ const INDIRECT = [
 
 const PLACEHOLDER = /\{(\w+)\}/g;
 
-export const uiSources = () =>
+const uiSources = () =>
   readdirSync(UI)
     .filter((name) => name.endsWith('.js'))
     .sort()

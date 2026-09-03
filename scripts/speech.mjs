@@ -35,7 +35,7 @@ export const PIPER_VOICES = {
   zh: 'zh_CN-huayan-medium',
 };
 
-export const PIPER_BASE = 'https://huggingface.co/rhasspy/piper-voices/resolve/main';
+const PIPER_BASE = 'https://huggingface.co/rhasspy/piper-voices/resolve/main';
 
 export const piperDir = () => join(DATA, 'piper');
 
@@ -59,7 +59,7 @@ export function piperCommand(lang) {
 }
 
 let pathCache = null;
-export function onPath(binary, env = process.env) {
+function onPath(binary, env = process.env) {
   if (!pathCache) pathCache = new Map();
   const key = `${binary}`;
   if (pathCache.has(key)) return pathCache.get(key);
@@ -97,7 +97,7 @@ function macVoices() {
   return voiceCache;
 }
 
-export const sayVoiceFor = (lang) => macVoices().find((voice) => voice.lang === codeOf(lang))?.name || '';
+const sayVoiceFor = (lang) => macVoices().find((voice) => voice.lang === codeOf(lang))?.name || '';
 
 export function providerFor(lang) {
   const code = codeOf(lang);

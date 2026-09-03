@@ -1,47 +1,16 @@
-import { NAME_PAIRS, isRtl, languageName, scriptOf } from './languages.js';
+import { NAME_PAIRS, flagOf, isRtl, languageName, scriptOf } from './languages.js';
+import { flyDirection, swipeTint, swipeVerdict } from './quiz.js';
+import { railState } from './shell.js';
+import { ALL_CATEGORIES, CATEGORY, CORE, FIELDS, categoriesForField, categoriesOf, groupByCategory } from './categories.js';
 
-export const CATEGORY = {
-  engineering: {
-    label: 'Engineering',
-    icon: 'terminal-window',
-    tint: 'sky',
-    blurb: 'Code, systems, debugging, review',
-  },
-  process: {
-    label: 'Process',
-    icon: 'flow-arrow',
-    tint: 'peach',
-    blurb: 'Plans, estimates, releases, specs',
-  },
-  collaboration: {
-    label: 'Collaboration',
-    icon: 'users-three',
-    tint: 'rose',
-    blurb: 'Meetings, feedback, asking, disagreeing',
-  },
-  phrasing: {
-    label: 'Phrasing',
-    icon: 'quotes',
-    tint: 'lavender',
-    blurb: 'Set phrases and idioms that resist translation',
-  },
-  connectors: {
-    label: 'Connectors',
-    icon: 'git-branch',
-    tint: 'butter',
-    blurb: 'However, in terms of, that said, provided that',
-  },
-  everyday: {
-    label: 'Everyday',
-    icon: 'coffee',
-    tint: 'mint',
-    blurb: 'General vocabulary and everything unplaced',
-  },
-};
+
+export { ALL_CATEGORIES, CATEGORY, CORE, FIELDS, categoriesForField, categoriesOf, groupByCategory };
+
+export const categoryKeys = () => categoriesOf(app.config.categories);
 
 export const LEVELS = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
 
-export const LEVEL_BLURB = {
+const LEVEL_BLURB = {
   A1: 'Breakthrough',
   A2: 'Waystage',
   B1: 'Threshold',
@@ -51,12 +20,13 @@ export const LEVEL_BLURB = {
 };
 
 export const LANGUAGES = NAME_PAIRS;
-export { languageName, isRtl, scriptOf };
+export { languageName, flagOf, isRtl, scriptOf };
 
 export const ROUTES = [
   { id: 'overview', label: 'Overview', icon: 'house' },
+  { id: 'practice', label: 'Practice', icon: 'lightning' },
   { id: 'deck', label: 'Deck', icon: 'cards-three' },
-  { id: 'study', label: 'Study', icon: 'graduation-cap' },
+  { id: 'study', label: 'Quiz', icon: 'graduation-cap' },
   { id: 'analytics', label: 'Analytics', icon: 'chart-bar' },
   { id: 'settings', label: 'Settings', icon: 'gear-six' },
 ];
@@ -81,7 +51,7 @@ export const GRADES = [
 export const SESSION_LENGTHS = [5, 10, 15];
 
 export const SHORTCUTS = () => [
-  ['1 – 5', t('Jump to a section')],
+  ['1 – 6', t('Jump to a section')],
   ['space', t('Show the answer')],
   ['1 2 3 4', t('Again / Hard / Good / Easy')],
   ['enter', t('Submit a typed answer, or go to the next card')],
@@ -108,6 +78,14 @@ export const app = {
   category: '',
   deck: { category: '', level: '', status: 'all', query: '', view: 'list', editing: null },
   session: null,
+  sync: null,
+  export: null,
+  duplicates: null,
+  dropping: null,
+  opened: null,
+  adding: null,
+  topics: null,
+  filing: null,
   analytics: { range: '30d', category: [], cefr: [], data: null, loading: false, tables: new Set() },
 };
 
@@ -166,7 +144,7 @@ export async function loadLanguage() {
   }
 }
 
-export const dirOf = (code) => (isRtl(code) ? 'rtl' : 'ltr');
+const dirOf = (code) => (isRtl(code) ? 'rtl' : 'ltr');
 
 export const langAttrs = (code) => `lang="${code || ''}" dir="${dirOf(code)}"`;
 
@@ -243,6 +221,7 @@ export async function load() {
   app.config = state.config;
   app.queued = state.queued || 0;
   app.building = !!state.building;
+  app.filing = state.filing || null;
   app.targets = state.targets || [];
   app.speech = state.speech || {};
   app.peekMatches = state.peekMatches ?? 0;
@@ -281,11 +260,10 @@ export function summarize(cards) {
   };
 }
 
-export const byCategory = (level) =>
-  Object.keys(CATEGORY).map((key) => ({
-    key,
-    ...summarize(app.cards.filter((card) => card.category === key && inLevel(card, level))),
-  }));
+export function byCategory(level) {
+  const buckets = groupByCategory(app.cards.filter((card) => inLevel(card, level)));
+  return categoryKeys().map((key) => ({ key, ...summarize(buckets.get(key) || []) }));
+}
 
 export function ring(value, { size = 40, label = pct(value), hole = 'var(--tint)' } = {}) {
   return `<div class="ring" style="--value:${value.toFixed(3)};--size:${size}px;--ring-hole:${hole}"
@@ -307,7 +285,7 @@ export function categoryChips(active, action) {
     <button class="chip" data-act="${action}" data-value="" aria-pressed="${active === ''}">
       <span class="dot">${icon('cards-three')}</span>${esc(t('All'))}
     </button>
-    ${Object.keys(CATEGORY)
+    ${categoryKeys()
       .map((key) => {
         const info = meta(key);
         return `<button class="chip" data-act="${action}" data-value="${key}"
@@ -366,6 +344,90 @@ export function applyTheme(theme) {
 
 export const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+let index = { list: null, byId: new Map() };
+
+export function cardById(id) {
+  if (index.list !== app.cards) {
+    index = { list: app.cards, byId: new Map(app.cards.map((card) => [card.id, card])) };
+  }
+  return index.byId.get(id) || null;
+}
+
+export const FLY_MS = 260;
+
+export function flyCard(face, rating) {
+  if (!face || reducedMotion()) return;
+  const way = flyDirection(rating);
+  face.style.transition = `transform ${FLY_MS}ms var(--ease), opacity ${FLY_MS}ms var(--ease)`;
+  face.style.transform = `translateX(${way * 130}%) rotate(${way * 18}deg)`;
+  face.style.opacity = '0';
+  face.dataset.swipe = way < 0 ? 'again' : 'good';
+  face.style.setProperty('--swipe', '1');
+}
+
+export function bindSwipe(face, decide) {
+  if (!face || reducedMotion()) return;
+  let from = null;
+  const rest = () => {
+    face.style.transform = '';
+    face.style.removeProperty('--swipe');
+    delete face.dataset.swipe;
+    delete face.dataset.dragging;
+  };
+
+  face.addEventListener('pointerdown', (event) => {
+    if (event.target.closest('button, input, a, select')) return;
+    from = { x: event.clientX, y: event.clientY };
+    face.setPointerCapture?.(event.pointerId);
+    face.dataset.dragging = '1';
+  });
+
+  face.addEventListener('pointermove', (event) => {
+    if (!from) return;
+    const dx = event.clientX - from.x;
+    face.style.transform = `translateX(${dx}px) rotate(${dx / 28}deg)`;
+    const { tint, reach } = swipeTint(dx);
+    face.dataset.swipe = tint;
+    face.style.setProperty('--swipe', reach.toFixed(3));
+  });
+
+  face.addEventListener('pointerup', (event) => {
+    if (!from) return;
+    const dx = event.clientX - from.x;
+    const dy = event.clientY - from.y;
+    from = null;
+    face.releasePointerCapture?.(event.pointerId);
+    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) face.dataset.noflip = '1';
+    const rating = swipeVerdict({ dx, dy, width: face.getBoundingClientRect().width });
+    if (!rating) return rest();
+    delete face.dataset.dragging;
+    flyCard(face, rating);
+    decide(rating);
+  });
+
+  face.addEventListener('pointercancel', () => {
+    from = null;
+    rest();
+  });
+}
+
+export function modal(id, onClose) {
+  const node = $(`#${id}`);
+  if (!node) return null;
+  node.addEventListener('click', (event) => {
+    if (event.target === node) node.close();
+  });
+  if (onClose) node.addEventListener('close', onClose);
+  return node;
+}
+
+export const dialogHead = (title, close) => `<div class="section-head dialog-head">
+  <h2>${esc(title)}</h2>
+  <button class="btn btn-quiet" data-act="${close}" aria-label="${esc(t('Cancel'))}">
+    ${icon('x', 'icon-sm icon')}
+  </button>
+</div>`;
+
 export const RENDER = {};
 export const ACTIONS = {};
 
@@ -373,7 +435,7 @@ export const registerScreen = (id, fn) => {
   RENDER[id] = fn;
 };
 
-export function sidebarItems(prefix = 'sb') {
+function sidebarItems(prefix = 'sb') {
   const due = app.cards.filter((card) => card.isDue).length;
   const closed = document.documentElement.dataset.rail === 'closed' && prefix === 'sb';
   return ROUTES.map((route) => {
@@ -403,15 +465,16 @@ function renderRail() {
 }
 
 export function setRail(open) {
-  document.documentElement.dataset.rail = open ? 'open' : 'closed';
+  const state = railState(open);
+  document.documentElement.dataset.rail = state;
   try {
-    localStorage.setItem('rail', open ? 'open' : 'closed');
+    localStorage.setItem('rail', state);
   } catch {}
   renderRail();
 }
 
-export const art = (name, alt, { width = 640, height = 480, cls = '' } = {}) =>
-  `<picture class="art ${cls}"><img src="art/${name}.webp" data-art="${name}" width="${width}" height="${height}" alt="${esc(alt)}" loading="lazy" decoding="async"></picture>`;
+export const art = (name, alt, { width = 640, height = 480, cls = '', fixed = false } = {}) =>
+  `<picture class="art ${cls}"><img src="art/${name}.webp" ${fixed ? '' : `data-art="${name}"`} width="${width}" height="${height}" alt="${esc(alt)}" loading="lazy" decoding="async"></picture>`;
 
 export function ringSvg(value, { size = 96, stroke = 8, label = '', unit = '', color = 'var(--accent)' } = {}) {
   const radius = 50 - stroke / 2;
@@ -439,7 +502,9 @@ export function decks() {
     total: app.cards.length,
     due: app.cards.filter((card) => card.isDue).length,
   });
-  return [...known.values()];
+  return [...known.values()].filter(
+    (pair) => (pair.total || 0) > 0 || (pair.native === native && pair.target === target),
+  );
 }
 
 function renderTopbar() {
@@ -447,6 +512,8 @@ function renderTopbar() {
   const list = decks();
   const taken = new Set(list.map((pair) => pair.target));
   const due = app.cards.filter((card) => card.isDue).length;
+  const uiLangs = ['en', ...(app.uiLanguages || [])].filter((code, index, all) => all.indexOf(code) === index);
+  const uiLang = uiLangs.includes(app.config.uiLang) ? app.config.uiLang : 'en';
   const row = (pair) => {
     const open = pair.native === native && pair.target === target;
     const foot = pair.due ? t('{n} due', { n: pair.due }) : tn(pair.total || 0, 'card', 'cards');
@@ -466,22 +533,43 @@ function renderTopbar() {
       </summary>
       <div class="menu" role="menu">
         ${list.map(row).join('')}
-        <label class="add">
-          ${icon('plus', 'icon-sm icon')}
-          <select class="select" data-setting="target" aria-label="${esc(t('Add a language'))}">
-            <option value="" selected disabled>${esc(t('Add a language'))}</option>
-            ${LANGUAGES.filter(([code]) => code !== native && !taken.has(code))
-              .map(([code, name]) => `<option value="${code}">${esc(name)} · ${code}</option>`)
-              .join('')}
-          </select>
-        </label>
+        <button class="add" data-act="pair-open">
+          ${icon('plus', 'icon-sm icon')} ${esc(t('Add a language'))}
+        </button>
       </div>
     </details>
+    ${
+      (app.pairs || []).some((pair) => pair.total > 0 && !(pair.native === native && pair.target === target))
+        ? `<button class="sync-btn" data-act="sync-open"
+            title="${esc(t('Copy into {lang}', { lang: languageName(target) }))}">
+            ${icon('arrows-clockwise', 'icon-sm icon')}<span>${esc(t('Sync'))}</span>
+          </button>`
+        : ''
+    }
+    <span class="topbar-gap"></span>
     ${
       due && app.route !== 'study'
         ? `<button class="due-pill" data-act="go" data-value="study">${icon('bell-ringing', 'icon-sm icon')}${esc(t('{n} due', { n: due }))}</button>`
         : ''
-    }`;
+    }
+    <details class="switcher lang-switcher" id="ui-switcher">
+      <summary aria-label="${esc(t('Interface language'))}">
+        <span class="flag">${flagOf(uiLang)}</span>
+        <span class="lang">${esc(languageName(uiLang))}</span>
+        ${icon('caret-down', 'icon-sm icon')}
+      </summary>
+      <div class="menu" role="menu">
+        ${uiLangs
+          .map(
+            (code) => `<button role="menuitem" data-act="pick-ui-lang" data-value="${code}"
+              ${code === uiLang ? 'aria-current="true"' : ''}>
+              <span class="flag">${flagOf(code)}</span>
+              <span class="lang">${esc(languageName(code))}</span>
+            </button>`,
+          )
+          .join('')}
+      </div>
+    </details>`;
 }
 
 export function setTitle() {
@@ -535,7 +623,7 @@ export function go(route) {
   $('#main')?.scrollTo?.({ top: 0 });
 }
 
-export function analyticsHash() {
+function analyticsHash() {
   const { range, category, cefr } = app.analytics;
   const params = new URLSearchParams();
   if (range !== '30d') params.set('range', range);

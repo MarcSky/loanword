@@ -11,9 +11,10 @@ import {
 } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { isLanguage, scriptLetters } from './lang.mjs';
+import { scriptLetters } from './lang.mjs';
 import { parsePick } from './peek.mjs';
 import { CODES, isPickable, scriptOf } from './languages.mjs';
+import { categoriesOf, knownField } from './categories.mjs';
 import {
   CATEGORIES,
   CEFR_LEVELS,
@@ -23,6 +24,7 @@ import {
   frontsFile,
   knownFile,
   lockFile,
+  progressFile,
   paths,
   peekFile,
   queueFile,
@@ -40,6 +42,7 @@ export {
   frontsFile,
   knownFile,
   lockFile,
+  progressFile,
   paths,
   peekFile,
   queueFile,
@@ -49,7 +52,7 @@ export {
 
 const LEGACY_DATA = join(homedir(), '.claude', 'plugins', 'data', 'loanword');
 
-export const MAX_LOG_BYTES = 1024 * 1024;
+const MAX_LOG_BYTES = 1024 * 1024;
 
 export function adoptStranded(target, legacy) {
   if (!target || !legacy) throw new TypeError('adoptStranded needs both directories spelled out');
@@ -112,6 +115,7 @@ const STUDY_MODES = ['flashcards', 'learn'];
 const ECHO_MODES = ['off', 'line', 'weave'];
 const SPEECH_MODES = ['off', 'reveal', 'ask'];
 const PEEK_MODES = ['off', 'on'];
+export const MODELS = ['haiku', 'sonnet', 'opus'];
 export const EXERCISES = ['flashcards', 'learn', 'cloze', 'type', 'reverse'];
 export const SESSION_LENGTHS = [5, 10, 15];
 const LANG_CODE = /^[a-z]{2}$/;
@@ -155,7 +159,10 @@ function envConfig(env = process.env) {
     theme: 'system',
     studyMode: 'flashcards',
 
-    uiLang: '',
+    field: '',
+  categories: [],
+  model: 'haiku',
+  uiLang: '',
     sessionMinutes: 10,
 
     weeklyGoal: 5,
@@ -201,6 +208,9 @@ const SETTING_RULES = {
   mode: (v) => (MODES.includes(v) ? v : undefined),
   dailyLimit: (v) => (Number.isFinite(v) && v >= 3 ? Math.min(Math.floor(v), 500) : undefined),
   autoBuild: (v) => (typeof v === 'boolean' ? v : undefined),
+  model: (v) => (MODELS.includes(v) ? v : undefined),
+  categories: (v) => (Array.isArray(v) ? categoriesOf(v) : undefined),
+  field: (v) => (v === '' || knownField(v) ? v : undefined),
   echo: echoMode,
   level: (v) => (v === '' || CEFR_LEVELS.includes(v) ? v : undefined),
   theme: (v) => (THEMES.includes(v) ? v : undefined),
@@ -234,6 +244,8 @@ export function config() {
   return merged;
 }
 
+export const enabledCategories = (cfg = config()) => categoriesOf(cfg.categories);
+
 export function activeTargets(cfg) {
   const list = [cfg.target, ...(cfg.targets || [])];
   return [...new Set(list)].filter((code) => LANG_CODE.test(code) && code !== cfg.native);
@@ -247,7 +259,6 @@ export function captureTargets(cfg = config()) {
 const isPair = (pair) =>
   !!pair && LANG_CODE.test(String(pair.native)) && LANG_CODE.test(String(pair.target));
 
-const pairKey = (pair) => `${pair.native}>${pair.target}`;
 
 export function fallbackPair() {
   const stored = readJson(paths.settings, {});
@@ -275,6 +286,8 @@ export function seedSettings(env = process.env) {
   return Object.keys(changed);
 }
 
+export class SamePairError extends Error {}
+
 export function saveSettings(patch) {
   const raw = readJson(paths.settings, {});
   const clean = sanitizeSettings(patch);
@@ -283,6 +296,9 @@ export function saveSettings(patch) {
 
   const native = merged.native || before.native;
   const target = merged.target || before.target;
+  if (native === target) {
+    throw new SamePairError(`${native} cannot be both the language you write in and the one you learn`);
+  }
   const wanted = [...(merged.targets || []), target, ...(clean.target ? [] : before.targets || [])];
   merged.target = target;
   merged.targets = [...new Set(wanted)].filter((code) => code !== native);
@@ -396,13 +412,12 @@ export function facing(card) {
   const native = card.native || fallbackPair().native;
   const target = card.target || fallbackPair().target;
   if (native === target) return card;
+  if (scriptOf(native) === scriptOf(target)) return card;
 
-  const swap = { ...card, front: card.back, back: card.front };
   const nativeOnFront = scriptLetters(card.front, native);
   const nativeOnBack = scriptLetters(card.back, native);
-  if (nativeOnFront !== nativeOnBack) return nativeOnFront > nativeOnBack ? swap : card;
-
-  return isLanguage(card.front, native, target) || isLanguage(card.back, target, native) ? swap : card;
+  if (nativeOnFront <= nativeOnBack) return card;
+  return { ...card, front: card.back, back: card.front };
 }
 
 export function loadCards() {
@@ -423,7 +438,7 @@ export function saveKnownWords(target, words) {
   writeLines(knownFile(target), [...db.knownWordsOf(target)].sort());
 }
 
-export function retrievabilityFrom(row, now = Date.now()) {
+function retrievabilityFrom(row, now = Date.now()) {
   const stability = Math.max(0.1, Number(row.stability) || 0.1);
   const elapsed = Math.max(0, (now - new Date(row.due).getTime()) / 86_400_000 + Number(row.stability || 0));
   return Math.pow(1 + (19 / 81) * (elapsed / stability), -0.5);
@@ -431,8 +446,8 @@ export function retrievabilityFrom(row, now = Date.now()) {
 
 export const PEEK_ROWS = 120;
 export const FRONTS_ROWS = 500;
-export const PEEK_QUOTA = { starred: 40, leech: 40, unseen: 20 };
-export const SNAPSHOT_THROTTLE_MS = 15_000;
+const PEEK_QUOTA = { starred: 40, leech: 40, unseen: 20 };
+const SNAPSHOT_THROTTLE_MS = 15_000;
 
 const snapshotAt = new Map();
 
@@ -492,20 +507,11 @@ export function writeSnapshots(native, target, { force = false, now = Date.now()
 
 export const forgetSnapshots = () => snapshotAt.clear();
 
-export function deckPairs() {
-  return db.deckPairsWithCounts();
-}
-
 export function cardsForPair(pair) {
   return db.cardsOfDeck(db.deckId(pair.native, pair.target));
 }
 
-export function ymd(value = new Date()) {
-  const date = value instanceof Date ? value : new Date(value);
-  return value && !Number.isNaN(date.getTime()) ? date.toISOString().slice(0, 10) : '';
-}
-
-const LEARNED_STABILITY_DAYS = 21;
+export const LEARNED_STABILITY_DAYS = 21;
 
 export const masteryOf = (entry) =>
   entry ? Math.max(0, Math.min(1, entry.stability / LEARNED_STABILITY_DAYS)) : 0;
@@ -551,6 +557,19 @@ export function normalizeCefr(value) {
   return CEFR_LEVELS.includes(level) ? level : '';
 }
 
+const STEM = 4;
+
+export function sameWord(a, b) {
+  const left = db.wordsOf(a);
+  const right = db.wordsOf(b);
+  if (!left.length || left.length !== right.length) return false;
+  return left.every((word, index) => {
+    const other = right[index];
+    const [short, long] = word.length <= other.length ? [word, other] : [other, word];
+    return long.startsWith(short) && short.length >= Math.min(STEM, long.length);
+  });
+}
+
 export function cardWords(card) {
   const words = (card.keywords || []).filter((word) => typeof word === 'string');
   if (card.type === 'word') words.push(card.front);
@@ -579,6 +598,14 @@ export function frequentWords(language) {
 }
 
 const CARD_TYPES = new Set(['phrase', 'word', 'letter']);
+
+export function sidedByRecord(card, record, target) {
+  const phrase = typeof record?.phrase === 'string' ? record.phrase.trim() : '';
+  if (!phrase || record.phrase_lang === target) return card;
+  const same = (value) => String(value || '').trim().toLowerCase() === phrase.toLowerCase();
+  if (!same(card.front) || same(card.back)) return card;
+  return { ...card, front: card.back, back: card.front };
+}
 
 function stampCard(card, pair, provenanceOf) {
   if (!card || typeof card !== 'object') return null;
@@ -616,7 +643,7 @@ function stampCard(card, pair, provenanceOf) {
   };
 }
 
-export function provenanceReader(queue) {
+function provenanceReader(queue) {
   const mostRecent = queue[queue.length - 1] || null;
   const byOrigin = new Map();
   for (const row of queue) if (row && typeof row.origin === 'string') byOrigin.set(row.origin, row);
@@ -635,7 +662,7 @@ export function provenanceReader(queue) {
   };
 }
 
-export function rejectReason(card, stopWords) {
+function rejectReason(card, stopWords) {
   if (BRACKETS.test(card.front)) return 'a bracketed front';
   if (card.type === 'word' && stopWords.has(card.front.toLowerCase())) return 'a stop-word card';
   return '';
@@ -644,6 +671,7 @@ export function rejectReason(card, stopWords) {
 function classifyCards(newCards, pair, deck, queue) {
   const provenanceOf = provenanceReader(queue);
   const stopWords = frequentWords(pair.target);
+  const byConcept = db.conceptFronts(deck);
   const stamped = [];
   const ids = [];
   const seen = new Set();
@@ -677,8 +705,22 @@ function classifyCards(newCards, pair, deck, queue) {
     const id = cardId(card);
     if (seen.has(id)) continue;
     seen.add(id);
+    const sided = facing(sidedByRecord(card, record, pair.target));
+    const concept = db.conceptKey(sided.back);
+    const twins = byConcept.get(concept) || [];
+    if (sided.type !== 'letter' && twins.some((front) => sameWord(front, sided.front))) {
+      dropped += 1;
+      log(`commit dropped another wording of a card already in the deck: ${card.front.slice(0, 60)}`);
+      continue;
+    }
+    byConcept.set(concept, [...twins, sided.front]);
     ids.push(id);
-    stamped.push({ ...facing(card), deck_id: deck, created_at: new Date().toISOString() });
+    stamped.push({
+      ...sided,
+      concept,
+      deck_id: deck,
+      created_at: new Date().toISOString(),
+    });
   }
 
   return { stamped, ids, rewrites, dropped };
@@ -761,4 +803,4 @@ async function cli() {
   db.close();
 }
 
-export { CODES, pairKey };
+export { CODES };

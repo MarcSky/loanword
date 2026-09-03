@@ -15,7 +15,7 @@ function tip() {
   return tipNode;
 }
 
-export function showTip(target) {
+function showTip(target) {
   const body = target.dataset.tip;
   if (!body) return;
   const node = tip();

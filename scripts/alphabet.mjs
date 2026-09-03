@@ -64,8 +64,6 @@ export function lettersOf(language) {
   return letters ? [...letters] : [];
 }
 
-export const hasAlphabet = (language) => lettersOf(language).length > 0;
-
 export function alphabetRecord(native, target, now = new Date()) {
   const letters = lettersOf(target);
   if (!letters.length) return null;

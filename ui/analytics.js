@@ -1,7 +1,7 @@
 import {
   $,
   ACTIONS,
-  CATEGORY,
+  categoryKeys,
   LEVELS,
   api,
   app,
@@ -135,7 +135,7 @@ function demoData() {
     const reviews = Math.max(0, Math.round(base + Math.sin(i / 5) * 7 + ((i * 7) % 5) - 2));
     days.push({ day, reviews, new: Math.min(4, reviews % 5), minutes: Math.round(reviews * 0.22) });
   }
-  const cats = Object.keys(CATEGORY).map((key, index) => ({
+  const cats = categoryKeys().map((key, index) => ({
     key,
     total: [64, 41, 33, 28, 19, 47][index],
     seen: [58, 36, 27, 21, 15, 39][index],
@@ -360,8 +360,8 @@ function kpiRow(data) {
 function filterBar() {
   const { range, category, cefr } = app.analytics;
   return `<div class="filter-bar">
-    <div class="filters" role="group" aria-label="${esc(t('Filter by category'))}">
-      ${Object.keys(CATEGORY)
+    <div class="filters filters-category" role="group" aria-label="${esc(t('Filter by category'))}">
+      ${categoryKeys()
         .map((key) => {
           const info = meta(key);
           return `<button class="chip chip-sm" data-act="an-category" data-value="${key}"
@@ -370,7 +370,7 @@ function filterBar() {
         })
         .join('')}
     </div>
-    <div class="filters" role="group" aria-label="${esc(t('Filter by CEFR level'))}">
+    <div class="filters filters-level" role="group" aria-label="${esc(t('Filter by CEFR level'))}">
       ${LEVELS.map(
         (level) => `<button class="chip chip-sm" data-act="an-cefr" data-value="${level}"
           aria-pressed="${cefr.includes(level)}" title="${esc(levelBlurb(level))}">${level}</button>`,
@@ -765,7 +765,7 @@ function sessionsChart(rows) {
   });
 }
 
-export function markdownSummary(data) {
+function markdownSummary(data) {
   const rows = [
     `# Loanword — ${app.config.native} → ${app.config.target}`,
     '',
@@ -907,4 +907,3 @@ Object.assign(ACTIONS, {
 
 registerScreen('analytics', renderAnalytics);
 
-export { renderAnalytics };

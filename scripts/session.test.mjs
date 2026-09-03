@@ -21,7 +21,6 @@ import {
   progressAt,
   requeue,
   shouldHoldNewCards,
-  stepsFor,
   warmupFor,
 } from './session.mjs';
 
@@ -68,7 +67,7 @@ test('the step budget matches the research formula for each length', () => {
   assert.equal(warmupFor(5), 2);
   assert.equal(warmupFor(10), 3);
   assert.equal(warmupFor(15), 3);
-  assert.equal(stepsFor(5), 28);
+  assert.equal(warmupFor(5) + coreSteps(5), 28);
   assert.equal(newFractionFor(5), 0.2);
   assert.equal(newFractionFor(15), 0.3);
 });

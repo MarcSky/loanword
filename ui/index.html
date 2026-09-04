@@ -7,7 +7,7 @@
 <meta name="robots" content="noindex, nofollow">
 <title>Loanword</title>
 <link rel="stylesheet" href="app.css">
-<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="favicon.png" type="image/png">
 <link rel="manifest" href="manifest.webmanifest">
 <script type="module" src="vendor/webawesome/components/drawer/drawer.js"></script>
 <script type="module" src="vendor/webawesome/components/tooltip/tooltip.js"></script>
@@ -19,9 +19,10 @@
   <nav class="sidebar" id="sidebar" aria-label="Sections">
     <div class="sb-head">
       <a class="mark" href="#/overview" title="Loanword" aria-label="Loanword">
-        <img src="favicon.svg" width="24" height="24" alt="">
+        <img class="sb-mark" src="logo-mark.png" width="26" height="26" alt="">
+        <img class="sb-lockup" src="logo-lockup.png" height="26" alt="">
+        <img class="sb-lockup sb-lockup-dark" src="logo-lockup-dark.png" height="26" alt="">
       </a>
-      <span class="sb-brand">Loanword</span>
       <button class="sb-toggle" data-act="rail" aria-expanded="true" aria-controls="sidebar" aria-label="Collapse sidebar">
         <svg class="icon" aria-hidden="true"><use href="icons.svg#i-sidebar-simple"></use></svg>
       </button>
@@ -103,6 +104,10 @@
 
 <dialog id="export" class="modal">
   <div class="panel" id="export-body"></div>
+</dialog>
+
+<dialog id="queue" class="modal wide">
+  <div class="panel" id="queue-body"></div>
 </dialog>
 
 <dialog id="sync" class="modal">

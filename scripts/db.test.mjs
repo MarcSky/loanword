@@ -354,7 +354,7 @@ test('an old deck is given the concept of every card it already holds', async ()
 
   const row = handle.prepare('SELECT back, concept FROM cards WHERE id = ?').get('abcdef0001');
   assert.equal(row.back, 'откатить');
-  assert.equal(row.concept, db.conceptKey('откатить'), 'the migration fills in what the column was added for');
+  assert.equal(row.concept, db.conceptOf(1, 'откатить'), 'the migration fills in what the column was added for');
   assert.notEqual(row.concept, '');
   db.close();
   db.open();
@@ -390,7 +390,7 @@ test('an old deck whose concepts predate the wording rules is keyed again', asyn
   const rows = handle.prepare('SELECT id, concept FROM cards WHERE id LIKE ?').all('abcdef001%');
   assert.equal(rows.length, 2);
   assert.equal(rows[0].concept, rows[1].concept, 'the ladder ends with both wordings on one meaning');
-  assert.equal(rows[0].concept, db.conceptKey('гамбургер меню'));
+  assert.equal(rows[0].concept, db.conceptOf(1, 'гамбургер меню'));
   db.close();
   db.open();
 });
@@ -410,24 +410,6 @@ test('a review is filed under the category and level of its card when it is not 
     { category: 'engineering', cefr: 'B2' },
   ], 'a missing or null field is read off the card');
   assert.deepEqual(rows[2], { category: 'legal', cefr: 'C1' }, 'what the caller states is kept');
-});
-
-test('a deck can hand back the wordings it holds for each meaning', () => {
-  db.open();
-  const deck = db.deckId('ru', 'da');
-  db.insertCards(
-    [
-      card('fronts-1', { deck_id: deck, front: 'hamburger meniu', back: 'гамбургер меню' }),
-      card('fronts-2', { deck_id: deck, front: 'burgermenu', back: 'меню-гамбургер' }),
-      card('fronts-3', { deck_id: deck, front: 'roll back', back: 'откатить' }),
-    ],
-    ['fronts-1', 'fronts-2', 'fronts-3'],
-  );
-
-  const fronts = db.conceptFronts(deck);
-  assert.deepEqual(fronts.get(db.conceptKey('гамбургер меню')).sort(), ['burgermenu', 'hamburger meniu']);
-  assert.deepEqual(fronts.get(db.conceptKey('откатить')), ['roll back']);
-  assert.equal(db.conceptFronts(db.deckId('ru', 'nl')).size, 0);
 });
 
 test('narrowing the categories moves the cards left outside them to everyday', () => {
@@ -459,7 +441,7 @@ test('a deck reports the meanings it already carries', () => {
   ]);
   const concepts = db.conceptsOfDeck(deck);
   assert.equal(concepts.size, 2);
-  assert.ok(concepts.has(db.conceptKey('Привет')));
+  assert.ok(concepts.has(db.conceptOf(deck, 'Привет')));
   assert.equal(db.conceptsOfDeck(db.deckId('ru', 'fi')).size, 0);
 });
 
@@ -477,7 +459,7 @@ test('a deck can list the meanings it carries more than once', () => {
 
   const groups = db.conceptsShared(deck);
   assert.equal(groups.length, 1, 'only the meaning that has two cards');
-  assert.equal(groups[0].concept, db.conceptKey('набирает популярность'));
+  assert.equal(groups[0].concept, db.conceptOf(deck, 'набирает популярность'));
   assert.deepEqual(groups[0].cards.map((entry) => entry.id), ['twin-1', 'twin-2']);
   assert.equal(groups[0].cards[0].keywords.length, 1, 'the cards come back hydrated, ready to show');
 
@@ -547,8 +529,8 @@ test('a v9 deck gains a topic column, keeps its rows, and ends with the fresh sh
   const row = handle.prepare('SELECT front, topic, concept FROM cards WHERE id = ?').get('abcdef0101');
   assert.equal(row.front, 'roll back');
   assert.equal(row.topic, '', 'old rows have no topic yet');
-  assert.equal(row.concept, db.conceptKey('откатить'), 'and nothing else moved');
-  assert.equal(db.get('SELECT version FROM schema_version').version, 10);
+  assert.equal(row.concept, db.conceptOf(1, 'откатить'), 'step 11 keys it again with the deck language');
+  assert.equal(db.get('SELECT version FROM schema_version').version, db.SCHEMA_VERSION);
   assert.ok(existsSync(paths.backups), 'a copy was taken before the ladder ran');
   assert.ok(readdirSync(paths.backups).length >= 1);
   db.close();
@@ -602,7 +584,7 @@ test('a rewrite may change both sides, refreshes the concept, and never touches 
   const row = db.cardById('rwrwrwrw01');
   assert.equal(row.front, 'stale data');
   assert.equal(row.back, 'устаревшие данные');
-  assert.equal(row.concept, db.conceptKey('устаревшие данные'), 'the meaning key follows the back');
+  assert.equal(row.concept, db.conceptOf(home, 'устаревшие данные'), 'the meaning key follows the back');
   assert.deepEqual(row.keywords, ['stale']);
   const after = db.stateOfCard('rwrwrwrw01');
   assert.equal(after.due, before.due);
@@ -613,7 +595,7 @@ test('a rewrite may change both sides, refreshes the concept, and never touches 
   assert.equal(db.cardById('rwrwrwrw01').deck_id, home);
 
   db.updateCard('rwrwrwrw01', { back: 'старые данные' });
-  assert.equal(db.cardById('rwrwrwrw01').concept, db.conceptKey('старые данные'), 'the editor keeps the concept in step too');
+  assert.equal(db.cardById('rwrwrwrw01').concept, db.conceptOf(home, 'старые данные'), 'the editor keeps the concept in step too');
 });
 
 test('a chapter is renamed by moving every card of its topic, inside one category only', () => {
@@ -631,4 +613,186 @@ test('a chapter is renamed by moving every card of its topic, inside one categor
   assert.equal(db.cardById('rnrnrnrn01').topic, 'releases');
   assert.equal(db.cardById('rnrnrnrn03').topic, 'rollouts', 'the same label under another category is another chapter');
   assert.equal(db.renameTopic(home, 'engineering', 'rollouts', 'releases'), 0, 'nothing left to move');
+});
+
+test('a card carries the form it was met in and its pronunciation', () => {
+  db.open();
+  const deck = db.deckId('ru', 'is');
+  db.insertCards(
+    [
+      card('ipa-1', { deck_id: deck, front: 'roll back', back: 'откатить', form: 'rolled back', ipa: 'ˈɹoʊl bæk' }),
+      card('ipa-2', { deck_id: deck, front: 'deadline', back: 'срок' }),
+    ],
+    ['ipaipaipa1', 'ipaipaipa2'],
+  );
+  const met = db.cardById('ipaipaipa1');
+  assert.equal(met.form, 'rolled back');
+  assert.equal(met.ipa, 'ˈɹoʊl bæk');
+  const bare = db.cardById('ipaipaipa2');
+  assert.equal(bare.form, '', 'a card with no met form is the empty string, never null');
+  assert.equal(bare.ipa, '');
+
+  assert.equal(db.rewriteCard('ipaipaipa2', { form: 'deadlines', ipa: 'ˈdɛdlaɪn' }), true);
+  assert.equal(db.cardById('ipaipaipa2').form, 'deadlines');
+  assert.equal(db.cardById('ipaipaipa2').ipa, 'ˈdɛdlaɪn');
+  assert.equal(db.updateCard('ipaipaipa1', { ipa: 'ɹoʊl' }), true, 'the editor may fix a transcription too');
+  assert.equal(db.cardById('ipaipaipa1').ipa, 'ɹoʊl');
+});
+
+test('a deck hands back every live front, and forgets the ones thrown away', () => {
+  db.open();
+  const deck = db.deckId('ru', 'hr');
+  db.insertCards(
+    [
+      card('front-1', { deck_id: deck, front: 'roll back', back: 'откатить' }),
+      card('front-2', { deck_id: deck, front: 'deadline', back: 'срок' }),
+    ],
+    ['frontfront1', 'frontfront2'],
+  );
+  assert.deepEqual(db.frontsOfDeck(deck).sort(), ['deadline', 'roll back']);
+  db.junkCard('frontfront2', deck, 'duplicate', 'deadline');
+  assert.deepEqual(db.frontsOfDeck(deck), ['roll back'], 'a deleted card is not a front the deck holds');
+  assert.deepEqual(db.frontsOfDeck(db.deckId('ru', 'sk')), []);
+});
+
+test('the concept key stems the words and drops the ones the language leans on', () => {
+  const stop = new Set(['the']);
+  const key = (text) => db.conceptKey(text, { lang: 'en', stop });
+  assert.equal(key('duplicate code'), key('duplicated code'));
+  assert.equal(key('duplicate code'), key('the duplicate code'), 'an article is not a meaning');
+  assert.notEqual(key('duplicate code'), key('duplicate'), 'a missing word is a different meaning');
+  assert.notEqual(key('program'), key('progress'), 'four letters could not tell these apart');
+  assert.equal(key('the'), db.conceptKey('the', { lang: 'en', stop }), 'a back of nothing but stop-words still keys');
+  assert.notEqual(key('the'), key('duplicate'));
+});
+
+test('the ability of a deck is stored, read back, and empty until it is graded', () => {
+  db.open();
+  const deck = db.deckId('ru', 'lv');
+  const fresh = db.abilityOf(deck);
+  assert.equal(fresh.n, 0);
+  assert.equal(fresh.theta, -0.5, 'a deck with no answers sits at the centre of B1');
+  assert.equal(fresh.label, '');
+
+  assert.deepEqual(fresh.bands, {}, 'and has met no band');
+
+  db.saveAbility(deck, { theta: 0.42, n: 61, label: 'B2', bands: { B1: 40, B2: 21, ZZ: 9 } });
+  const saved = db.abilityOf(deck);
+  assert.equal(saved.n, 61);
+  assert.equal(saved.theta, 0.42);
+  assert.equal(saved.label, 'B2');
+  assert.deepEqual(saved.bands, { B1: 40, B2: 21 }, 'the tally is kept per band, and only for bands that exist');
+  assert.ok(saved.updated_at, 'the row says when it last moved');
+
+  db.saveAbility(deck, { theta: 0.51, n: 62, label: 'B2', bands: { B1: 40, B2: 22 } });
+  assert.equal(db.abilityOf(deck).n, 62, 'a second answer updates the row, never adds one');
+  assert.deepEqual(db.abilityOf(deck).bands, { B1: 40, B2: 22 });
+  assert.equal(db.abilityOf(db.deckId('ru', 'sl')).n, 0);
+
+  db.run("UPDATE ability SET bands = 'not json' WHERE deck_id = ?", deck);
+  assert.deepEqual(db.abilityOf(deck).bands, {}, 'a tally that cannot be read is no evidence at all');
+});
+
+test('a deck whose level was counted from every repeat is counted again from first answers only', async () => {
+  const { replay } = await import('./level.mjs');
+  const { DatabaseSync } = await import('node:sqlite');
+  db.close();
+  const file = join(DATA, 'recount.db');
+  rmSync(file, { force: true });
+  const seeded = new DatabaseSync(file);
+  seeded.exec(CARDS_V9);
+  seeded.exec(REVIEWS_V3);
+  for (const column of ['topic', 'form', 'ipa']) {
+    seeded.exec(`ALTER TABLE cards ADD COLUMN ${column} TEXT NOT NULL DEFAULT ''`);
+  }
+  seeded.exec(
+    `CREATE TABLE ability (deck_id INTEGER PRIMARY KEY, theta REAL NOT NULL DEFAULT -0.5,
+       n INTEGER NOT NULL DEFAULT 0, label TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL DEFAULT '')`,
+  );
+  seeded.prepare('INSERT INTO schema_version (version) VALUES (?)').run(11);
+  seeded.prepare('INSERT INTO decks (native, target) VALUES (?, ?)').run('ru', 'en');
+  seeded
+    .prepare('INSERT INTO cards (id, deck_id, front, back, concept, created_at) VALUES (?, 1, ?, ?, ?, ?)')
+    .run('abcdef0301', 'roll back', 'откатить', '', '2026-01-01');
+  seeded.prepare('INSERT INTO ability (deck_id, theta, n, label, updated_at) VALUES (1, 1.97, 200, ?, ?)').run(
+    'C1',
+    '2026-03-01T00:00:00.000Z',
+  );
+
+  const insert = seeded.prepare(
+    `INSERT INTO reviews (card_id, deck_id, ts, day, rating, mode, cefr, difficulty_after, was_new)
+     VALUES (?, 1, ?, ?, 3, 'flashcards', 'A1', 5, ?)`,
+  );
+  const log = [];
+  for (let index = 0; index < 200; index += 1) {
+    const first = index < 3;
+    insert.run('abcdef0301', `2026-03-${String((index % 28) + 1).padStart(2, '0')}T10:00:00.000Z`, '2026-03-01', first ? 1 : 0);
+    log.push({ rating: 3, mode: 'flashcards', cefr: 'A1', difficulty: 5, first });
+  }
+  seeded.close();
+
+  db.open(file);
+  const stored = db.abilityOf(1);
+  const wanted = replay(log.filter((row) => row.first), -0.5);
+  assert.equal(stored.n, 3, 'a hundred and ninety-seven repeats of one card are not a hundred and ninety-seven answers');
+  assert.ok(Math.abs(stored.theta - wanted.theta) < 1e-9);
+  assert.deepEqual(stored.bands, { A1: 3 });
+  assert.equal(db.get('SELECT version FROM schema_version').version, db.SCHEMA_VERSION);
+  db.close();
+  db.open();
+});
+
+test('an old deck is given the level its own review log implies', async () => {
+  const { replay } = await import('./level.mjs');
+  const { DatabaseSync } = await import('node:sqlite');
+  db.close();
+  const file = join(DATA, 'ability.db');
+  rmSync(file, { force: true });
+  const seeded = new DatabaseSync(file);
+  seeded.exec(CARDS_V9);
+  seeded.exec(REVIEWS_V3);
+  seeded.prepare('INSERT INTO schema_version (version) VALUES (?)').run(9);
+  seeded.prepare('INSERT INTO decks (native, target) VALUES (?, ?)').run('ru', 'en');
+  seeded
+    .prepare('INSERT INTO cards (id, deck_id, front, back, concept, created_at) VALUES (?, 1, ?, ?, ?, ?)')
+    .run('abcdef0201', 'roll back', 'откатить', '', '2026-01-01');
+
+  const log = [
+    { rating: 3, mode: 'flashcards', cefr: 'B2', difficulty: 5.5, first: true },
+    { rating: 1, mode: 'cloze', cefr: 'C1', difficulty: 7, first: true },
+    { rating: 3, mode: 'wild', cefr: 'B2', difficulty: 5.5, first: true },
+    { rating: 2, mode: 'learn', cefr: 'B1', difficulty: 4, first: true },
+    { rating: 4, mode: 'flashcards', cefr: 'C2', difficulty: 5.5, first: false },
+  ];
+  const insert = seeded.prepare(
+    `INSERT INTO reviews (card_id, deck_id, ts, day, rating, mode, cefr, difficulty_after, was_new)
+     VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+  log.forEach((row, index) =>
+    insert.run(
+      'abcdef0201',
+      `2026-02-0${index + 1}T10:00:00.000Z`,
+      `2026-02-0${index + 1}`,
+      row.rating,
+      row.mode,
+      row.cefr,
+      row.difficulty,
+      row.first ? 1 : 0,
+    ),
+  );
+  seeded.close();
+
+  db.open(file);
+  const wanted = replay(log, -0.5);
+  const stored = db.abilityOf(1);
+  assert.equal(stored.n, 3, 'the two modes that are not a test are skipped');
+  assert.equal(stored.n, wanted.n);
+  assert.ok(Math.abs(stored.theta - wanted.theta) < 1e-9, 'the ladder replays the log exactly');
+  assert.equal(stored.label, wanted.label);
+  assert.deepEqual(stored.bands, wanted.bands, 'and remembers which bands the answers came from');
+  assert.equal(stored.bands.C2, undefined, 'a card met a second time is not evidence of a new band');
+  assert.equal(db.cardById('abcdef0201').form, '', 'the new columns start empty');
+  assert.equal(db.cardById('abcdef0201').ipa, '');
+  db.close();
+  db.open();
 });

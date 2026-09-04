@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -800,20 +800,20 @@ test('one word written twice is reported as the repeat it is', async () => {
     [
       {
         deck_id: deck,
-        front: 'hamburger menu',
-        back: 'гамбургер меню',
-        keywords: ['hamburger menu'],
-        example: 'Tap the hamburger menu.',
+        front: 'code review',
+        back: 'обзор кода',
+        keywords: ['code review'],
+        example: 'The code review found a duplicated helper.',
         category: 'frontend',
         cefr: 'B1',
         created_at: new Date().toISOString(),
       },
       {
         deck_id: deck,
-        front: 'hamburger menus',
-        back: 'меню-гамбургер',
-        keywords: ['hamburger menus'],
-        example: 'Both hamburger menus open the same drawer.',
+        front: 'code reviews',
+        back: 'кода обзор',
+        keywords: ['code reviews'],
+        example: 'Two code reviews caught the same bug.',
         category: 'frontend',
         cefr: 'B1',
         created_at: new Date().toISOString(),
@@ -832,6 +832,34 @@ test('one word written twice is reported as the repeat it is', async () => {
   );
 
   for (const id of ['aaaaaaaa11', 'aaaaaaaa12']) await post('/delete', { id, reason: 'duplicate' });
+});
+
+test('the queue is previewed before a single token is spent, and a record can be thrown away', async () => {
+  const { appendJsonl, queueFile, readJsonl } = await import('./store.mjs');
+  writeFileSync(queueFile('en'), '');
+  appendJsonl(queueFile('en'), [
+    { ts: '2026-09-03T08:00:00Z', project: '~/api', source: 'prompt', text: 'давай откатим миграцию' },
+    { ts: '2026-09-03T09:00:00Z', project: '~/api', source: 'session', lang: 'en', words: ['rollback', 'staging'] },
+  ]);
+
+  const preview = await get('/queue');
+  assert.equal(preview.status, 200);
+  const english = preview.body.profiles.find((row) => row.target === 'en');
+  assert.equal(english.rows.length, 2);
+  assert.equal(english.rows[0].text, 'давай откатим миграцию');
+  assert.ok(english.rows[0].key, 'each row carries the key the delete button sends back');
+
+  const dropped = await post('/queue/drop', { key: english.rows[1].key });
+  assert.equal(dropped.status, 200);
+  assert.equal(dropped.body.dropped, 1);
+  assert.equal(dropped.body.stopped, 2, 'the words the learner already knows go to the stop-list');
+  assert.equal(dropped.body.profiles.find((row) => row.target === 'en').rows.length, 1, 'and the caller redraws from the answer');
+
+  const nothing = await post('/queue/drop', { key: 42 });
+  assert.equal(nothing.body.dropped, 0, 'a key that is not a string drops nothing');
+
+  await post('/queue/drop', { key: english.rows[0].key });
+  assert.equal(readJsonl(queueFile('en')).length, 0);
 });
 
 test('the interface can start a build and is told whether one began', async () => {
@@ -972,4 +1000,120 @@ test('a chapter can be renamed from the deck, and the name is normalised', async
   assert.equal(state.body.cards.find((card) => card.id === id(5)).topic, 'idioms');
   assert.equal((await post('/topic/rename', { category: 'phrasing', from: 'set phrases', to: '   ' })).status, 400);
   assert.equal((await post('/topic/rename', { category: 'astrology', from: 'set phrases', to: 'x' })).status, 400, 'an unknown category never falls back to everyday');
+});
+
+test('the trainer keeps an estimate of the level, and only a graded test moves it', async () => {
+  const fresh = await get('/state');
+  assert.equal(typeof fresh.body.ability.theta, 'number');
+  assert.equal(fresh.body.ability.band, '', 'no band before a hundred answers');
+  assert.equal(fresh.body.ability.min, 100);
+  assert.equal(fresh.body.ability.floor, fresh.body.config.level ?? '');
+  const before = fresh.body.ability;
+
+  const unseen = (await get('/state')).body.cards.find((card) => card.isNew && !card.isKnown);
+  const graded = await post('/grade', { id: unseen.id, rating: 3, mode: 'flashcards' });
+  assert.equal(graded.status, 200);
+  const after = (await get('/state')).body.ability;
+  assert.equal(after.n, before.n + 1);
+  assert.ok(after.theta > before.theta, 'a card answered right raises the estimate');
+  assert.equal(after.band, '', 'and still says nothing until there are enough answers');
+
+  await post('/grade', { id: unseen.id, rating: 3, mode: 'flashcards' });
+  assert.equal((await get('/state')).body.ability.n, after.n, 'the same card answered again is not new evidence');
+
+  await post('/grade', { id: id(3), rating: 3, mode: 'wild' });
+  assert.equal((await get('/state')).body.ability.n, after.n, 'a word met in the wild is not a test');
+});
+
+test('a card can be given the form it was met in and its pronunciation, and nonsense is refused', async () => {
+  const saved = await post('/card', { id: id(0), form: 'rolled back', ipa: 'ˈɹoʊl bæk' });
+  assert.equal(saved.status, 200);
+  assert.equal(saved.body.card.form, 'rolled back');
+  assert.equal(saved.body.card.ipa, 'ˈɹoʊl bæk');
+
+  const junk = await post('/card', { id: id(0), ipa: '/roll back/' });
+  assert.equal(junk.status, 200);
+  assert.equal(junk.body.card.ipa, '', 'a transcription that is not IPA is stored as nothing');
+});
+
+test('the level over time is a report like any other', async () => {
+  const { status, body } = await get('/api/analytics/level');
+  assert.equal(status, 200);
+  assert.equal(typeof body.ms, 'number');
+  assert.ok(Array.isArray(body.points));
+  assert.equal(typeof body.current.n, 'number');
+  assert.equal(body.current.min, 100);
+  for (const point of body.points) {
+    assert.ok(point.day, 'every point is a day the estimate moved');
+    assert.equal(typeof point.theta, 'number');
+  }
+});
+
+const UI_DIR = join(HERE, '..', 'ui');
+
+function browserPaths() {
+  const literal = new Set();
+  const dynamic = new Set();
+  for (const name of readdirSync(UI_DIR).filter((file) => file.endsWith('.js'))) {
+    const source = readFileSync(join(UI_DIR, name), 'utf8');
+    for (const [, path] of source.matchAll(/\b(?:api|fetch)\(\s*'([^']+)'/g)) literal.add(path);
+    for (const [, path] of source.matchAll(/\b(?:api|fetch)\(\s*`(\/[^`$]*)/g)) dynamic.add(path);
+  }
+  return { literal: [...literal].sort(), dynamic: [...dynamic].sort() };
+}
+
+const SAMPLE = {
+  '/card': { id: id(0), note: 'checked by the endpoint sweep' },
+  '/grade': { id: id(0), rating: 3, mode: 'flashcards' },
+  '/favorite': { id: id(0), on: false },
+  '/known': { id: id(0), on: false },
+  '/delete': { id: id(5), reason: 'not-useful' },
+  '/restore': { id: id(5) },
+  '/rewrite': { id: id(0), reason: 'wrong' },
+  '/words': { words: ['sweep'], example: 'The sweep found every endpoint.' },
+  '/topic/rename': { category: 'engineering', from: 'nothing', to: 'nothing else' },
+  '/settings': {},
+  '/build': {},
+  '/queue/drop': { key: 'nothing' },
+  '/alphabet': {},
+  '/produce': { sentence: 'We roll back the migration tonight.', words: ['roll back'] },
+  '/clone': { to: 'zz', sources: [] },
+  '/deck/delete': { native: 'ru', target: 'zz' },
+  '/categories/rebuild': {},
+  '/session/start': { minutes: 10 },
+  '/session/end': { id: 1 },
+  '/stop': null,
+};
+
+test('every path the browser calls answers, so the interface never says "failed to fetch"', async () => {
+  const { literal, dynamic } = browserPaths();
+  assert.ok(literal.length > 15, `expected the whole interface, found ${literal.length} paths`);
+
+  const routes = readFileSync(SERVE, 'utf8');
+  const served = (path) =>
+    routes.includes(`url.pathname === '${path}'`) || routes.includes(`url.pathname.startsWith('${path}`);
+
+  const missing = [...literal, ...dynamic]
+    .map((path) => path.split('?')[0].replace(/\/$/, ''))
+    .filter((path) => !served(path) && !routes.includes(`startsWith('${path}`));
+  assert.deepEqual(missing, [], 'the browser calls a path serve.mjs has no route for');
+
+  const crashed = [];
+  for (const path of literal) {
+    if (path === '/stop') continue;
+    const payload = SAMPLE[path];
+    const answer = payload === undefined ? await get(path) : await post(path, payload);
+    if (answer.status >= 500) crashed.push(`${path} → ${answer.status}`);
+  }
+  assert.deepEqual(crashed, [], 'a path that answers 5xx is a "failed to fetch" waiting to happen');
+});
+
+test('every live path is one the service worker never serves from its cache', () => {
+  const { literal, dynamic } = browserPaths();
+  const worker = readFileSync(join(UI_DIR, 'sw.js'), 'utf8');
+  const live = new RegExp(worker.match(/const LIVE = \/([^;]+)\/;/)[1]);
+  const cached = [...literal, ...dynamic]
+    .map((path) => path.split('?')[0])
+    .filter((path) => path.startsWith('/') && !live.test(path));
+  assert.deepEqual(cached, [], 'add it to LIVE in ui/sw.js, or the page will answer from a stale cache');
 });

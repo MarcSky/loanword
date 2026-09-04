@@ -1,6 +1,7 @@
 import { fsrs, generatorParameters } from 'ts-fsrs';
 import * as db from './db.mjs';
 import { CATEGORIES, CEFR_LEVELS, LEARNED_STABILITY_DAYS, config, enabledCategories, masteryOf } from './store.mjs';
+import { estimate, seedTheta, update } from './level.mjs';
 
 const engine = fsrs(generatorParameters({ enable_fuzz: false }));
 
@@ -583,6 +584,33 @@ const csvField = (value) => {
   const text = String(value ?? '').replace(/\r?\n/g, ' ').trim();
   return /["\n,]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 };
+
+export function level(deck, filter = {}) {
+  const rows = db.all(
+    `SELECT r.day AS day, r.rating AS rating, r.mode AS mode, r.cefr AS cefr,
+            r.difficulty_after AS difficulty, r.was_new AS first
+     FROM reviews r WHERE r.deck_id = ? ORDER BY r.ts, r.id`,
+    deck,
+  );
+  const cfg = config();
+  const seed = seedTheta(cfg.level);
+  let state = { theta: seed, n: 0, label: '', bands: {} };
+  const points = [];
+  for (const row of rows) {
+    const next = update(state, row);
+    if (next === state) continue;
+    state = next;
+    const last = points[points.length - 1];
+    if (last && last.day === row.day) {
+      last.theta = Number(state.theta.toFixed(4));
+      last.band = state.label;
+      last.n = state.n;
+      continue;
+    }
+    points.push({ day: row.day, theta: Number(state.theta.toFixed(4)), band: state.label, n: state.n });
+  }
+  return { points, current: estimate(state), floor: cfg.level };
+}
 
 export function exportCsv(deck, filter = {}) {
   const rows = [['section', 'key', 'value', 'extra'].join(',')];

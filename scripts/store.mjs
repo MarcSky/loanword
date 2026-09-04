@@ -12,10 +12,11 @@ import {
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { scriptLetters, trimToSentence } from './lang.mjs';
-import { broken, keywordsIn, reasonsOf, vet } from './lexis.mjs';
-import { MAX_CHARS, RANGES, SESSION_LENGTHS, USAGE_WINDOWS, clampInt, intIn } from './limits.mjs';
+import { anchorLevel, broken, keepContext, keepForm, keepIpa, keywordsIn, reasonsOf, vet } from './lexis.mjs';
+import { MAX_CHARS, RANGES, SESSION_LENGTHS, USAGE_WINDOWS, clampInt, intIn, textIn } from './limits.mjs';
 import { parsePick } from './peek.mjs';
 import { CODES, isPickable, scriptOf } from './languages.mjs';
+import { stemKey } from './stem.mjs';
 import { categoriesOf, knownField } from './categories.mjs';
 import {
   CATEGORIES,
@@ -23,6 +24,8 @@ import {
   DATA,
   PLUGIN_ROOT,
   decksOnDisk,
+  failedFile,
+  frequentWords,
   frontsFile,
   knownFile,
   lockFile,
@@ -41,6 +44,8 @@ export {
   DATA,
   PLUGIN_ROOT,
   decksOnDisk,
+  failedFile,
+  frequentWords,
   frontsFile,
   knownFile,
   lockFile,
@@ -173,6 +178,7 @@ const THEMES = ['light', 'dark', 'system'];
 const STUDY_MODES = ['flashcards', 'learn'];
 const ECHO_MODES = ['off', 'line', 'weave'];
 const SPEECH_MODES = ['off', 'reveal', 'ask'];
+const PHONETICS = ['auto', 'off'];
 const PEEK_MODES = ['off', 'on'];
 export const MODELS = ['haiku', 'sonnet', 'opus'];
 export const EXERCISES = ['flashcards', 'learn', 'cloze', 'type', 'reverse'];
@@ -228,6 +234,7 @@ function envConfig(env = process.env) {
     peekPick: parsePick(env.CLAUDE_PLUGIN_OPTION_PEEK_PICK || ''),
     peekEvery: peekEveryFrom(env.CLAUDE_PLUGIN_OPTION_PEEK_EVERY),
     produce: true,
+    phonetics: 'auto',
     exercises: ['flashcards', 'learn', 'cloze', 'type', 'reverse'],
   };
 }
@@ -280,6 +287,7 @@ const SETTING_RULES = {
   peekPick: (v) => (v === undefined || v === null ? undefined : parsePick(v)),
   peekEvery: (v) => intIn(v, RANGES.peekEvery),
   produce: (v) => (typeof v === 'boolean' ? v : undefined),
+  phonetics: (v) => (PHONETICS.includes(v) ? v : undefined),
   exercises: (v) => stringList(v, EXERCISES),
 };
 
@@ -387,6 +395,13 @@ export async function readStdin() {
   process.stdin.setEncoding('utf8');
   for await (const chunk of process.stdin) buffer += chunk;
   return buffer;
+}
+
+export function countJsonl(file) {
+  if (!existsSync(file)) return 0;
+  let lines = 0;
+  for (const line of readFileSync(file, 'utf8').split('\n')) if (line.trim()) lines += 1;
+  return lines;
 }
 
 export function readJsonl(file) {
@@ -622,17 +637,9 @@ export function normalizeTopic(value) {
     .trim();
 }
 
-const STEM = 4;
-
-export function sameWord(a, b) {
-  const left = db.wordsOf(a);
-  const right = db.wordsOf(b);
-  if (!left.length || left.length !== right.length) return false;
-  return left.every((word, index) => {
-    const other = right[index];
-    const [short, long] = word.length <= other.length ? [word, other] : [other, word];
-    return long.startsWith(short) && short.length >= Math.min(STEM, long.length);
-  });
+export function sameWord(a, b, lang = '') {
+  const left = stemKey(a, lang);
+  return !!left && left === stemKey(b, lang);
 }
 
 export function cardWords(card) {
@@ -647,17 +654,6 @@ export function readingWanted(native, target) {
   const script = scriptOf(target);
   if (script !== 'latin' && script !== 'cyrillic') return true;
   return script !== 'latin' && script !== scriptOf(native);
-}
-
-export function frequentWords(language) {
-  const file = join(PLUGIN_ROOT, 'data', 'freq', `${String(language || '').toLowerCase().slice(0, 2)}.txt`);
-  if (!existsSync(file)) return new Set();
-  return new Set(
-    readFileSync(file, 'utf8')
-      .split('\n')
-      .map((word) => word.trim().toLowerCase())
-      .filter(Boolean),
-  );
 }
 
 const CARD_TYPES = new Set(['phrase', 'word', 'letter']);
@@ -678,24 +674,28 @@ function stampCard(card, pair, provenanceOf) {
   if (!front || !back) return null;
 
   const source = provenanceOf(card);
+  const type = CARD_TYPES.has(card.type) ? card.type : 'phrase';
   const wantsReading = readingWanted(pair.native, pair.target);
+  const anchored = type === 'word' ? anchorLevel(front, pair.target) : '';
   const keywords = (Array.isArray(card.keywords) ? card.keywords : [])
     .filter((word) => typeof word === 'string')
     .map((word) => text(word))
     .filter(Boolean);
   return {
-    type: CARD_TYPES.has(card.type) ? card.type : 'phrase',
+    type,
     front,
     back,
     keywords: keywordsIn(keywords, pair),
     example: text(card.example),
     pos: text(card.pos),
-    cefr: normalizeCefr(card.cefr) || normalizeCefr(source?.cefr),
+    cefr: anchored || normalizeCefr(card.cefr) || normalizeCefr(source?.cefr),
     reading: wantsReading ? text(card.reading) : '',
 
     note: text(card.note),
     category: normalizeCategory(card.category || source?.category),
     topic: normalizeTopic(card.topic),
+    form: textIn(keepForm(card), MAX_CHARS.word),
+    ipa: keepIpa(card),
 
     native: pair.native,
     target: pair.target,
@@ -706,7 +706,7 @@ function stampCard(card, pair, provenanceOf) {
     record: source || null,
     n: card.n,
 
-    source: trimToSentence(text(source?.text), MAX_SOURCE_LENGTH),
+    source: keepContext(card, source) || trimToSentence(text(source?.text), MAX_SOURCE_LENGTH),
   };
 }
 
@@ -733,7 +733,8 @@ function provenanceReader(queue) {
 function classifyCards(newCards, pair, deck, queue) {
   const provenanceOf = provenanceReader(queue);
   const stopWords = frequentWords(pair.target);
-  const byConcept = db.conceptFronts(deck);
+  const nativeStop = frequentWords(pair.native);
+  const fronts = new Set(db.frontsOfDeck(deck).map((front) => stemKey(front, pair.target)));
   const stamped = [];
   const ids = [];
   const seen = new Set();
@@ -770,14 +771,14 @@ function classifyCards(newCards, pair, deck, queue) {
     const id = cardId(sided);
     if (seen.has(id)) continue;
     seen.add(id);
-    const concept = db.conceptKey(sided.back);
-    const twins = byConcept.get(concept) || [];
-    if (sided.type !== 'letter' && twins.some((front) => sameWord(front, sided.front))) {
+    const key = stemKey(sided.front, pair.target);
+    if (sided.type !== 'letter' && key && fronts.has(key)) {
       dropped += 1;
-      log(`commit dropped another wording of a card already in the deck: ${card.front.slice(0, 60)}`);
+      log(`commit dropped a second card for a word the deck has: ${sided.front.slice(0, 60)}`);
       continue;
     }
-    byConcept.set(concept, [...twins, sided.front]);
+    if (sided.type !== 'letter' && key) fronts.add(key);
+    const concept = db.conceptKey(sided.back, { lang: pair.native, stop: nativeStop });
     ids.push(id);
     stamped.push({
       ...sided,

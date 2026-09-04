@@ -379,3 +379,30 @@ test.after(() => {
   db.close();
   rmSync(DATA, { recursive: true, force: true });
 });
+
+test('the level report replays the log and moves only where the estimate moved', async () => {
+  const { estimate, replay, seedTheta } = await import('./level.mjs');
+  const out = analytics.level(DECK);
+
+  const counted = db
+    .all(
+      `SELECT rating, mode, cefr, difficulty_after AS difficulty, was_new AS first FROM reviews
+       WHERE deck_id = ? ORDER BY ts, id`,
+      DECK,
+    )
+    .map((row) => ({ ...row }));
+  const wanted = estimate(replay(counted, seedTheta('')));
+
+  assert.equal(out.current.n, wanted.n);
+  assert.ok(Math.abs(out.current.theta - wanted.theta) < 1e-4);
+  assert.ok(out.points.length <= counted.length, 'a review that says nothing draws no point');
+  assert.ok(out.points.length > 0);
+  const days = out.points.map((point) => point.day);
+  assert.deepEqual(days, [...new Set(days)], 'one point per day at most');
+  assert.equal(analytics.level(db.deckId('ru', 'sv')).points.length, 0, 'a deck with no reviews has no line');
+  assert.equal(analytics.level(db.deckId('ru', 'sv')).current.n, 0);
+  assert.ok(
+    out.current.n <= counted.filter((row) => row.first).length,
+    'only the first answer to a card is counted, so the line can never outrun the new cards',
+  );
+});

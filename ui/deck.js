@@ -119,6 +119,8 @@ function cardForm(card) {
       ${cardField(t('Meaning'), text('back', card.back, `required ${langAttrs(app.config.native)}`))}
       ${cardField(t('Example'), text('example', card.example, langAttrs(app.config.target)), true)}
       ${cardField(t('Reading'), text('reading', card.reading, `placeholder="${esc(t('Romanised reading'))}" lang="und" dir="ltr"`))}
+      ${cardField(t('Met as'), text('form', card.form, 'lang="und"'))}
+      ${cardField(t('Pronunciation'), text('ipa', card.ipa, `placeholder="${esc(t('IPA'))}" lang="und" dir="ltr"`))}
       ${cardField(
         t('Level'),
         `<select class="edit" name="cefr">
@@ -321,7 +323,7 @@ function wordTable(cards) {
     <tbody>${sorted
       .map((card) => {
         const info = categoryMeta(card.category);
-        const status = card.isNew ? t('never seen') : card.isDue ? t('due {when}', { when: relativeDay(card.due) }) : relativeDay(card.due);
+        const status = card.isNew ? t('never seen') : card.isDue ? t('due now') : relativeDay(card.due);
         return `<tr style="${tintOf(card.category)}">
           <td class="tbl-badge"><span class="badge-icon" title="${esc(info.label)}">${icon(info.icon)}</span></td>
           <td class="tbl-front" ${langAttrs(app.config.target)}>${esc(card.front)}${
@@ -343,7 +345,7 @@ function wordCard(card) {
   const status = card.isNew
     ? t('never seen')
     : card.isDue
-      ? t('due {when}', { when: relativeDay(card.due) })
+      ? t('due now')
       : t('next {when}', { when: relativeDay(card.due) });
   return `<article class="word" style="${tintOf(card.category)}">
     <div class="word-top">
@@ -502,6 +504,7 @@ function cardCard(card) {
 
     <div class="card-front" ${langAttrs(app.config.target)}>${esc(card.front)}</div>
     ${card.reading ? `<div class="reading" lang="und" dir="ltr">${esc(card.reading)}</div>` : ''}
+    ${card.ipa ? `<div class="ipa" lang="und" dir="ltr">${esc(card.ipa)}</div>` : ''}
     <div class="card-back" ${langAttrs(app.config.native)}>${esc(card.back)}</div>
     ${
       card.example
@@ -521,6 +524,11 @@ function cardCard(card) {
     }
 
     ${
+      card.form && card.form !== card.front
+        ? `<div class="card-met"><span class="micro">${esc(t('Met as'))}</span> <b lang="und">${esc(card.form)}</b></div>`
+        : ''
+    }
+    ${
       card.source
         ? `<div class="card-source">
             <div class="micro">${esc(t('Where it came from'))}</div>
@@ -536,7 +544,7 @@ function cardCard(card) {
     <div class="card-facts">
       <div><span class="l">${esc(t('Mastery'))}</span><span class="v">${esc(pct(card.mastery))}</span></div>
       <div><span class="l">${esc(t('Next'))}</span><span class="v">${esc(
-        card.isNew ? t('never seen') : relativeDay(card.due),
+        card.isNew ? t('never seen') : card.isDue ? t('due now') : relativeDay(card.due),
       )}</span></div>
       <div><span class="l">${esc(t('Reviews'))}</span><span class="v">${card.reps || 0}</span></div>
       <div><span class="l">${esc(t('Lapses'))}</span><span class="v">${card.lapses || 0}</span></div>
@@ -621,7 +629,7 @@ function renderDeck() {
       <div class="deck-tools">
         <label class="search">
           ${icon('magnifying-glass', 'icon-sm icon')}
-          <input class="input" id="deck-search" type="search" placeholder="${esc(t('Search words, translations, examples'))}"
+          <input class="input" id="deck-search" type="search" maxlength="${MAX_CHARS.field}" placeholder="${esc(t('Search words, translations, examples'))}"
             value="${esc(query)}" aria-label="${esc(t('Search the deck'))}">
         </label>
       <div class="page-actions">

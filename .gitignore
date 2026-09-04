@@ -220,3 +220,6 @@ $RECYCLE.BIN/
 loanword.db
 loanword.db-wal
 loanword.db-shm
+# derived from images/branding by docs/design/brand/render.sh
+images/logo-mark-*.png
+images/avatar-*.png

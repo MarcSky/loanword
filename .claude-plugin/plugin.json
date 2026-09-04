@@ -2,7 +2,7 @@
   "name": "loanword",
   "displayName": "Loanword",
   "version": "0.1.0",
-  "description": "Turn your Claude Code sessions into a personal phrasebook. Learn the words you actually needed today.",
+  "description": "Turn the words you actually needed today into flashcards, made from your own work and reviewed right where you code: your own Quizlet, built from your own data.",
   "author": {
     "name": "MarcSky",
     "url": "https://github.com/MarcSky"
@@ -10,11 +10,20 @@
   "repository": "https://github.com/MarcSky/loanword",
   "license": "MIT",
   "keywords": [
+    "claude-code",
+    "claude-code-plugin",
     "language-learning",
     "vocabulary",
     "flashcards",
     "spaced-repetition",
-    "anki"
+    "fsrs",
+    "srs",
+    "anki",
+    "quizlet",
+    "duolingo",
+    "cefr",
+    "local-first",
+    "privacy"
   ],
   "userConfig": {
     "native_lang": {

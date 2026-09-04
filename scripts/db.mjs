@@ -2,24 +2,25 @@ import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { DATA, CATEGORIES, CEFR_LEVELS, LEECH_LAPSES, paths } from './store-paths.mjs';
+import { DATA, CATEGORIES, CEFR_LEVELS, LEECH_LAPSES, frequentWords, paths } from './store-paths.mjs';
+import { SEED, bandsOf, replay, seedTheta } from './level.mjs';
+import { stem, wordsOf } from './stem.mjs';
 
 const require = createRequire(import.meta.url);
 
 export const DB_FILE = join(DATA, 'loanword.db');
-export const SCHEMA_VERSION = 10;
+export const SCHEMA_VERSION = 12;
 
-export const wordsOf = (text) =>
-  String(text ?? '')
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, ' ')
-    .trim()
-    .split(' ')
-    .filter(Boolean);
+export { LEECH_LAPSES, wordsOf };
 
-export const conceptKey = (text) =>
-  createHash('sha1').update(wordsOf(text).sort().join(' ')).digest('hex').slice(0, 10);
-export { LEECH_LAPSES };
+const NO_STOP = new Set();
+
+export function conceptKey(text, { lang = '', stop = NO_STOP } = {}) {
+  const words = wordsOf(text);
+  const kept = words.filter((word) => !stop.has(word));
+  const stems = [...new Set((kept.length ? kept : words).map((word) => stem(word, lang)))].sort();
+  return createHash('sha1').update(stems.join(' ')).digest('hex').slice(0, 10);
+}
 
 const NODE_SQLITE_HELP =
   'Loanword needs Node 22.16 or newer: this build has no node:sqlite. ' +
@@ -82,6 +83,8 @@ CREATE TABLE IF NOT EXISTS cards (
   starred    INTEGER NOT NULL DEFAULT 0,
   deleted_at TEXT,
   reading    TEXT NOT NULL DEFAULT '',
+  form       TEXT NOT NULL DEFAULT '',
+  ipa        TEXT NOT NULL DEFAULT '',
   origin_id  TEXT,
   known      INTEGER NOT NULL DEFAULT 0,
   concept    TEXT NOT NULL DEFAULT '',
@@ -178,6 +181,15 @@ CREATE INDEX IF NOT EXISTS junk_deck ON junk(deck_id, day);
 
 CREATE TABLE IF NOT EXISTS retired (front_key TEXT PRIMARY KEY);
 
+CREATE TABLE IF NOT EXISTS ability (
+  deck_id    INTEGER PRIMARY KEY,
+  theta      REAL NOT NULL DEFAULT -0.5,
+  n          INTEGER NOT NULL DEFAULT 0,
+  label      TEXT NOT NULL DEFAULT '',
+  bands      TEXT NOT NULL DEFAULT '{}',
+  updated_at TEXT NOT NULL DEFAULT ''
+);
+
 CREATE VIEW IF NOT EXISTS daily_stats AS
 SELECT deck_id,
        day,
@@ -266,7 +278,69 @@ const MIGRATIONS = {
     if (!columns.has('topic')) handle.exec("ALTER TABLE cards ADD COLUMN topic TEXT NOT NULL DEFAULT ''");
     handle.exec('CREATE INDEX IF NOT EXISTS cards_deck_topic ON cards(deck_id, topic)');
   },
+
+  11: (handle) => {
+    const columns = new Set(handle.prepare('PRAGMA table_info(cards)').all().map((row) => row.name));
+    if (!columns.has('form')) handle.exec("ALTER TABLE cards ADD COLUMN form TEXT NOT NULL DEFAULT ''");
+    if (!columns.has('ipa')) handle.exec("ALTER TABLE cards ADD COLUMN ipa TEXT NOT NULL DEFAULT ''");
+    handle.exec(
+      `CREATE TABLE IF NOT EXISTS ability (
+         deck_id    INTEGER PRIMARY KEY,
+         theta      REAL NOT NULL DEFAULT -0.5,
+         n          INTEGER NOT NULL DEFAULT 0,
+         label      TEXT NOT NULL DEFAULT '',
+         bands      TEXT NOT NULL DEFAULT '{}',
+         updated_at TEXT NOT NULL DEFAULT ''
+       )`,
+    );
+
+    const stops = new Map();
+    const stopFor = (native) => {
+      if (!stops.has(native)) stops.set(native, frequentWords(native));
+      return stops.get(native);
+    };
+    const refile = handle.prepare('UPDATE cards SET concept = ? WHERE id = ?');
+    for (const row of handle
+      .prepare('SELECT c.id AS id, c.back AS back, d.native AS native FROM cards c JOIN decks d ON d.id = c.deck_id')
+      .all()) {
+      refile.run(conceptKey(row.back, { lang: row.native, stop: stopFor(row.native) }), row.id);
+    }
+
+    recountAbility(handle);
+  },
+
+  12: (handle) => {
+    const columns = new Set(handle.prepare('PRAGMA table_info(ability)').all().map((row) => row.name));
+    if (!columns.has('bands')) handle.exec("ALTER TABLE ability ADD COLUMN bands TEXT NOT NULL DEFAULT '{}'");
+    handle.exec('DELETE FROM ability');
+    recountAbility(handle);
+  },
 };
+
+function recountAbility(handle) {
+  const seed = seedTheta(readJsonFile(paths.settings)?.level);
+  const byDeck = new Map();
+  for (const row of handle
+    .prepare('SELECT deck_id, rating, mode, cefr, difficulty_after, was_new FROM reviews ORDER BY deck_id, ts, id')
+    .all()) {
+    if (!byDeck.has(row.deck_id)) byDeck.set(row.deck_id, []);
+    byDeck.get(row.deck_id).push({
+      rating: row.rating,
+      mode: row.mode,
+      cefr: row.cefr,
+      difficulty: row.difficulty_after,
+      first: !!row.was_new,
+    });
+  }
+  const remember = handle.prepare(
+    'INSERT OR REPLACE INTO ability (deck_id, theta, n, label, bands, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+  );
+  const now = new Date().toISOString();
+  for (const [deck, reviews] of byDeck) {
+    const state = replay(reviews, seed);
+    if (state.n) remember.run(deck, state.theta, state.n, state.label, JSON.stringify(state.bands), now);
+  }
+}
 
 const stamp = () => new Date().toISOString().replace(/[:.]/g, '-');
 
@@ -353,6 +427,7 @@ export function open(file = DB_FILE) {
 export function close() {
   if (!handle) return;
   statements.clear();
+  deckMeta.clear();
   try {
     handle.close();
   } catch {
@@ -423,7 +498,7 @@ export function deckPairsWithCounts() {
 const plain = (rows) => rows.map((row) => ({ ...row }));
 
 const CARD_COLUMNS =
-  'id, deck_id, type, front, back, keywords, example, pos, cefr, note, category, project, source, ts, created_at, starred, reading, origin_id, known, concept, topic';
+  'id, deck_id, type, front, back, keywords, example, pos, cefr, note, category, project, source, ts, created_at, starred, reading, form, ipa, origin_id, known, concept, topic';
 
 const NO_KEYWORDS = [];
 
@@ -452,7 +527,7 @@ export function insertCards(rows, ids) {
   const insert = stmt(`
     INSERT OR IGNORE INTO cards
       (${CARD_COLUMNS}, deleted_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`);
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`);
   let added = 0;
   for (let i = 0; i < rows.length; i++) {
     const card = rows[i];
@@ -474,9 +549,11 @@ export function insertCards(rows, ids) {
       card.created_at || new Date().toISOString(),
       card.starred ? 1 : 0,
       card.reading || '',
+      card.form || '',
+      card.ipa || '',
       card.origin_id || null,
       card.known ? 1 : 0,
-      card.concept || conceptKey(card.back),
+      card.concept || conceptOf(card.deck_id, card.back),
       card.topic || '',
     ).changes;
     added += Number(changes);
@@ -512,12 +589,25 @@ export const countCards = (deck) =>
 
 export const totalCards = () => get('SELECT COUNT(*) AS n FROM cards WHERE deleted_at IS NULL').n;
 
-const EDITABLE = new Set(['front', 'back', 'example', 'note', 'category', 'cefr', 'pos', 'type', 'reading', 'topic']);
+const EDITABLE = new Set([
+  'front',
+  'back',
+  'example',
+  'note',
+  'category',
+  'cefr',
+  'pos',
+  'type',
+  'reading',
+  'form',
+  'ipa',
+  'topic',
+]);
 
 export function updateCard(id, patch) {
   const fields = Object.entries(patch).filter(([key]) => EDITABLE.has(key));
   if (!fields.length) return false;
-  if (typeof patch.back === 'string') fields.push(['concept', conceptKey(patch.back)]);
+  if (typeof patch.back === 'string') fields.push(['concept', conceptOf(deckOfCard(id), patch.back)]);
   const sql = `UPDATE cards SET ${fields.map(([key]) => `${key} = ?`).join(', ')} WHERE id = ?`;
   return Number(run(sql, ...fields.map(([, value]) => String(value ?? '')), id).changes) > 0;
 }
@@ -525,8 +615,8 @@ export function updateCard(id, patch) {
 export function rewriteCard(id, patch) {
   const fields = { ...patch };
   if (Array.isArray(fields.keywords)) fields.keywords = JSON.stringify(fields.keywords);
-  if (typeof fields.back === 'string') fields.concept = conceptKey(fields.back);
-  const allowed = ['front', 'back', 'concept', 'example', 'note', 'keywords', 'reading', 'topic'].filter(
+  if (typeof fields.back === 'string') fields.concept = conceptOf(deckOfCard(id), fields.back);
+  const allowed = ['front', 'back', 'concept', 'example', 'note', 'keywords', 'reading', 'form', 'ipa', 'topic'].filter(
     (key) => fields[key] !== undefined,
   );
   if (!allowed.length) return false;
@@ -569,16 +659,65 @@ export function refileToFallback(allowed, fallback = 'everyday') {
   );
 }
 
-export function conceptFronts(deck) {
-  const map = new Map();
-  for (const row of all(
-    "SELECT concept, front FROM cards WHERE deck_id = ? AND deleted_at IS NULL AND concept != ''",
-    deck,
-  )) {
-    if (!map.has(row.concept)) map.set(row.concept, []);
-    map.get(row.concept).push(row.front);
+export const frontsOfDeck = (deck) =>
+  all('SELECT front FROM cards WHERE deck_id = ? AND deleted_at IS NULL', deck).map((row) => row.front);
+
+const deckMeta = new Map();
+
+function deckOf(id) {
+  if (deckMeta.has(id)) return deckMeta.get(id);
+  const row = get('SELECT native, target FROM decks WHERE id = ?', id);
+  const meta = row
+    ? { native: row.native, target: row.target, stop: frequentWords(row.native) }
+    : { native: '', target: '', stop: NO_STOP };
+  deckMeta.set(id, meta);
+  return meta;
+}
+
+const deckOfCard = (id) => get('SELECT deck_id FROM cards WHERE id = ?', id)?.deck_id ?? null;
+
+export function conceptOf(deck, text) {
+  const { native, stop } = deckOf(deck);
+  return conceptKey(text, { lang: native, stop });
+}
+
+const ABILITY = { theta: SEED, n: 0, label: '', bands: {}, updated_at: '' };
+
+export function abilityOf(deck) {
+  const row = get('SELECT theta, n, label, bands, updated_at FROM ability WHERE deck_id = ?', deck);
+  if (!row) return { ...ABILITY, bands: {} };
+  return {
+    theta: Number.isFinite(row.theta) ? row.theta : SEED,
+    n: Number(row.n) || 0,
+    label: String(row.label || ''),
+    bands: bandsOf(readBands(row.bands)),
+    updated_at: String(row.updated_at || ''),
+  };
+}
+
+function readBands(raw) {
+  try {
+    return JSON.parse(String(raw || '{}'));
+  } catch {
+    return {};
   }
-  return map;
+}
+
+export function saveAbility(deck, state) {
+  const theta = Number(state?.theta);
+  const answers = Number(state?.n);
+  return run(
+    `INSERT INTO ability (deck_id, theta, n, label, bands, updated_at) VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(deck_id) DO UPDATE SET
+       theta = excluded.theta, n = excluded.n, label = excluded.label, bands = excluded.bands,
+       updated_at = excluded.updated_at`,
+    deck,
+    Number.isFinite(theta) ? theta : SEED,
+    Number.isFinite(answers) && answers > 0 ? Math.floor(answers) : 0,
+    String(state?.label || ''),
+    JSON.stringify(bandsOf(state?.bands)),
+    new Date().toISOString(),
+  );
 }
 
 export const conceptsOfDeck = (deck) =>

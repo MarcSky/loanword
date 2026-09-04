@@ -9,6 +9,7 @@ import {
   appendJsonl,
   captureTargets,
   config,
+  countJsonl,
   fileSize,
   frequentWords,
   frontsFile,
@@ -141,6 +142,7 @@ function seenWords(target) {
   }
   return seen;
 }
+
 
 export function capturePrompt(event, cfg, meta) {
   const raw = scrub(stripFilenames(stripCode(event.prompt)));
@@ -282,7 +284,7 @@ async function main(source) {
       appendJsonl(queueFile(target), [row]);
       wrote = true;
     }
-    const queued = open.reduce((sum, target) => sum + readJsonl(queueFile(target)).length, 0);
+    const queued = open.reduce((sum, target) => sum + countJsonl(queueFile(target)), 0);
     if (cfg.autoBuild && queued >= AUTO_BUILD_THRESHOLD) buildInBackground();
   }
 }

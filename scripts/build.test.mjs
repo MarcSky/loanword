@@ -29,12 +29,11 @@ const {
   effortFor,
   running,
   STREAM_ARGS,
-  LEAN_ARGS,
+  ARGS,
   costOf,
   dedupe,
   repairPrompt,
   triage,
-  unknownFlag,
 } = await import('./build.mjs');
 const { lockFile, paths, progressFile, writeJson } = await import('./store.mjs');
 
@@ -59,6 +58,12 @@ test('the brief comes from the agent definition, without its frontmatter', () =>
   assert.match(text, /equivalent/);
   assert.match(text, /## Repair/);
   assert.match(text, /## Lexicographer/);
+  assert.match(text, /"form"/, 'the card carries the form the learner met');
+  assert.match(text, /"context"/, 'and the clause it was met in');
+  assert.match(text, /"ipa"/);
+  assert.match(text, /WINDOW/, 'and aims at the band the learner is in');
+  assert.match(text, /loanword/i);
+  assert.match(text, /zadeployit/, 'a target word in native letters is named as a candidate');
 });
 
 test('a role gets the shared sections and its own, never another role\'s', () => {
@@ -95,6 +100,14 @@ test('the prompt carries the batch and the language pair', () => {
   assert.match(prompt, /^## This batch/, 'the brief is the system prompt, not part of the batch');
   assert.doesNotMatch(prompt, /You are a lexicographer/);
   assert.match(prompt, /TOPICS = \(none yet\)/);
+  assert.match(prompt, /^LEVEL = \(no floor\)$/m, 'no floor and no estimate is what B1 used to mean');
+  assert.match(prompt, /^WINDOW = B1-B2$/m, 'the window is the band the learner is in and the one above');
+  assert.match(prompt, /^IPA = no$/m, 'the model writes a transcription only when eSpeak cannot');
+
+  const levelled = promptFor(records, { native: 'ru', target: 'en', levelLine: 'C1', window: ['C1', 'C2'], ipa: true });
+  assert.match(levelled, /^LEVEL = C1$/m);
+  assert.match(levelled, /^WINDOW = C1-C2$/m);
+  assert.match(levelled, /^IPA = yes$/m);
 
   const session = promptFor([{ source: 'session', words: Array.from({ length: 40 }, (_, i) => `w${i}`) }], { native: 'ru', target: 'en' });
   assert.match(session, /LIMIT = 40/, 'one session record with forty words is forty chances');
@@ -160,8 +173,9 @@ test('only an empty deck is worth making the user wait for', () => {
 
 
 
-const { build, buildOne, locked: lockedFor, queueSizes } = await import('./build.mjs');
-const { appendJsonl, config, queueFile, readJsonl, saveSettings } = await import('./store.mjs');
+const { build, buildOne, dropQueued, locked: lockedFor, queuePreview, queueSizes } = await import('./build.mjs');
+const { forgetTuning } = await import('./tune.mjs');
+const { appendJsonl, config, knownWords, queueFile, readJsonl, saveSettings } = await import('./store.mjs');
 const { chmodSync, mkdirSync } = await import('node:fs');
 const { join: joinPath } = await import('node:path');
 const db = await import('./db.mjs');
@@ -174,6 +188,7 @@ const fakeClaude = (script) => {
   writeFileSync(path, script);
   chmodSync(path, 0o755);
   process.env.PATH = `${BIN}:${process.env.PATH}`;
+  forgetTuning();
 };
 
 const record = (text) => ({ ts: '2026-09-01T00:00:00Z', project: '~/work/api', source: 'prompt', text });
@@ -316,7 +331,8 @@ test('the reply is read back from a stream, and from plain output when there is 
   assert.equal(replyText('[{"front":"plain"}]'), '[{"front":"plain"}]', 'plain output passes straight through');
 });
 
-test('an older command line falls back to a build without progress', () => {
+test('an older command line falls back to a build without progress', async () => {
+  const { unknownFlag } = await import('./tune.mjs');
   assert.equal(unknownFlag({ stderr: 'error: unknown option --include-partial-messages' }), true);
   assert.equal(unknownFlag({ stderr: 'rate limited' }), false);
   assert.equal(unknownFlag({}), false);
@@ -386,7 +402,7 @@ test('a reply is costed from the result event, and plain output costs nothing', 
   ].join('\n');
   assert.deepEqual(costOf(stream), { input: 273, cacheRead: 10, cacheWrite: 5, output: 200, thinking: 170, cost: 0.0123, ms: 4000 });
   assert.deepEqual(costOf('[{"front":"plain"}]'), { input: 0, cacheRead: 0, cacheWrite: 0, output: 0, thinking: 0, cost: 0, ms: 0 });
-  assert.ok(LEAN_ARGS.includes('--tools') && LEAN_ARGS.includes('--no-session-persistence'));
+  assert.ok(ARGS.lean.includes('--tools') && ARGS.lean.includes('--no-session-persistence'));
 });
 
 test('repeated prompts are sent once, and the copies are consumed with the original', () => {
@@ -464,14 +480,14 @@ printf '[{"n":0,"type":"phrase","front":"roll back the index","back":"откат
 
 test('an older command line that rejects the lean flags falls back to the old shape', async () => {
   writeFileSync(queueFile('en'), '');
-  appendJsonl(queueFile('en'), [record('перестроить индекс заново')]);
+  appendJsonl(queueFile('en'), [record('вынести это в отдельный сервис')]);
   rmSync(joinPath(DATA, 'argv-all.txt'), { force: true });
   fakeClaude(`#!/bin/sh
 printf '%s\\n' "$@" >> "${DATA}/argv-all.txt"
 printf -- '----\\n' >> "${DATA}/argv-all.txt"
 cat > /dev/null
 case " $* " in *" --tools "*) echo "error: unknown option '--tools'" >&2; exit 1 ;; esac
-printf '[{"n":0,"type":"phrase","front":"rebuild the index","back":"перестроить индекс","example":"We rebuild the index nightly.","cefr":"B1","category":"engineering"}]'
+printf '[{"n":0,"type":"phrase","front":"split out a service","back":"вынести сервис","example":"We split out a service for billing.","cefr":"B1","category":"engineering"}]'
 `);
   const result = await build({ target: 'en' });
   assert.deepEqual(result.failures, []);
@@ -653,4 +669,275 @@ esac
   assert.equal(left.length, 1);
   assert.equal(left[0].text, 'вторая партия падает');
   assert.equal(lockedFor('en'), false);
+});
+
+test('the preview lists what every language is about to spend a model call on', () => {
+  writeFileSync(queueFile('en'), '');
+  writeFileSync(queueFile('ka'), '');
+  const shared = record('давай откатим миграцию');
+  const heard = { ts: '2026-09-02T00:00:00Z', project: '~/work/api', source: 'session', lang: 'en', words: ['rollback', 'staging'] };
+  appendJsonl(queueFile('en'), [shared, shared, heard]);
+  appendJsonl(queueFile('ka'), [shared]);
+
+  const preview = queuePreview();
+  const english = preview.find((row) => row.target === 'en');
+  assert.equal(english.rows.length, 2, 'the same prompt twice is one row, as the build would dedupe it');
+  assert.equal(english.queued, 2);
+  assert.equal(english.rows[0].text, 'давай откатим миграцию');
+  assert.equal(english.rows[0].project, '~/work/api');
+  assert.equal(english.rows[1].text, 'rollback, staging', 'a heard word list reads as one line');
+  assert.equal(preview.find((row) => row.target === 'ka').rows.length, 1);
+});
+
+test('dropping one record clears it from every language, and its words go to the stop-list', () => {
+  const [prompt, heard] = queuePreview().find((row) => row.target === 'en').rows;
+
+  assert.deepEqual(dropQueued(prompt.key), { dropped: 3, stopped: 0 }, 'one click takes both copies and both queues');
+  assert.equal(readJsonl(queueFile('ka')).length, 0, 'the Georgian copy went with it');
+
+  assert.deepEqual(dropQueued([heard.key]), { dropped: 1, stopped: 2 });
+  assert.equal(readJsonl(queueFile('en')).length, 0);
+  assert.ok(knownWords('en').has('rollback'), 'a word thrown away is never captured again');
+  assert.ok(knownWords('en').has('staging'));
+
+  assert.deepEqual(dropQueued([]), { dropped: 0, stopped: 0 }, 'nothing asked for, nothing written');
+  assert.deepEqual(dropQueued(['not a key']), { dropped: 0, stopped: 0 });
+});
+
+test('every call carries a ceiling, and the lean flags collapse into --bare where the CLI has it', async () => {
+  const { ARGS: SHAPE_ARGS, MAX_CALL_USD, firstShape, forgetHelp, supportsFlag } = await import('./build.mjs');
+  assert.ok(SHAPE_ARGS.lean.includes('--max-budget-usd'));
+  assert.equal(SHAPE_ARGS.lean[SHAPE_ARGS.lean.indexOf('--max-budget-usd') + 1], String(MAX_CALL_USD));
+  assert.ok(SHAPE_ARGS.bare.includes('--max-budget-usd'), 'the ceiling is on every shape of the call');
+  assert.ok(SHAPE_ARGS.bare.includes('--bare'));
+  assert.ok(!SHAPE_ARGS.bare.includes('--mcp-config'), '--bare is what those three flags were for');
+
+  const { rememberTuning } = await import('./tune.mjs');
+  rmSync(paths.tuning, { force: true });
+  fakeClaude('#!/bin/sh\ncat > /dev/null\necho "  --tools <names>   restrict the tools"\n');
+  forgetHelp();
+  assert.equal(supportsFlag('--bare'), false);
+  assert.equal(firstShape(), 'lean', 'an older command line starts at the long shape');
+
+  fakeClaude('#!/bin/sh\ncat > /dev/null\necho "  --bare   minimal mode"\n');
+  forgetHelp();
+  assert.equal(supportsFlag('--bare'), true);
+  assert.equal(firstShape(), 'lean', 'a bare call reads no login, so a subscription never starts there');
+
+  const key = process.env.ANTHROPIC_API_KEY;
+  process.env.ANTHROPIC_API_KEY = 'sk-test';
+  assert.equal(firstShape(), 'bare', 'with a key in the environment the short call is the cheap one');
+
+  rememberTuning({ shape: 'plain' });
+  assert.equal(firstShape(), 'plain', 'and what worked last time wins over the probe');
+  if (key === undefined) delete process.env.ANTHROPIC_API_KEY;
+  else process.env.ANTHROPIC_API_KEY = key;
+  rmSync(paths.tuning, { force: true });
+  forgetHelp();
+});
+
+test('a shape that cannot carry the login is never remembered into the next build', async () => {
+  const { apiKeyed, firstShape, forgetHelp, shapeUsable } = await import('./build.mjs');
+  const { rememberTuning } = await import('./tune.mjs');
+  const key = process.env.ANTHROPIC_API_KEY;
+  delete process.env.ANTHROPIC_API_KEY;
+
+  assert.equal(apiKeyed({}), false);
+  assert.equal(apiKeyed({ ANTHROPIC_API_KEY: 'sk-test' }), true);
+  assert.equal(apiKeyed({ ANTHROPIC_AUTH_TOKEN: 'token' }), true, 'a gateway token is a key too');
+  assert.equal(shapeUsable('bare', {}), false);
+  assert.equal(shapeUsable('lean', {}), true, 'every other shape carries whatever login the runner has');
+
+  fakeClaude('#!/bin/sh\ncat > /dev/null\necho "  --bare   minimal mode"\n');
+  forgetHelp();
+  rememberTuning({ shape: 'bare' });
+  assert.equal(firstShape(), 'lean', 'a remembered bare is dropped when there is no key to go with it');
+
+  rmSync(paths.tuning, { force: true });
+  if (key !== undefined) process.env.ANTHROPIC_API_KEY = key;
+  forgetHelp();
+});
+
+test('the pronunciation is written on this machine when eSpeak is here, and asked for when it is not', async () => {
+  const { fillIpa } = await import('./build.mjs');
+  const speech = await import('./speech.mjs');
+  const before = process.env.PATH;
+
+  process.env.PATH = joinPath(DATA, 'nothing');
+  speech.forgetProviders();
+  const untouched = await fillIpa([{ front: 'roll back', ipa: '' }], 'en', { phonetics: 'auto' });
+  assert.equal(untouched[0].ipa, '', 'no eSpeak, nothing local to write it');
+
+  writeFileSync(joinPath(BIN, 'espeak-ng'), '#!/bin/sh\ncat > /dev/null\nprintf " ˈɹoʊl bæk\\n"\n');
+  chmodSync(joinPath(BIN, 'espeak-ng'), 0o755);
+  process.env.PATH = `${BIN}:${process.env.PATH}`;
+  speech.forgetProviders();
+  const filled = await fillIpa([{ front: 'roll back', ipa: '' }, { front: 'deadline', ipa: 'ˈdɛdlaɪn' }], 'en', {
+    phonetics: 'auto',
+  });
+  assert.equal(filled[0].ipa, 'ˈɹoʊl bæk');
+  assert.equal(filled[1].ipa, 'ˈdɛdlaɪn', 'a transcription the model already wrote is not asked for twice');
+
+  const off = await fillIpa([{ front: 'roll back', ipa: '' }], 'en', { phonetics: 'off' });
+  assert.equal(off[0].ipa, '', 'phonetics off spends nothing, local or otherwise');
+
+  process.env.PATH = before;
+  speech.forgetProviders();
+});
+
+test('a link or an address in a record left over from before is cleaned on the way out', async () => {
+  const { queuePreview } = await import('./build.mjs');
+  writeFileSync(queueFile('en'), '');
+  appendJsonl(queueFile('en'), [
+    {
+      ts: '2026-09-04T12:00:00Z',
+      project: '~/work/api',
+      source: 'prompt',
+      text: 'mira https://mlaccessible.medium.com/stemming-37d429da33ec y escribe a alguien@example.com',
+    },
+    { ts: '2026-09-04T13:00:00Z', source: 'session', lang: 'en', words: ['rollback', 'www.example.com'] },
+  ]);
+
+  const rows = queuePreview().find((row) => row.target === 'en').rows;
+  for (const row of rows) {
+    assert.doesNotMatch(row.text, /medium\.com|example\.com|https?:/, `the preview shows ${row.text}`);
+    assert.match(row.text, /▮/, 'and says something was taken out');
+  }
+
+  const prompt = promptFor(readJsonl(queueFile('en')), { native: 'ru', target: 'en' });
+  assert.doesNotMatch(prompt, /medium\.com|example\.com|https?:/, 'and the model is never sent the link either');
+  writeFileSync(queueFile('en'), '');
+});
+
+test('a build that fell over says why, and the next one clears the mark', async () => {
+  const { forgetFailure, queueSizes: sizes, readFailure } = await import('./build.mjs');
+  writeFileSync(queueFile('en'), '');
+  appendJsonl(queueFile('en'), [record('вынести это в отдельный сервис')]);
+  forgetFailure('en');
+
+  fakeClaude(`#!/bin/sh
+cat > /dev/null
+echo "Credit balance is too low" >&2
+exit 1
+`);
+  await assert.rejects(() => buildOne('en', {}));
+
+  const failure = readFailure('en');
+  assert.ok(failure, 'the reason outlives the process that hit it');
+  assert.match(failure.reason, /Credit balance is too low/);
+  assert.equal(failure.records, 1);
+  assert.ok(failure.ts);
+
+  const row = sizes().find((entry) => entry.target === 'en');
+  assert.match(row.failed, /Credit balance is too low/, 'and the trainer serves it beside the queue');
+  assert.equal(row.queued, 1, 'the records are still there to try again');
+
+  fakeClaude(`#!/bin/sh
+cat > /dev/null
+printf '[{"n":0,"type":"phrase","front":"split out a service","back":"вынести сервис","example":"We split out a service for billing.","cefr":"B1","category":"engineering"}]'
+`);
+  await buildOne('en', {});
+  assert.equal(readFailure('en'), null, 'a build that works forgets the last one that did not');
+  assert.equal(sizes().find((entry) => entry.target === 'en').failed, '');
+});
+
+test('a call that costs more than the ceiling is halved rather than abandoned', async () => {
+  const { forgetTuning, readTuning } = await import('./tune.mjs');
+  writeFileSync(queueFile('en'), '');
+  appendJsonl(queueFile('en'), Array.from({ length: 4 }, (_, i) => record(`слишком дорогая запись ${i}`)));
+  forgetTuning();
+  rmSync(joinPath(DATA, 'sizes.txt'), { force: true });
+
+  fakeClaude(`#!/bin/sh
+prompt=$(cat)
+n=$(printf '%s' "$prompt" | grep -c '"source":"prompt"')
+echo "$n" >> "${DATA}/sizes.txt"
+if [ "$n" -gt 2 ]; then
+  printf '{"type":"result","is_error":true,"subtype":"error_max_budget_usd","errors":["Reached maximum budget ($3)"]}\\n'
+  exit 1
+fi
+printf '[{"n":0,"type":"phrase","front":"too dear a call","back":"слишком дорого","example":"That was too dear a call to make twice.","cefr":"B1","category":"process"}]'
+`);
+
+  const result = await build({ target: 'en' });
+  assert.deepEqual(result.failures, [], 'the halves went through, so the batch did not fail');
+  assert.ok(result.added >= 1);
+  const sizes = readFileSync(joinPath(DATA, 'sizes.txt'), 'utf8').split('\n').filter(Boolean).map(Number);
+  assert.equal(sizes[0], 4, 'the first call carried the whole batch');
+  assert.ok(sizes.slice(1).every((size) => size <= 2), 'and the retry carried halves');
+  assert.equal(readTuning().records, 2, 'the smaller batch is remembered for next time');
+  forgetTuning();
+});
+
+test('a silent refusal walks down the ladder instead of stopping the build', async () => {
+  const { forgetTuning, readTuning } = await import('./tune.mjs');
+  writeFileSync(queueFile('en'), '');
+  appendJsonl(queueFile('en'), [record('тихий отказ командной строки')]);
+  forgetTuning();
+  rmSync(joinPath(DATA, 'shapes.txt'), { force: true });
+
+  fakeClaude(`#!/bin/sh
+case " $* " in
+  *" --system-prompt "*) echo refused >> "${DATA}/shapes.txt"; cat > /dev/null; exit 1 ;;
+esac
+echo accepted >> "${DATA}/shapes.txt"
+cat > /dev/null
+printf '[{"n":0,"type":"phrase","front":"walk it down","back":"спуститься по лестнице","example":"We walk it down one rung at a time.","cefr":"B2","category":"process"}]'
+`);
+
+  const result = await build({ target: 'en' });
+  assert.deepEqual(result.failures, [], 'a command line the runner refuses is not a build that failed');
+  assert.equal(result.added, 1);
+  const shapes = readFileSync(joinPath(DATA, 'shapes.txt'), 'utf8').split('\n').filter(Boolean);
+  assert.equal(shapes.at(-1), 'accepted');
+  assert.ok(shapes.length >= 2, 'it took at least one refused shape to get there');
+  assert.ok(['stream', 'plain'].includes(readTuning().shape), 'and the shape that works is remembered');
+  forgetTuning();
+});
+
+test('the reason a call stopped is read from the stream, where the runner writes it', async () => {
+  const { failureOf } = await import('./build.mjs');
+  const line = (fields) => JSON.stringify({ type: 'result', is_error: true, ...fields });
+
+  assert.deepEqual(failureOf(line({ subtype: 'error_max_budget_usd', errors: ['Reached maximum budget ($3)'] })), {
+    reason: 'Reached maximum budget ($3)',
+    subtype: 'error_max_budget_usd',
+  });
+  assert.equal(failureOf(line({ subtype: 'error', result: 'Not logged in · Please run /login' })).reason, 'Not logged in · Please run /login');
+  assert.equal(failureOf(line({ subtype: 'error_during_execution' })).reason, 'error_during_execution');
+  assert.deepEqual(failureOf('{"type":"result","is_error":false,"result":"[]"}'), { reason: '', subtype: '' });
+  assert.deepEqual(failureOf('not json at all'), { reason: '', subtype: '' });
+});
+
+test('a cause the learner has to fix stops the build and says what to do', async () => {
+  const { forgetTuning, readTuning } = await import('./tune.mjs');
+  const { readFailure } = await import('./build.mjs');
+  writeFileSync(queueFile('en'), '');
+  appendJsonl(queueFile('en'), [record('запись для вышедшего из аккаунта')]);
+  forgetTuning();
+  rmSync(joinPath(DATA, 'calls.txt'), { force: true });
+
+  fakeClaude(`#!/bin/sh
+cat > /dev/null
+echo call >> "${DATA}/calls.txt"
+printf '{"type":"result","is_error":true,"subtype":"error","result":"Not logged in · Please run /login"}\\n'
+exit 1
+`);
+
+  await assert.rejects(() => buildOne('en', {}));
+  assert.equal(calls(), 1, 'a runner that is signed out is not asked three more times');
+  const failure = readFailure('en');
+  assert.match(failure.reason, /Not logged in/);
+  assert.equal(failure.hint, 'login', 'and the interface is told which line to show');
+  assert.equal(readTuning().shape, '', 'nothing about the command line was to blame, so nothing is remembered');
+  forgetTuning();
+});
+
+test('every shape the tuner can name is one the runner knows how to build', async () => {
+  const { ARGS } = await import('./build.mjs');
+  const { SHAPES } = await import('./tune.mjs');
+  assert.deepEqual(Object.keys(ARGS).sort(), ['bare', 'lean'], 'only the two shapes that carry flags');
+  for (const shape of SHAPES) {
+    assert.ok(['bare', 'lean', 'stream', 'plain'].includes(shape), `${shape} has no call to build`);
+  }
 });

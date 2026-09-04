@@ -280,3 +280,28 @@ test('a deck is never copied onto itself, whichever way it is named', () => {
   assert.throws(() => planClone({ native: 'ru', from: 'ru>en', to: 'en' }), /onto itself/);
   assert.throws(() => planClone({ native: 'ru', from: 'ru>zz', to: 'sv' }), /no ru>zz deck/);
 });
+
+test('three wordings of one meaning cross as one record', () => {
+  const source = db.deckId('en', 'de');
+  db.tx(() =>
+    db.insertCards(
+      [
+        { deck_id: source, type: 'phrase', front: 'duplizierter Code', back: 'duplicated code', keywords: [], example: '', category: 'engineering', cefr: 'B2', created_at: '2026-01-01' },
+        { deck_id: source, type: 'phrase', front: 'doppelter Code', back: 'duplicate code', keywords: [], example: '', category: 'engineering', cefr: 'B2', created_at: '2026-01-02' },
+        { deck_id: source, type: 'phrase', front: 'Kopie des Codes', back: 'the duplicate code', keywords: [], example: '', category: 'engineering', cefr: 'B2', created_at: '2026-01-03' },
+        { deck_id: source, type: 'word', front: 'Duplikat', back: 'duplicate', keywords: [], example: '', category: 'engineering', cefr: 'B2', created_at: '2026-01-04' },
+      ],
+      ['dupdupdup1', 'dupdupdup2', 'dupdupdup3', 'dupdupdup4'],
+    ),
+  );
+
+  const wanted = selectForClone(db.cardsOfDeck(source), { native: 'en' });
+  assert.deepEqual(
+    wanted.map((card) => card.front),
+    ['duplizierter Code', 'Duplikat'],
+    'one card per meaning, and a different word is a different meaning',
+  );
+
+  const loose = selectForClone(db.cardsOfDeck(source), {});
+  assert.equal(loose.length, 3, 'with no language named, the prefix cannot see past the article');
+});

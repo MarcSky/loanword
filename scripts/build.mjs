@@ -1,16 +1,24 @@
 #!/usr/bin/env node
 
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { isUnspaced, trimToSentence } from './lang.mjs';
+import { levelFor, windowOf } from './level.mjs';
+import * as speech from './speech.mjs';
 import { EXAMPLE_WARNING, broken, budget, flat, reasonsOf, vet } from './lexis.mjs';
+import { MAX_CHARS } from './limits.mjs';
+import { scrub } from './scrub.mjs';
+import { SPLIT_FLOOR, WAIT_MS, hintFor, readTuning, rememberTuning, tuneFor } from './tune.mjs';
 import * as db from './db.mjs';
 import {
   adoptQueue,
   captureTargets,
   commit,
   config,
+  countJsonl,
+  dropFromQueue,
+  failedFile,
   enabledCategories,
   facing,
   frequentWords,
@@ -23,22 +31,24 @@ import {
   readJson,
   readJsonl,
   readingWanted,
+  recordKey,
   recordUsage,
+  saveKnownWords,
   sidedByRecord,
   writeJson,
   PLUGIN_ROOT,
 } from './store.mjs';
 
 export const BATCH_RECORDS = 20;
-export const BUILD_CONCURRENCY = Number(process.env.LOANWORD_BUILD_CONCURRENCY) || 3;
-export const MAX_RECORD_CHARS = 400;
-export const TOPICS_PER_CATEGORY = 30;
+const BUILD_CONCURRENCY = Number(process.env.LOANWORD_BUILD_CONCURRENCY) || 3;
+const MAX_RECORD_CHARS = 400;
+const TOPICS_PER_CATEGORY = 30;
 const FALLBACK_MODEL = 'sonnet';
 const BATCH_TIMEOUT_MS = 5 * 60_000;
 
 const STALE_LOCK_MS = 30 * 60_000;
 
-export const ROLES = {
+const ROLES = {
   prompt: 'lexicographer',
   session: 'lexicographer',
   clone: 'cloner',
@@ -57,7 +67,7 @@ const ROLE_HEADINGS = {
 
 export const roleOf = (record) => ROLES[record?.source] || 'lexicographer';
 
-export const EFFORT = { alphabet: 'low', filer: 'low', sentence: 'low' };
+const EFFORT = { alphabet: 'low', filer: 'low', sentence: 'low' };
 
 export const effortFor = (kind) => EFFORT[kind] || 'medium';
 
@@ -73,6 +83,8 @@ export function brief(role = '') {
     .join('')
     .trim();
 }
+
+const TUNING_TRIES = 4;
 
 export const chunk = (rows, size) =>
   Array.from({ length: Math.ceil(rows.length / size) }, (_, i) => rows.slice(i * size, i * size + size));
@@ -97,7 +109,7 @@ export function dedupe(queue) {
   return { unique, twins, skipped };
 }
 
-export function groupByRole(rows) {
+function groupByRole(rows) {
   const groups = new Map();
   for (const row of rows) {
     const role = roleOf(row);
@@ -122,9 +134,9 @@ export function topicLines(topics = []) {
 function recordLine(row, index) {
   const { n, ...rest } = row;
   const out = { n: Number.isInteger(n) ? n : index, ...rest };
-  if (typeof out.text === 'string' && out.text.length > MAX_RECORD_CHARS) {
-    out.text = trimToSentence(out.text, MAX_RECORD_CHARS);
-  }
+  if (typeof out.text === 'string') out.text = trimToSentence(scrub(out.text), MAX_RECORD_CHARS);
+  if (typeof out.example === 'string') out.example = scrub(out.example);
+  if (Array.isArray(out.words)) out.words = out.words.map((word) => scrub(String(word)));
   return JSON.stringify(out);
 }
 
@@ -136,7 +148,9 @@ export function promptFor(records, cfg) {
     `TARGET = ${cfg.target}`,
     `CATEGORIES = ${enabledCategories(cfg).join(', ')}`,
     `LIMIT = ${budget(records)}`,
-    `LEVEL = ${cfg.level || '(no floor)'}`,
+    `LEVEL = ${cfg.levelLine || cfg.level || '(no floor)'}`,
+    `WINDOW = ${(cfg.window || windowOf(cfg.levelLine || cfg.level || '')).join('-')}`,
+    `IPA = ${cfg.ipa ? 'yes' : 'no'}`,
     `READING = ${readingWanted(cfg.native, cfg.target) ? 'yes' : 'no'}`,
     `UNSPACED = ${isUnspaced(cfg.target) ? 'yes' : 'no'}`,
     ...topicLines(cfg.topics),
@@ -184,18 +198,53 @@ export const parseCards = jsonArray;
 
 export const STREAM_ARGS = ['--output-format', 'stream-json', '--include-partial-messages', '--verbose'];
 
-export const LEAN_ARGS = [
-  '--tools',
-  '',
-  '--no-session-persistence',
-  '--max-turns',
-  '1',
-  '--setting-sources',
-  '',
-  '--strict-mcp-config',
-  '--mcp-config',
-  '{"mcpServers":{}}',
-];
+export const MAX_CALL_USD = Number(process.env.LOANWORD_MAX_CALL_USD) || 3;
+
+export const ARGS = {
+  bare: [
+    '--tools',
+    '',
+    '--no-session-persistence',
+    '--max-turns',
+    '1',
+    '--bare',
+    '--max-budget-usd',
+    String(MAX_CALL_USD),
+  ],
+  lean: [
+    '--tools',
+    '',
+    '--no-session-persistence',
+    '--max-turns',
+    '1',
+    '--setting-sources',
+    '',
+    '--strict-mcp-config',
+    '--mcp-config',
+    '{"mcpServers":{}}',
+    '--max-budget-usd',
+    String(MAX_CALL_USD),
+  ],
+};
+
+let helpText = null;
+
+function claudeHelp() {
+  if (helpText !== null) return helpText;
+  try {
+    const out = spawnSync('claude', ['--help'], { encoding: 'utf8', timeout: 10_000 });
+    helpText = `${out.stdout || ''}${out.stderr || ''}`;
+  } catch {
+    helpText = '';
+  }
+  return helpText;
+}
+
+export const forgetHelp = () => {
+  helpText = null;
+};
+
+export const supportsFlag = (flag) => claudeHelp().includes(flag);
 
 export const cardsSoFar = (text) => (String(text).match(/"front"\s*:/g) || []).length;
 
@@ -235,6 +284,17 @@ export function replyText(out) {
 }
 
 const NO_COST = { input: 0, cacheRead: 0, cacheWrite: 0, output: 0, thinking: 0, cost: 0, ms: 0 };
+
+export function failureOf(out) {
+  for (const line of String(out).split('\n')) {
+    const event = eventOf(line);
+    if (event?.type !== 'result' || !event.is_error) continue;
+    const named = Array.isArray(event.errors) ? event.errors.find((row) => typeof row === 'string') : '';
+    const subtype = String(event.subtype || '');
+    return { reason: named || (typeof event.result === 'string' ? event.result : '') || subtype, subtype };
+  }
+  return { reason: '', subtype: '' };
+}
 
 export function costOf(out) {
   for (const line of String(out).split('\n')) {
@@ -283,7 +343,11 @@ function run(args, prompt, onText) {
     child.on('close', (code) => {
       clearTimeout(timer);
       if (code === 0) return resolve(out);
-      const error = new Error(`claude exited ${code}: ${err.trim().slice(0, 200)}`);
+      const failure = failureOf(out);
+      const reason = failure.reason || err.trim();
+      const error = new Error(reason ? `claude stopped: ${reason.slice(0, 200)}` : `claude exited ${code} without a word`);
+      error.reason = reason;
+      error.subtype = failure.subtype;
       error.stderr = err;
       reject(error);
     });
@@ -291,7 +355,17 @@ function run(args, prompt, onText) {
   });
 }
 
-export const unknownFlag = (error) => /unknown (option|argument)|unrecognized|--include-partial-messages/i.test(error?.stderr || '');
+export const apiKeyed = (env = process.env) => !!(env.ANTHROPIC_API_KEY || env.ANTHROPIC_AUTH_TOKEN);
+
+export const shapeUsable = (shape, env = process.env) => shape !== 'bare' || apiKeyed(env);
+
+export const firstShape = () => {
+  const remembered = readTuning().shape;
+  if (remembered && shapeUsable(remembered)) return remembered;
+  return apiKeyed() && supportsFlag('--bare') ? 'bare' : 'lean';
+};
+
+export const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export const modelFor = (cfg = config()) => (MODELS.includes(cfg.model) ? cfg.model : FALLBACK_MODEL);
 
@@ -309,29 +383,40 @@ export async function askFull(prompt, onCards = () => {}, { model = modelFor(), 
     onCards(cards);
   };
 
-  const attempts = [
-    {
-      args: [...base, ...LEAN_ARGS, '--effort', effort, ...(system ? ['--system-prompt', system] : []), ...STREAM_ARGS],
+  const callFor = (shape) => {
+    if (shape === 'plain') return { args: [...base], stdin: joined, onText: () => {} };
+    if (shape === 'stream') return { args: [...base, ...STREAM_ARGS], stdin: joined, onText: watch };
+    return {
+      args: [...base, ...ARGS[shape], '--effort', effort, ...(system ? ['--system-prompt', system] : []), ...STREAM_ARGS],
       stdin: prompt,
       onText: watch,
-    },
-    { args: [...base, ...STREAM_ARGS], stdin: joined, onText: watch },
-    { args: base, stdin: joined, onText: () => {} },
-  ];
-  const notes = [
-    'the lexicographer does not take the lean flags on this version; building with the full context',
-    'the lexicographer does not stream on this version; building without progress',
-  ];
+    };
+  };
 
-  for (const [index, attempt] of attempts.entries()) {
+  let shape = firstShape();
+  let waited = false;
+  for (let tries = 0; tries < TUNING_TRIES; tries++) {
+    const call = callFor(shape);
     try {
-      const out = await run(attempt.args, attempt.stdin, attempt.onText);
+      const out = await run(call.args, call.stdin, call.onText);
       return { text: replyText(out), usage: costOf(out) };
     } catch (error) {
-      if (index === attempts.length - 1 || !unknownFlag(error)) throw error;
-      log(notes[index]);
+      const tuned = tuneFor(error, shape);
+      if (tuned.change === 'wait' && !waited) {
+        waited = true;
+        log(tuned.note);
+        await sleep(WAIT_MS);
+        continue;
+      }
+      if (tuned.change !== 'shape') throw error;
+      log(tuned.note);
+      shape = tuned.shape;
+      rememberTuning({ shape });
+      text = '';
+      counted = 0;
     }
   }
+  throw new Error('claude refused every shape of the command line');
 }
 
 export async function ask(prompt, onCards = () => {}, options = {}) {
@@ -396,12 +481,39 @@ async function repaired(first, records, pair, stopWords, { model, system, target
   return { kept, rejected, repaired: fixed.length };
 }
 
+export async function fillIpa(cards, target, cfg = config()) {
+  if (cfg.phonetics === 'off' || !speech.ipaAvailable()) return cards;
+  for (const card of cards) {
+    if (card.ipa) continue;
+    card.ipa = await speech.ipaOf(card.front, target);
+  }
+  return cards;
+}
+
 async function buildBatch({ role, records, pair, model, stopWords, target, onCards }) {
   const system = brief(role);
   const effort = effortFor(role);
-  const { text, usage } = await askFull(promptFor(records, pair), onCards, { model, system, effort });
-  const raw = parseCards(text);
-  recordUsage({ kind: role, model, effort, target, records: records.length, cards: raw.length, ...usage });
+  let answer;
+  try {
+    answer = await askFull(promptFor(records, pair), onCards, { model, system, effort });
+  } catch (error) {
+    const tuned = tuneFor(error);
+    if (tuned.change !== 'split' || records.length < SPLIT_FLOOR) throw error;
+    log(`${tuned.note} (${records.length} records)`);
+    rememberTuning({ records: Math.ceil(records.length / 2) });
+    const halves = [records.slice(0, Math.ceil(records.length / 2)), records.slice(Math.ceil(records.length / 2))];
+    const built = [];
+    for (const half of halves) {
+      built.push(await buildBatch({ role, records: half, pair, model, stopWords, target, onCards }));
+    }
+    return {
+      kept: built.flatMap((run) => run.kept),
+      rejected: built.reduce((sum, run) => sum + run.rejected, 0),
+      repaired: built.reduce((sum, run) => sum + run.repaired, 0),
+    };
+  }
+  const raw = parseCards(answer.text);
+  recordUsage({ kind: role, model, effort, target, records: records.length, cards: raw.length, ...answer.usage });
   const first = triage(raw, records, pair, stopWords);
   return repaired(first, records, pair, stopWords, { model, system, target });
 }
@@ -459,28 +571,93 @@ function buildTargets(cfg = config()) {
 
 export const readProgress = (target) => progressIn(progressFile(target));
 
+export const readFailure = (target) => {
+  const failure = readJson(failedFile(target), null);
+  return failure && typeof failure.reason === 'string' ? failure : null;
+};
+
+function rememberFailure(target, reason, records) {
+  writeJson(failedFile(target), {
+    target,
+    reason: String(reason || '').slice(0, MAX_CHARS.failure),
+    hint: hintFor(reason),
+    records,
+    ts: new Date().toISOString(),
+  });
+}
+
+export const forgetFailure = (target) => rmSync(failedFile(target), { force: true });
+
 export function queueSizes(cfg = config()) {
   return buildTargets(cfg).map((target) => {
     const building = locked(target);
     const progress = building ? readProgress(target) : null;
+    const failure = building ? null : readFailure(target);
     return {
       target,
-      queued: readJsonl(queueFile(target)).length,
+      queued: countJsonl(queueFile(target)),
       building,
       done: progress ? Math.min(progress.done, progress.total) : 0,
       total: progress ? progress.total : 0,
       batch: progress ? progress.batch || 0 : 0,
       batches: progress ? progress.batches || 0 : 0,
       startedAt: progress ? progress.startedAt : '',
+      failed: failure ? failure.reason : '',
+      hint: failure ? failure.hint || '' : '',
     };
   });
 }
 
-export function batchesOf(queue) {
+const previewText = (row) => {
+  if (typeof row.text === 'string' && row.text.trim()) return scrub(row.text).trim();
+  if (Array.isArray(row.words)) return scrub(row.words.filter((word) => typeof word === 'string').join(', '));
+  if (Array.isArray(row.letters)) return row.letters.filter((letter) => typeof letter === 'string').join(' ');
+  return '';
+};
+
+export function queuePreview(cfg = config()) {
+  return buildTargets(cfg).map((target) => {
+    const seen = new Set();
+    const rows = [];
+    for (const row of readJsonl(queueFile(target))) {
+      const key = recordKey(row);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      rows.push({
+        key,
+        source: String(row.source || 'prompt'),
+        ts: String(row.ts || ''),
+        project: String(row.project || ''),
+        text: previewText(row),
+      });
+    }
+    return { target, rows, queued: rows.length };
+  });
+}
+
+export function dropQueued(keys, cfg = config()) {
+  const wanted = new Set((Array.isArray(keys) ? keys : [keys]).filter((key) => typeof key === 'string'));
+  if (!wanted.size) return { dropped: 0, stopped: 0 };
+  let dropped = 0;
+  let stopped = 0;
+  for (const target of buildTargets(cfg)) {
+    const gone = readJsonl(queueFile(target)).filter((row) => wanted.has(recordKey(row)));
+    if (!gone.length) continue;
+    dropped += dropFromQueue(queueFile(target), gone);
+    const words = gone.flatMap((row) => (Array.isArray(row.words) ? row.words : []));
+    if (words.length) {
+      saveKnownWords(target, words);
+      stopped += words.length;
+    }
+  }
+  return { dropped, stopped };
+}
+
+function batchesOf(queue, size = readTuning().records || BATCH_RECORDS) {
   const { unique, twins } = dedupe(queue);
   const batches = [];
   for (const [role, rows] of groupByRole(unique)) {
-    for (const records of chunk(rows, BATCH_RECORDS)) {
+    for (const records of chunk(rows, Math.max(1, Math.min(size, BATCH_RECORDS)))) {
       batches.push({
         role,
         records: records.map((row, n) => ({ ...row, n })),
@@ -503,12 +680,16 @@ export async function buildOne(target, { onBatch = () => {}, cfg = config() } = 
   }
 
   writeFileSync(lockFile(target), String(process.pid));
+  forgetFailure(target);
   const startedAt = new Date().toISOString();
   const batches = batchesOf(queue);
   const model = modelFor(cfg);
   const stopWords = frequentWords(target);
   const deck = db.deckIdIfAny(cfg.native, target);
   pair.topics = deck === null ? [] : db.topicsOf(deck);
+  pair.levelLine = levelFor(cfg, deck === null ? null : db.abilityOf(deck));
+  pair.window = windowOf(pair.levelLine);
+  pair.ipa = cfg.phonetics !== 'off' && !speech.ipaAvailable();
 
   let done = 0;
   let started = 0;
@@ -531,7 +712,8 @@ export async function buildOne(target, { onBatch = () => {}, cfg = config() } = 
       onBatch(index + 1, batches.length, target);
       try {
         const built = await buildBatch({ role, records, pair, model, stopWords, target, onCards: (n) => report(n) });
-        const result = commit(built.kept, { native: cfg.native, target, records: [...records, ...extras] });
+        const kept = await fillIpa(built.kept, target, cfg);
+        const result = commit(kept, { native: cfg.native, target, records: [...records, ...extras] });
         totals.added += result.added;
         totals.rewritten += result.rewritten;
         totals.dropped += result.dropped;
@@ -550,6 +732,7 @@ export async function buildOne(target, { onBatch = () => {}, cfg = config() } = 
     const summary = { target, records: queue.length, batches: batches.length, ...totals, cards: undefined };
     log(`build ${JSON.stringify(summary)}`);
     if (failures.length) {
+      rememberFailure(target, failures[0], queue.length);
       const error = new Error(failures.join('; '));
       error.result = { ...totals, target, batches: batches.length };
       throw error;
@@ -611,7 +794,7 @@ export function runDetached(moduleUrl) {
 export function buildInBackground() {
   const cfg = config();
   const targets = buildTargets(cfg);
-  const records = targets.reduce((sum, target) => sum + readJsonl(queueFile(target)).length, 0);
+  const records = targets.reduce((sum, target) => sum + countJsonl(queueFile(target)), 0);
   if (!records) return false;
   if (targets.every((target) => locked(target))) return false;
   log(`build requested for ${records} record(s)`);

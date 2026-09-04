@@ -83,6 +83,10 @@ export const app = {
   sync: null,
   export: null,
   duplicates: null,
+  queue: null,
+  offline: false,
+  ability: null,
+  startingPolls: 0,
   chapter: null,
   dropping: null,
   opened: null,
@@ -95,7 +99,7 @@ export const app = {
 };
 
 export const $ = (selector, root = document) => root.querySelector(selector);
-export const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
+const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 
 export const esc = (value) =>
   String(value ?? '').replace(/[&<>"']/g, (c) => ({
@@ -199,6 +203,34 @@ export const weekdayName = (index, style = 'short') => {
   }
 };
 
+const RECONNECT_MS = 3000;
+
+export function offline() {
+  if (app.offline) return;
+  app.offline = true;
+  const main = $('#main');
+  if (main) {
+    main.innerHTML = `<div class="page" data-active>${emptyState({
+      art: {
+        src: 'offline-error.webp',
+        alt: 'Flat line illustration: a laptop with its cable unplugged, a person leaning in to look; thin black outline, blue and beige fills, white background, no text',
+      },
+      title: t('The trainer is not running'),
+      body: t('Start it with <code>loanword</code> in a terminal, or <code>/loanword:start</code> in Claude Code. This page reconnects on its own.'),
+    })}</div>`;
+  }
+  const again = setInterval(async () => {
+    try {
+      const reply = await fetch('/state', { cache: 'no-store' });
+      if (reply.ok) {
+        clearInterval(again);
+        location.reload();
+      }
+    } catch {}
+  }, RECONNECT_MS);
+  return again;
+}
+
 export async function api(path, payload) {
   const options = payload
     ? {
@@ -207,7 +239,13 @@ export async function api(path, payload) {
         body: JSON.stringify(payload),
       }
     : {};
-  const response = await fetch(path, options);
+  let response;
+  try {
+    response = await fetch(path, options);
+  } catch {
+    offline();
+    throw new Error(t('The trainer is not running'));
+  }
   if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || response.statusText);
   return response.json();
 }
@@ -233,6 +271,7 @@ export async function load() {
   app.peekMatches = state.peekMatches ?? 0;
   app.alphabet = state.alphabet || null;
   app.starter = state.starter || null;
+  app.ability = state.ability || null;
   app.loaded = true;
   applyTheme(app.config.theme);
 }
@@ -324,6 +363,8 @@ export function weekDots(weekly, { big = false } = {}) {
       .join('')}
   </span>`;
 }
+
+export const isDark = () => document.documentElement.dataset.theme === 'dark';
 
 export function applyTheme(theme) {
   const dark =

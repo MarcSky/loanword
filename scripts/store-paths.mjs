@@ -1,4 +1,4 @@
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -52,6 +52,7 @@ export const paths = {
   db: join(DATA, 'loanword.db'),
   pending: join(DATA, 'pending'),
   peekState: join(DATA, 'peek.json'),
+  tuning: join(DATA, 'tuning.json'),
   backups: join(DATA, 'backup'),
   audio: join(DATA, 'audio'),
   exportCsv: join(DATA, 'export', 'loanword.csv'),
@@ -64,10 +65,22 @@ export const LEECH_LAPSES = 6;
 export const queueFile = (target) => join(DATA, `queue.${safe(target)}.jsonl`);
 export const lockFile = (target) => join(DATA, `build.${safe(target)}.lock`);
 export const progressFile = (target) => join(DATA, `build.${safe(target)}.progress`);
+export const failedFile = (target) => join(DATA, `build.${safe(target)}.failed`);
 export const knownFile = (target) => join(DATA, `known.${safe(target)}.txt`);
 export const frontsFile = (target) => join(DATA, `fronts.${safe(target)}.txt`);
 export const wildFile = (target) => join(DATA, `wild.${safe(target)}.jsonl`);
 export const peekFile = (target) => join(DATA, `peek.${safe(target)}.jsonl`);
+
+export function frequentWords(language) {
+  const file = join(PLUGIN_ROOT, 'data', 'freq', `${String(language || '').toLowerCase().slice(0, 2)}.txt`);
+  if (!existsSync(file)) return new Set();
+  return new Set(
+    readFileSync(file, 'utf8')
+      .split('\n')
+      .map((word) => word.trim().toLowerCase())
+      .filter(Boolean),
+  );
+}
 
 export { ALL_CATEGORIES as CATEGORIES } from './categories.mjs';
 

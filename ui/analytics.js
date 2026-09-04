@@ -1,3 +1,4 @@
+import { MIN_ANSWERS } from './level.js';
 import {
   $,
   ACTIONS,
@@ -87,7 +88,7 @@ export function query({ range = true } = {}) {
   return params.toString();
 }
 
-const FULL_HISTORY = new Set(['calendar', 'forecast', 'memory', 'retention', 'categories', 'cefr', 'hardest']);
+const FULL_HISTORY = new Set(['calendar', 'forecast', 'memory', 'retention', 'categories', 'cefr', 'hardest', 'level']);
 
 const REPORTS = [
   'summary',
@@ -101,6 +102,7 @@ const REPORTS = [
   'grades',
   'hardest',
   'sessions',
+  'level',
 ];
 
 export async function loadAnalytics() {
@@ -274,6 +276,16 @@ function demoData() {
         duration_ms: [10, 15, 5, 10, 10, 15, 5, 10][index] * 60_000,
         accuracy: [0.88, 0.85, 0.9, 0.85, 0.89, 0.88, 0.79, 0.88][index],
       })),
+    },
+    level: {
+      points: Array.from({ length: 12 }, (_, index) => ({
+        day: dayString(-11 + index),
+        theta: Number((-0.5 + index * 0.09).toFixed(4)),
+        band: index < 7 ? 'B1' : 'B2',
+        n: (index + 1) * 9,
+      })),
+      current: { band: 'B2', theta: 0.49, n: 108, min: MIN_ANSWERS, ceiling: 'B2', confident: true },
+      floor: '',
     },
   };
 }
@@ -666,6 +678,38 @@ function forecastChart(forecast) {
   });
 }
 
+const BAND_SPAN = 6;
+
+function levelChart(level) {
+  const points = (level?.points || []).map((point) => ({
+    ...point,
+    tip: tipRows(point.day, [
+      [t('Level'), point.band || '—'],
+      [t('Answers'), point.n],
+    ]),
+  }));
+
+  return chart('level', {
+    title: t('Your level over time'),
+    note: level?.current?.confident
+      ? t('estimated from {n} answers', { n: level.current.n })
+      : t('{n} of {min} answers to estimate', { n: level?.current?.n || 0, min: level?.current?.min || MIN_ANSWERS }),
+    span: 6,
+    aria: t('the estimated level after every graded answer'),
+    body: line(points, {
+      xOf: (point) => point.n,
+      yOf: (point) => Math.min(1, Math.max(0, (point.theta + 3) / BAND_SPAN)),
+      height: 160,
+      xLabel: t('answers'),
+      yTicks: LEVELS.map((band, index) => ({ at: (index + 0.5) / LEVELS.length, label: band })),
+    }),
+    table: table(
+      [t('Day'), t('Level'), t('Answers')],
+      points.slice(-12).map((point) => [point.day, point.band || '—', String(point.n)]),
+    ),
+  });
+}
+
 function retentionChart(retention) {
   const curve = retention.curve.map((point) => ({
     ...point,
@@ -842,6 +886,7 @@ function renderAnalytics() {
       ${wildChart(data.activity)}
       ${hardestChart(data.hardest.rows)}
       ${sessionsChart(data.sessions.rows)}
+      ${levelChart(data.level)}
     </div>`;
 }
 

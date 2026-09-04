@@ -1,6 +1,23 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { broken, budget, keywordsIn, reasonsOf, vet, wordCount, words, writtenIn } from './lexis.mjs';
+import {
+  FORM_WARNING,
+  IPA_WARNING,
+  anchorLevel,
+  anchorList,
+  broken,
+  budget,
+  keepContext,
+  keepForm,
+  keepIpa,
+  keywordsIn,
+  reasonsOf,
+  vet,
+  wordCount,
+  words,
+  writtenIn,
+} from './lexis.mjs';
+import { MAX_CHARS } from './limits.mjs';
 
 const enKa = { native: 'en', target: 'ka' };
 const ruEn = { native: 'ru', target: 'en' };
@@ -159,4 +176,59 @@ test('a short back in a script with combining marks is not mistaken for a defini
   assert.deepEqual(vet({ front: 'validation', back: 'डेटा सत्यापन' }, { native: 'hi', target: 'en' }).repair, []);
   assert.deepEqual(vet({ front: 'validation', back: 'การตรวจสอบข้อมูล' }, { native: 'th', target: 'en' }).repair, []);
   assert.deepEqual(vet({ front: 'validation', back: 'التحقُّق من البيانات' }, { native: 'ar', target: 'en' }).repair, []);
+});
+
+test('the met form is kept only when it is really in the context beside it', () => {
+  assert.equal(keepForm({ form: 'Откатили', context: 'мы уже откатили миграцию' }), 'Откатили', 'case is noise');
+  assert.equal(keepForm({ form: 'rolled  back', context: 'we rolled back the migration' }), 'rolled  back');
+  assert.equal(keepForm({ form: 'rolled', context: 'we deploy tonight' }), '', 'a form nobody met is no form');
+  assert.equal(keepForm({ form: '', context: 'anything' }), '');
+  assert.equal(keepForm({ form: 'rolled' }), '', 'no context, nothing to check it against');
+});
+
+test('the context is the record clause, verbatim, or it is dropped', () => {
+  const record = { text: 'давай откатим миграцию, она положила стейджинг' };
+  assert.equal(keepContext({ context: 'давай откатим миграцию' }, record), 'давай откатим миграцию');
+  assert.equal(keepContext({ context: 'ДАВАЙ  ОТКАТИМ МИГРАЦИЮ' }, record), 'ДАВАЙ  ОТКАТИМ МИГРАЦИЮ');
+  assert.equal(keepContext({ context: 'We deploy tonight' }, record), '', 'a rewritten clause is not the record');
+  assert.equal(keepContext({ context: 'x'.repeat(MAX_CHARS.context + 1) }, { text: 'x'.repeat(400) }), '');
+  assert.equal(keepContext({ context: 'anything' }, null), '', 'a session record has no text to quote');
+});
+
+test('a pronunciation is kept only when it is written in IPA', () => {
+  for (const ipa of ['ˈɹoʊl bæk', 'dɪˈplɔɪ', '(ə)', 'ˈθʌɹə', 'dupliˈkaːt']) {
+    assert.equal(keepIpa({ ipa }), ipa);
+  }
+  for (const junk of ['/roll back/', 'откатить', 'ダウン', '[roll]', 'ˈɹoʊl!']) {
+    assert.equal(keepIpa({ ipa: junk }), '', `${junk} is not IPA`);
+  }
+  assert.equal(keepIpa({ ipa: 'ə'.repeat(MAX_CHARS.ipa + 1) }), '', 'a paragraph is not a transcription');
+  assert.equal(keepIpa({}), '');
+});
+
+test('a broken form or pronunciation is a warning, never a model call', () => {
+  const pair = { native: 'ru', target: 'en' };
+  const card = {
+    front: 'roll back',
+    back: 'откатить',
+    example: 'We roll back the migration tonight.',
+    form: 'rolled back',
+    context: 'we deploy tonight',
+    ipa: '/roll back/',
+  };
+  const issues = vet(card, pair, {});
+  assert.equal(issues.reject, '', 'the card itself is sound');
+  assert.deepEqual(issues.repair, [], 'a bad transcription is not worth a repair call');
+  assert.ok(issues.warn.includes(FORM_WARNING));
+  assert.ok(issues.warn.includes(IPA_WARNING));
+});
+
+test('an English word card takes its level from the graded list, a phrase keeps the model’s', () => {
+  assert.equal(anchorLevel('duplicate', 'en'), 'B2');
+  assert.equal(anchorLevel('the', 'en'), 'A1');
+  assert.equal(anchorLevel('xyzzy', 'en'), '', 'an unlisted lemma leaves the builder’s label alone');
+  assert.equal(anchorLevel('roll back', 'en'), '', 'the list holds lemmas, never phrases');
+  assert.equal(anchorLevel('duplicate', 'ka'), '', 'only English ships a list');
+  assert.ok(anchorList('en').size > 8000);
+  assert.equal(anchorList('ka').size, 0);
 });

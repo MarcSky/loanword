@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, statSync } from 'node:fs';
 import { delimiter, join } from 'node:path';
 import { DATA, paths } from './store-paths.mjs';
+import { MAX_CHARS } from './limits.mjs';
 import { codeOf } from './languages.mjs';
 
 export const PIPER_VOICES = {
@@ -105,6 +106,38 @@ export function providerFor(lang) {
   if (sayVoiceFor(code)) return 'say';
   if (onPath('espeak-ng')) return 'espeak-ng';
   return null;
+}
+
+export const ipaAvailable = () => !!onPath('espeak-ng');
+
+const IPA_TIMEOUT_MS = 5_000;
+
+function readProvider(command, args, input, timeout = IPA_TIMEOUT_MS) {
+  return new Promise((resolve) => {
+    const child = spawn(command, args, { stdio: ['pipe', 'pipe', 'ignore'] });
+    let out = '';
+    const timer = setTimeout(() => {
+      child.kill('SIGKILL');
+      resolve('');
+    }, timeout);
+    child.stdout.on('data', (chunk) => (out += chunk));
+    child.on('error', () => {
+      clearTimeout(timer);
+      resolve('');
+    });
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      resolve(code === 0 ? out : '');
+    });
+    child.stdin.end(input);
+  });
+}
+
+export async function ipaOf(text, lang) {
+  const clean = String(text || '').trim().slice(0, MAX_TEXT);
+  if (!clean || !ipaAvailable()) return '';
+  const out = await readProvider('espeak-ng', ['-q', '--ipa', '-v', codeOf(lang), '--stdin'], clean);
+  return out.replace(/\s+/g, ' ').trim().slice(0, MAX_CHARS.ipa);
 }
 
 export function warm(targets = []) {

@@ -111,3 +111,20 @@ test('the providers are looked up once, at start-up, never inside a request', ()
 test.after(() => {
   rmSync(DATA, { recursive: true, force: true });
 });
+
+test('eSpeak NG writes the pronunciation when it is on the machine, and nothing when it is not', async () => {
+  withPath(NO_PATH);
+  assert.equal(speech.ipaAvailable(), false);
+  assert.equal(await speech.ipaOf('roll back', 'en'), '', 'no eSpeak, no transcription');
+
+  fakeBinary('espeak-ng', '#!/bin/sh\ncat > /dev/null\nprintf " ˈɹoʊl bæk\\n"\n');
+  withPath(`${BIN}:${NO_PATH}`);
+  assert.equal(speech.ipaAvailable(), true);
+  assert.equal(await speech.ipaOf('roll back', 'en'), 'ˈɹoʊl bæk', 'the line is trimmed, never the phonemes');
+  assert.equal(await speech.ipaOf('', 'en'), '', 'nothing to say, nothing to spend');
+
+  fakeBinary('espeak-ng', '#!/bin/sh\ncat > /dev/null\nexit 1\n');
+  withPath(`${BIN}:${NO_PATH}`);
+  assert.equal(await speech.ipaOf('roll back', 'en'), '', 'a provider that fell over returns no guess');
+  withPath(NO_PATH);
+});

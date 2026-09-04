@@ -342,7 +342,7 @@ export function area(points, { height = 190, limit = null, keys = [] } = {}) {
   </svg>`;
 }
 
-export function line(points, { height = 190, xOf, yOf, color = 'var(--accent)', xLabel, xTicks = [] } = {}) {
+export function line(points, { height = 190, xOf, yOf, color = 'var(--accent)', xLabel, xTicks = [], yTicks = null } = {}) {
   if (points.length < 2) return '';
   const top = 10;
   const floor = height - 26;
@@ -366,12 +366,16 @@ export function line(points, { height = 190, xOf, yOf, color = 'var(--accent)', 
     )
     .join('');
 
+  const levels = yTicks || [0.25, 0.5, 0.75, 1].map((at) => ({ at, label: '' }));
+  const named = yTicks || [0.5, 1].map((at) => ({ at, label: `${Math.round(at * 100)}%` }));
+
   return `<svg viewBox="0 0 ${W} ${height}">
-    ${[0.25, 0.5, 0.75, 1]
-      .map((level) => `<line class="grid-line" x1="0" x2="${W}" y1="${py(level).toFixed(2)}" y2="${py(level).toFixed(2)}"></line>`)
+    ${levels
+      .map((tick) => `<line class="grid-line" x1="0" x2="${W}" y1="${py(tick.at).toFixed(2)}" y2="${py(tick.at).toFixed(2)}"></line>`)
       .join('')}
-    ${[0.5, 1]
-      .map((level) => `<text class="axis" x="2" y="${(py(level) - 3).toFixed(2)}">${Math.round(level * 100)}%</text>`)
+    ${named
+      .filter((tick) => tick.label)
+      .map((tick) => `<text class="axis" x="2" y="${(py(tick.at) - 3).toFixed(2)}">${esc(tick.label)}</text>`)
       .join('')}
     <path d="M ${path}" fill="none" stroke="${color}" stroke-width="2.5"
       stroke-linecap="round" stroke-linejoin="round"></path>

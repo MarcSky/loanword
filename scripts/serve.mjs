@@ -8,13 +8,24 @@ import { networkInterfaces } from 'node:os';
 import { join, normalize, resolve, sep } from 'node:path';
 import { createEmptyCard, fsrs, generatorParameters, Rating } from 'ts-fsrs';
 import * as analytics from './analytics.mjs';
+import * as level from './level.mjs';
 import { alphabetRecord, offerAlphabet } from './alphabet.mjs';
-import { askFull, buildBeforeServing, buildInBackground, effortFor, modelFor, queueSizes } from './build.mjs';
+import {
+  askFull,
+  buildBeforeServing,
+  buildInBackground,
+  dropQueued,
+  effortFor,
+  modelFor,
+  queuePreview,
+  queueSizes,
+} from './build.mjs';
 import * as filing from './reclassify.mjs';
 import { conceptsInto, copiedInto, planClone, selectForClone, sourcePair, suggestStarter } from './clone.mjs';
 import * as db from './db.mjs';
 import { toCsv, writeCsv } from './export-anki.mjs';
 import { languages as dictionaries } from './i18n.mjs';
+import { keepIpa } from './lexis.mjs';
 import { isRtl } from './languages.mjs';
 import { MAX_CHARS, MAX_IDS, RANGES, SESSION_LENGTHS, textIn } from './limits.mjs';
 import { ensureMigrated } from './migrate.mjs';
@@ -199,6 +210,16 @@ function grade(id, rating, { mode = 'flashcards', ms = 0, sessionId = null, deck
 
   db.tx(() => {
     db.saveState(id, target, card);
+    const row = db.cardById(id);
+    const ability = db.abilityOf(target);
+    const next = level.update(ability, {
+      rating,
+      mode,
+      first: isNew,
+      cefr: row?.cefr || '',
+      difficulty: card.difficulty,
+    });
+    if (next !== ability) db.saveAbility(target, next);
     db.logReview({
       card_id: id,
       deck_id: target,
@@ -571,6 +592,7 @@ const ANALYTICS = {
   grades: analytics.grades,
   hardest: (deckId, filter) => ({ rows: analytics.hardest(deckId, filter) }),
   sessions: (deckId, filter) => ({ rows: analytics.sessions(deckId, filter) }),
+  level: analytics.level,
 };
 
 const TTY = !!process.stdout.isTTY && !process.env.NO_COLOR;
@@ -676,6 +698,7 @@ const server = createServer(async (req, res) => {
 
         pairs: db.deckPairsWithCounts(),
         uiLanguages: dictionaries(),
+        ability: { ...level.estimate(db.abilityOf(currentDeck(cfg))), floor: cfg.level },
 
         targets: builds,
         filing: filing.readProgress(),
@@ -755,6 +778,18 @@ const server = createServer(async (req, res) => {
       return json(res, { ok: true, started, cards, filing: filing.readProgress() });
     }
 
+    if (req.method === 'GET' && url.pathname === '/queue') {
+      return json(res, { profiles: queuePreview() });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/queue/drop') {
+      const payload = await payloadOf(req, res);
+      if (!payload) return;
+      const keys = Array.isArray(payload.keys) ? payload.keys : [payload.key];
+      const { dropped, stopped } = dropQueued(keys);
+      return json(res, { ok: true, dropped, stopped, profiles: queuePreview() });
+    }
+
     if (req.method === 'POST' && url.pathname === '/build') {
       const started = buildInBackground();
       return json(res, { ok: true, started, targets: queueSizes() });
@@ -786,6 +821,7 @@ const server = createServer(async (req, res) => {
         categories: filter.category,
         levels: filter.cefr,
         skip,
+        native: cfg.native,
       });
       return json(res, { from, to, count: wanted.length, already: skip.size });
     }
@@ -809,6 +845,7 @@ const server = createServer(async (req, res) => {
             fresh: selectForClone(db.cardsOfDeck(db.deckIdIfAny(pair.native, pair.target)), {
               skip,
               concepts: home ? concepts : new Set(),
+              native: pair.native,
             }).length,
           };
         });
@@ -929,7 +966,9 @@ const server = createServer(async (req, res) => {
         meaning: group.meaning,
         cards: group.cards.map((card, index) => ({
           id: card.id,
-          repeat: group.cards.slice(0, index).some((earlier) => sameWord(earlier.front, card.front)),
+          repeat: group.cards
+            .slice(0, index)
+            .some((earlier) => sameWord(earlier.front, card.front, cfg.target)),
           front: card.front,
           back: card.back,
           example: card.example,
@@ -1001,9 +1040,10 @@ const server = createServer(async (req, res) => {
       if (!payload) return;
       if (!knownId(payload.id)) return json(res, { error: 'unknown card id' }, 404);
       const patch = {};
-      for (const key of ['front', 'back', 'example', 'note', 'reading']) {
+      for (const key of ['front', 'back', 'example', 'note', 'reading', 'form']) {
         if (typeof payload[key] === 'string') patch[key] = textIn(payload[key], MAX_CHARS.field);
       }
+      if (typeof payload.ipa === 'string') patch.ipa = keepIpa({ ipa: textIn(payload.ipa, MAX_CHARS.ipa) });
       if (payload.category !== undefined) patch.category = normalizeCategory(payload.category);
       if (payload.cefr !== undefined) patch.cefr = normalizeCefr(payload.cefr);
       if (payload.topic !== undefined) patch.topic = normalizeTopic(payload.topic);

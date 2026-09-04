@@ -6,6 +6,7 @@ import {
   CEFR_LEVELS,
   appendJsonl,
   config,
+  frequentWords,
   log,
   queueFile,
   readJsonl,
@@ -51,21 +52,26 @@ export function copiedInto(native, to) {
 export function conceptsInto(native, to) {
   const destination = db.deckIdIfAny(native, to);
   const known = destination === null ? new Set() : db.conceptsOfDeck(destination);
+  const stop = frequentWords(native);
   for (const row of readJsonl(queueFile(to))) {
-    if (typeof row.text === 'string' && row.text) known.add(db.conceptKey(row.text));
+    if (typeof row.text === 'string' && row.text) known.add(db.conceptKey(row.text, { lang: native, stop }));
   }
   return known;
 }
 
-export function selectForClone(cards, { categories = [], levels = [], skip = new Set(), concepts = new Set() } = {}) {
+export function selectForClone(
+  cards,
+  { categories = [], levels = [], skip = new Set(), concepts = new Set(), native = '' } = {},
+) {
   const wantedCategory = new Set(categories.filter((key) => CATEGORIES.includes(key)));
   const wantedLevel = new Set(levels.filter((key) => CEFR_LEVELS.includes(key)));
+  const stop = frequentWords(native);
   const taken = new Set(concepts);
   return cards.filter((card) => {
     if (skip.has(card.id)) return false;
     if (wantedCategory.size && !wantedCategory.has(card.category)) return false;
     if (wantedLevel.size && !wantedLevel.has(card.cefr)) return false;
-    const concept = db.conceptKey(card.back);
+    const concept = db.conceptKey(card.back, { lang: native, stop });
     if (taken.has(concept)) return false;
     taken.add(concept);
     return true;
@@ -95,8 +101,8 @@ export function planClone({ native, from, to, categories = [], levels = [] } = {
   const skip = copiedInto(home, to);
   const concepts = pair.native === home ? conceptsInto(home, to) : new Set();
   const cards = db.cardsOfDeck(source);
-  const fresh = selectForClone(cards, { categories, levels, skip });
-  const wanted = selectForClone(cards, { categories, levels, skip, concepts });
+  const fresh = selectForClone(cards, { categories, levels, skip, native: pair.native });
+  const wanted = selectForClone(cards, { categories, levels, skip, concepts, native: pair.native });
 
   const now = new Date();
   const records = wanted.map((card) => cloneRecord(card, pair.native, now, pair.target));

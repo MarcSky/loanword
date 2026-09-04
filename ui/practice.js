@@ -27,9 +27,33 @@ import { checkTyped } from './answer.js';
 import { buildChoices, frontOf } from './quiz.js';
 import { shuffle } from './plan.js';
 import { sayButton, speak } from './speak.js';
-import { clampInt } from './limits.js';
+import { MAX_CHARS, clampInt } from './limits.js';
 import { chapterKey, inChapter, namedChapters, titleOf } from './chapters.js';
 import { ANSWER_WITH, DEFAULT_COUNT, TYPES, buildTest, eligibleCards, isAnswered, scoreTest, sortCounts } from './exam.js';
+
+const TESTED_KEY = 'loanword.tested';
+
+const openDeck = () => `${app.config.native}>${app.config.target}`;
+const today = () => new Date().toISOString().slice(0, 10);
+
+function testedToday() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(TESTED_KEY) || '{}');
+    return stored.day === today() && stored.deck === openDeck() && Array.isArray(stored.ids) ? stored.ids : [];
+  } catch {
+    return [];
+  }
+}
+
+function rememberTested(ids, pool) {
+  const seen = [...new Set([...testedToday(), ...ids])];
+  try {
+    localStorage.setItem(
+      TESTED_KEY,
+      JSON.stringify({ day: today(), deck: openDeck(), ids: seen.length >= pool ? [] : seen }),
+    );
+  } catch {}
+}
 
 const TABS = [
   ['cards', 'Flashcards', 'cards-three'],
@@ -473,7 +497,7 @@ function questionBody(q, answers, result) {
       })
       .join('')}</div>`;
   }
-  return `<input class="input exam-written" data-written="${q.n}" type="text" autocomplete="off" spellcheck="false"
+  return `<input class="input exam-written" data-written="${q.n}" type="text" maxlength="${MAX_CHARS.context}" autocomplete="off" spellcheck="false"
       ${faceLang(q.answerSide)} value="${esc(given || '')}" ${done ? 'readonly' : ''}
       placeholder="${esc(t('Type the answer'))}" aria-label="${esc(t('Your answer'))}">`;
 }
@@ -696,8 +720,13 @@ Object.assign(ACTIONS, {
     const cfg = state.testConfig;
     cfg.count = clampInt($('#exam-count')?.value, { min: 1, max: Math.max(1, studyPool().length) }) ?? cfg.count;
     cfg.answerWith = $('#exam-side')?.value || cfg.answerWith;
-    const questions = buildTest(studyPool(), cfg);
+    const pool = studyPool();
+    const questions = buildTest(pool, { ...cfg, seen: testedToday() });
     if (!questions.length) return toast(t('Nothing to ask yet'));
+    rememberTested(
+      questions.flatMap((question) => (question.kind === 'match' ? question.items.map((item) => item.id) : [question.id])),
+      pool.length,
+    );
     state.test = { questions, answers: {}, score: null };
     renderTest($('#page-practice'));
     $('#main')?.scrollTo?.({ top: 0 });

@@ -6,6 +6,7 @@ import {
   buildTest,
   eligibleCards,
   facesOf,
+  freshFirst,
   isAnswered,
   pointsOf,
   scoreTest,
@@ -141,4 +142,48 @@ test('a half-filled matching block is still unanswered', () => {
 test('the sort tally counts both piles', () => {
   assert.deepEqual(sortCounts({ a: true, b: false, c: true }), { known: 2, learning: 1 });
   assert.deepEqual(sortCounts({}), { known: 0, learning: 0 });
+});
+
+test('a second test the same day asks the cards the first one did not', () => {
+  const deck = Array.from({ length: 40 }, (_, index) => ({
+    id: `card${index}`,
+    front: `front ${index}`,
+    back: `back ${index}`,
+    category: 'engineering',
+    cefr: 'B1',
+  }));
+
+  const first = buildTest(deck, { count: 20, types: ['mc'], random: seeded(1) });
+  const asked = first.map((question) => question.id);
+  assert.equal(new Set(asked).size, 20, 'a test never asks one card twice');
+
+  const second = buildTest(deck, { count: 20, types: ['mc'], seen: asked, random: seeded(2) });
+  const again = second.map((question) => question.id);
+  assert.equal(new Set(again).size, 20);
+  assert.deepEqual(
+    again.filter((id) => asked.includes(id)),
+    [],
+    'the twenty already asked today are held back',
+  );
+});
+
+test('when every card has been asked the window opens again rather than leaving nothing', () => {
+  const deck = Array.from({ length: 6 }, (_, index) => ({
+    id: `small${index}`,
+    front: `front ${index}`,
+    back: `back ${index}`,
+    category: 'engineering',
+    cefr: 'B1',
+  }));
+  const seen = deck.map((card) => card.id);
+  const questions = buildTest(deck, { count: 6, types: ['mc'], seen, random: seeded(3) });
+  assert.equal(questions.length, 6, 'a small deck still gets a full test');
+});
+
+test('the cards a test held back are the ones a fresh order puts first', () => {
+  const deck = Array.from({ length: 5 }, (_, index) => ({ id: `f${index}` }));
+  const order = freshFirst(deck, ['f0', 'f1'], seeded(4)).map((card) => card.id);
+  assert.deepEqual(order.slice(0, 3).sort(), ['f2', 'f3', 'f4'], 'the unasked come first');
+  assert.deepEqual(order.slice(3).sort(), ['f0', 'f1'], 'the asked come last, never dropped');
+  assert.equal(freshFirst(deck, []).length, 5);
 });

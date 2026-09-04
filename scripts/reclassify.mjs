@@ -7,7 +7,7 @@ import { ALL_CATEGORIES } from './categories.mjs';
 import { config, enabledCategories, log, normalizeTopic, paths, recordUsage, writeJson } from './store.mjs';
 
 export const BATCH_CARDS = 60;
-export const FILING_MODEL = 'haiku';
+const FILING_MODEL = 'haiku';
 
 export const lockFile = () => paths.filingLock;
 export const progressFile = () => paths.filingProgress;

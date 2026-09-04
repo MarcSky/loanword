@@ -1,7 +1,7 @@
 {
   "name": "loanword",
   "version": "0.1.0",
-  "description": "Turn your Claude Code sessions into a personal phrasebook.",
+  "description": "Turn the words you actually needed today into flashcards, inside Claude Code.",
   "license": "MIT",
   "private": true,
   "type": "module",
@@ -14,7 +14,8 @@
     "i18n": "node scripts/i18n.mjs audit",
     "tokens": "node scripts/tokens.mjs",
     "icons": "node scripts/icons.mjs",
-    "vendor": "node scripts/vendor.mjs"
+    "vendor": "node scripts/vendor.mjs",
+    "stem": "node scripts/stem-vendor.mjs"
   },
   "dependencies": {
     "ts-fsrs": "^5.2.0"

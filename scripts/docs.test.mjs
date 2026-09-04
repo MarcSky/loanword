@@ -102,6 +102,41 @@ function walkCode(dir, out) {
   return out;
 }
 
+const EXPORTED = /^export\s+(?:async\s+)?(?:function|const|let|class)\s+([A-Za-z_$][\w$]*)/gm;
+const EXPORT_LIST = /^export\s*\{([^}]*)\}/gm;
+const IDENTIFIER = /[A-Za-z_$][\w$]*/g;
+
+function exportsOf(source) {
+  const names = new Set();
+  for (const [, name] of source.matchAll(EXPORTED)) names.add(name);
+  for (const [, list] of source.matchAll(EXPORT_LIST)) {
+    for (const part of list.split(',')) {
+      const name = part.trim().split(/\s+as\s+/).pop().trim();
+      if (name) names.add(name);
+    }
+  }
+  return names;
+}
+
+test('nothing is exported that nothing else uses', () => {
+  const sources = new Map();
+  for (const path of [...walkCode(join(PLUGIN_ROOT, 'scripts'), []), ...walkCode(join(PLUGIN_ROOT, 'ui'), [])]) {
+    sources.set(relative(PLUGIN_ROOT, path), readFileSync(path, 'utf8'));
+  }
+
+  const words = new Map();
+  for (const [path, source] of sources) words.set(path, new Set(source.match(IDENTIFIER) || []));
+
+  const dead = [];
+  for (const [path, source] of sources) {
+    for (const name of exportsOf(source)) {
+      const used = [...words].some(([other, tokens]) => other !== path && tokens.has(name));
+      if (!used) dead.push(`${path}: ${name}`);
+    }
+  }
+  assert.deepEqual(dead.sort(), [], 'drop the export keyword, or the code with it');
+});
+
 test('every module has its test file beside it, and every test a module', () => {
   const modules = readdirSync(join(PLUGIN_ROOT, 'scripts'));
   const orphans = modules
@@ -111,7 +146,7 @@ test('every module has its test file beside it, and every test a module', () => 
 
   const strays = modules
     .filter((name) => name.endsWith('.test.mjs'))
-    .filter((name) => !['api', 'docs', 'perf', 'pipeline'].includes(name.replace('.test.mjs', '')))
+    .filter((name) => !['api', 'docs', 'perf', 'pipeline', 'screens'].includes(name.replace('.test.mjs', '')))
     .filter((name) => !modules.includes(name.replace('.test.mjs', '.mjs')));
   assert.deepEqual(strays, [], 'a test whose module is gone tests nothing');
 });

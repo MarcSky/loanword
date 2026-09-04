@@ -1,6 +1,9 @@
+import { MIN_ANSWERS } from './level.js';
 import {
   $,
   ACTIONS,
+  dialogHead,
+  modal,
   MODE_LABEL,
   api,
   flagOf,
@@ -34,14 +37,19 @@ import { greetingKey } from './shell.js';
 import { wordList } from './deck.js';
 
 function buildRow(row) {
-  const records = tn(row.queued, 'captured record', 'captured records');
-  if (!row.building) {
-    return `<span>${esc(t('{lang}: {records} waiting to become cards.', { lang: languageName(row.target), records }))}</span>`;
+  const lang = languageName(row.target);
+  if (!row.building && !app.startingPolls) {
+    if (row.failed) {
+      const reason = HINTS[row.hint] ? t(HINTS[row.hint]) : row.failed;
+      return `<span class="build-failed">${esc(t('{lang}: the build stopped — {reason}', { lang, reason }))}</span>`;
+    }
+    const records = tn(row.queued, 'captured record', 'captured records');
+    return `<span>${esc(t('{lang}: {records} waiting to become cards.', { lang, records }))}</span>`;
   }
   const total = row.total || row.queued;
   const done = Math.min(row.done || 0, total);
   return `<span class="build-line">
-    <span>${esc(t('{lang}: building your cards', { lang: languageName(row.target) }))}
+    <span>${esc(t('{lang}: building your cards', { lang }))}
       <b>${done} / ${total}</b>
       ${
         row.batches > 1
@@ -67,17 +75,24 @@ function filingRow() {
   </span>`;
 }
 
+const STARTING_POLLS = 10;
+
+const HINTS = {
+  login: 'Sign in first: run claude in a terminal and type /login',
+  credit: 'The Claude account has no credit left',
+};
+
 function buildBanner() {
   const rows = (app.targets || []).filter((row) => row.queued || row.building);
   if (!rows.length && !app.filing) return '';
-  const running = rows.some((row) => row.building) || !!app.filing;
+  const running = rows.some((row) => row.building) || !!app.filing || app.startingPolls > 0;
   return `<div class="banner">
     ${running ? '<span class="spinner" aria-hidden="true"></span>' : icon('cards-three', 'icon')}
     <span class="build-rows">${rows.map(buildRow).join('')}${filingRow()}</span>
     ${
       running
         ? ''
-        : `<button class="btn" data-act="build-now">${icon('play', 'icon-sm icon')} ${esc(t('Build them now'))}</button>`
+        : `<button class="btn" data-act="build-now">${icon('play', 'icon-sm icon')} ${esc(t('Build now'))}</button>`
     }
   </div>`;
 }
@@ -115,18 +130,96 @@ function starterBanner() {
 
 const buildKey = () =>
   (app.targets || []).map((row) => `${row.target}:${row.building ? 1 : 0}:${row.queued}:${row.done || 0}`).join(',') +
-  `|${app.filing ? `${app.filing.done}/${app.filing.total}` : ''}`;
+  `|${app.filing ? `${app.filing.done}/${app.filing.total}` : ''}|${app.startingPolls}`;
+
+const idleNow = () => !app.queued && !app.building && !app.filing && !app.startingPolls;
 
 export function watchBuild() {
-  clearInterval(app.buildPoll);
-  if (!app.queued && !app.building && !app.filing) return;
+  if (idleNow()) {
+    clearInterval(app.buildPoll);
+    app.buildPoll = 0;
+    return;
+  }
+  if (app.buildPoll) return;
   app.buildPoll = setInterval(async () => {
     const before = buildKey();
     const { load } = await import('./core.js');
     await load().catch(() => {});
+    app.startingPolls = app.building || !app.queued ? 0 : Math.max(0, app.startingPolls - 1);
     if (buildKey() !== before) render();
-    if (!app.queued && !app.building && !app.filing) clearInterval(app.buildPoll);
+    if (idleNow()) {
+      clearInterval(app.buildPoll);
+      app.buildPoll = 0;
+    }
   }, 2000);
+}
+
+async function loadQueue() {
+  app.queue = { profiles: app.queue?.profiles || [], loading: true };
+  renderQueue();
+  try {
+    const out = await api('/queue');
+    app.queue = { profiles: out.profiles || [], loading: false };
+  } catch {
+    app.queue = { profiles: [], loading: false };
+  }
+  renderQueue();
+}
+
+const queueRowAt = (value) => {
+  const [column, index] = String(value).split(':').map(Number);
+  return (app.queue?.profiles || [])[column]?.rows?.[index];
+};
+
+const queueTotal = () => (app.queue?.profiles || []).reduce((sum, profile) => sum + profile.rows.length, 0);
+
+function queueRow(row, column, index) {
+  return `<div class="q-row">
+    <span class="q-text" title="${esc(row.text)}">${esc(row.text)}</span>
+    <span class="q-meta">${esc(row.project || row.source)}</span>
+    <button class="star danger" data-act="queue-drop" data-value="${column}:${index}"
+      aria-label="${esc(t('Delete {word} for good', { word: row.text }))}">
+      ${icon('trash', 'icon-sm icon')}
+    </button>
+  </div>`;
+}
+
+function queueColumn(profile, column) {
+  return `<section class="q-col">
+    <div class="q-col-head">
+      <span class="flag">${flagOf(profile.target)}</span>
+      <b>${esc(languageName(profile.target))}</b>
+      <span class="n">${esc(tn(profile.rows.length, 'captured record', 'captured records'))}</span>
+    </div>
+    <div class="q-rows">
+      ${
+        profile.rows.length
+          ? profile.rows.map((row, index) => queueRow(row, column, index)).join('')
+          : `<p class="field-hint">${esc(t('Nothing is waiting.'))}</p>`
+      }
+    </div>
+  </section>`;
+}
+
+export function renderQueue() {
+  const box = $('#queue-body');
+  if (!box) return;
+  const profiles = app.queue?.profiles || [];
+  const total = queueTotal();
+  $('#queue')?.style.setProperty('--cols', String(Math.max(1, profiles.length)));
+  box.innerHTML = `
+    ${dialogHead(t('What we are about to build'), 'queue-close')}
+    <p class="lede" style="font-size:.9375rem">${esc(
+      t('Every one of these costs a model call. Throw away what you already know — it never comes back.'),
+    )}</p>
+    <div class="q-cols">${profiles.map(queueColumn).join('')}</div>
+    <div class="sync-foot">
+      ${app.queue?.error ? `<span class="q-error">${esc(app.queue.error)}</span>` : ''}
+      <button class="btn" data-act="queue-close">${esc(t('Cancel'))}</button>
+      <button class="btn btn-primary" data-act="queue-start" ${total ? '' : 'aria-disabled="true" disabled'}>
+        ${icon('play', 'icon-sm icon')} ${esc(t('Start'))}${total ? ` · ${total}` : ''}
+      </button>
+    </div>`;
 }
 
 export function deckChips() {
@@ -227,7 +320,7 @@ function kpiStrip(stats, totals) {
     return days > 0 && days <= 1;
   }).length;
 
-  return `<div class="kpis">
+  return `<div class="kpis" data-count="4">
     ${kpi({
       label: t('Due now'),
       value: totals.due,
@@ -245,6 +338,13 @@ function kpiStrip(stats, totals) {
       foot: esc(t('limit {n} new a day', { n: stats.daily_limit })),
     })}
     ${kpi({
+      label: t('Your level'),
+      value: app.ability?.band || '—',
+      icon: 'graduation-cap',
+      tint: 'butter',
+      foot: esc(levelFoot()),
+    })}
+    ${kpi({
       label: t('In long-term memory'),
       value: stats.learned,
       unit: ` / ${stats.total}`,
@@ -254,6 +354,13 @@ function kpiStrip(stats, totals) {
       foot: esc(t('{n} mastered', { n: pct(stats.mastery) })),
     })}
   </div>`;
+}
+
+function levelFoot() {
+  const ability = app.ability || { n: 0, min: MIN_ANSWERS, confident: false };
+  if (app.config.level) return t('floor {level} set by you', { level: app.config.level });
+  if (ability.confident) return t('estimated from {n} answers', { n: ability.n });
+  return t('{n} of {min} answers to estimate', { n: ability.n, min: ability.min });
 }
 
 function goalCard(stats) {
@@ -290,7 +397,13 @@ function heroCard(totals, dueLine) {
         ${fresh ? `<button class="btn lg" data-act="practice-tab" data-value="learn">${icon('sparkle', 'icon-sm icon')} ${esc(t('Learn {n} new words', { n: fresh }))}</button>` : ''}
       </div>
     </div>
-    ${art('hero', 'Flat line illustration: a developer sitting cross-legged on a giant blank flashcard with a laptop, holding a smaller card up to the light; blue shirt, beige trousers, white background, no text', { width: 640, height: 400, cls: 'hero-art' })}
+    ${art(
+      totals.due ? 'hero' : 'caught-up',
+      totals.due
+        ? 'Flat line illustration: a developer sitting cross-legged on a giant blank flashcard with a laptop, holding a smaller card up to the light; blue shirt, beige trousers, white background, no text'
+        : 'Flat line illustration: a developer sitting back at a small table with a laptop and a coffee, nothing left to do; blue shirt, beige trousers, white background, no text',
+      { width: 640, height: 400, cls: 'hero-art' },
+    )}
   </section>`;
 }
 
@@ -312,6 +425,7 @@ function promoCard() {
 }
 
 function renderOverview() {
+  watchBuild();
   const stats = app.stats;
   const scoped = app.cards.filter(
     (card) => inLevel(card, app.level) && (!app.category || card.category === app.category),
@@ -411,10 +525,31 @@ Object.assign(ACTIONS, {
     await api('/settings', { paused: [...paused] });
     await refresh();
   },
-  'build-now': async () => {
+  'build-now': () => {
+    if (app.building || app.startingPolls > 0) return;
+    $('#queue').showModal();
+    loadQueue();
+  },
+  'queue-close': () => $('#queue').close(),
+  'queue-drop': async (value) => {
+    const row = queueRowAt(value);
+    if (!row) return;
+    try {
+      const out = await api('/queue/drop', { key: row.key });
+      app.queue = { profiles: out.profiles || [], loading: false };
+    } catch (error) {
+      app.queue = { ...app.queue, error: error.message || t('Could not delete that card') };
+    }
+    renderQueue();
+  },
+  'queue-start': async () => {
+    $('#queue').close();
     try {
       const out = await api('/build', {});
-      app.targets = out.targets || app.targets;
+      app.targets = (out.targets || app.targets).map((row) =>
+        out.started && row.queued ? { ...row, building: true, total: row.total || row.queued } : row,
+      );
+      app.startingPolls = out.started ? STARTING_POLLS : 0;
       toast(out.started ? t('Building your cards') : t('Nothing to build right now'));
       render();
       watchBuild();
@@ -441,6 +576,8 @@ Object.assign(ACTIONS, {
     renderOverview();
   },
 });
+
+modal('queue');
 
 registerScreen('overview', renderOverview);
 

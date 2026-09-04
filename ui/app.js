@@ -6,19 +6,19 @@ import {
   SHORTCUTS,
   app,
   applyTheme,
-  emptyState,
   esc,
   go,
   load,
   loadLanguage,
   modal,
+  offline,
   readAnalyticsHash,
   render,
   saveSetting,
   t,
 } from './core.js';
 import { bindTips, hideTip } from './charts.js';
-import { RANGES, clampInt } from './limits.js';
+import { RANGES, numberField } from './limits.js';
 import { railOpen, railState } from './shell.js';
 import { setRail } from './core.js';
 
@@ -103,11 +103,30 @@ document.addEventListener('input', (event) => {
     return;
   }
   if (!field.dataset.setting) return;
+  commitSetting(field, false);
+});
+
+document.addEventListener('change', (event) => {
+  const field = event.target;
+  if (field.dataset?.setting && RANGES[field.dataset.setting]) {
+    commitSetting(field, true);
+    return;
+  }
+  if (field.type !== 'number' || field.min === '' || field.max === '') return;
+  const range = { min: Number(field.min), max: Number(field.max), fallback: Number(field.min) };
+  field.value = numberField(field.value, range, field.value, true).text;
+});
+
+function commitSetting(field, settle) {
   const key = field.dataset.setting;
   const range = RANGES[key];
-  const value = range ? clampInt(field.value, range) : field.value;
+  let value = field.value;
+  if (range) {
+    const shown = numberField(field.value, range, app.config[key], settle);
+    if (shown.text !== field.value) field.value = shown.text;
+    value = shown.value;
+  }
   if (value === undefined || value === app.config[key]) return;
-  if (range && String(value) !== field.value) field.value = String(value);
   saveSetting(key, value).then(async () => {
     if (key === 'uiLang') {
       await loadLanguage();
@@ -123,7 +142,7 @@ document.addEventListener('input', (event) => {
       await refresh();
     }
   });
-});
+}
 
 document.addEventListener('click', async (event) => {
   const toggle = event.target.closest('[role="switch"][data-setting]');
@@ -215,21 +234,5 @@ try {
     render();
   }
 } catch {
-  $('#main').innerHTML = `<div class="page" data-active>${emptyState({
-    art: {
-      src: 'offline-error.webp',
-      alt: 'Flat line illustration: a laptop with its cable unplugged, a person leaning in to look; thin black outline, blue and beige fills, white background, no text',
-    },
-    title: t('The trainer is not running'),
-    body: t('Start it with <code>loanword</code> in a terminal, or <code>/loanword:review</code> in Claude Code. This page reconnects on its own.'),
-  })}</div>`;
-  const again = setInterval(async () => {
-    try {
-      const reply = await fetch('/state', { cache: 'no-store' });
-      if (reply.ok) {
-        clearInterval(again);
-        location.reload();
-      }
-    } catch {}
-  }, 3000);
+  offline();
 }

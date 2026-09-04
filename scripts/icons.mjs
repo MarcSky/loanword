@@ -15,6 +15,7 @@ export const MAP = {
   'cards-three-duotone': ['cards-three', 'duotone'],
   'graduation-cap': ['graduation-cap', 'regular'],
   'graduation-cap-fill': ['graduation-cap', 'fill'],
+  'graduation-cap-duotone': ['graduation-cap', 'duotone'],
   'chart-bar': ['chart-bar', 'regular'],
   'chart-bar-fill': ['chart-bar', 'fill'],
   'gear-six': ['gear-six', 'regular'],

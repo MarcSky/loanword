@@ -1221,3 +1221,133 @@ test('the language you write in can never also be the one you are learning', () 
   assert.equal(saved.target, 'sv');
   saveSettings({ native: before.native, target: before.target });
 });
+
+test('the same word is the same word in the language it is written in', () => {
+  assert.equal(sameWord('code review', 'code reviews', 'en'), true);
+  assert.equal(sameWord('duplicate code', 'duplicated code', 'en'), true);
+  assert.equal(sameWord('program', 'progress', 'en'), false, 'a stemmer knows what a prefix cannot');
+  assert.equal(sameWord('программа', 'программы', 'ru'), true);
+  assert.equal(sameWord('программа', 'программист', 'ru'), false);
+  assert.equal(sameWord('roll back', 'roll back the migration', 'en'), false, 'a longer phrase is its own card');
+  assert.equal(sameWord('', 'anything', 'en'), false);
+});
+
+test('a word the deck already teaches never gets a second card, whatever its meaning says', () => {
+  const pair = { native: 'en', target: 'de' };
+  const first = commit(
+    [{ front: 'duplizierter Code', back: 'duplicated code', example: 'Der duplizierter Code fiel auf.' }],
+    pair,
+  );
+  assert.equal(first.added, 1);
+
+  const again = commit(
+    [
+      { front: 'duplizierter Code', back: 'duplicate code' },
+      { front: 'doppelter Code', back: 'duplicate code' },
+    ],
+    pair,
+  );
+  assert.equal(again.added, 1, 'the second card for the same word is refused, the other wording is judged on its meaning');
+  assert.equal(again.dropped, 1);
+  assert.equal(again.cards[0].front, 'doppelter Code');
+
+  const fronts = cardsForPair(pair).map((card) => card.front).sort();
+  assert.deepEqual(fronts, ['doppelter Code', 'duplizierter Code']);
+});
+
+test('one front twice inside a single batch lands once', () => {
+  const pair = { native: 'ru', target: 'sq' };
+  const out = commit(
+    [
+      { front: 'kthej prapa', back: 'откатить' },
+      { front: 'kthej prapa', back: 'вернуть назад' },
+    ],
+    pair,
+  );
+  assert.equal(out.added, 1);
+  assert.equal(cardsForPair(pair).length, 1);
+});
+
+test('a letter card is exempt from the one-front rule, because an alphabet repeats itself', () => {
+  const pair = { native: 'ru', target: 'hy' };
+  const out = commit(
+    [
+      { front: 'ա', back: 'a', type: 'letter' },
+      { front: 'ա', back: 'ah', type: 'letter' },
+    ],
+    pair,
+  );
+  assert.ok(out.added >= 1, 'letters are not judged as words');
+});
+
+test('a card keeps the form it was met in, the clause it was met in, and its pronunciation', () => {
+  const pair = { native: 'ru', target: 'en' };
+  const record = {
+    ts: '2026-09-04T09:00:00.000Z',
+    source: 'prompt',
+    lang: 'ru',
+    project: '~/work/api',
+    text: 'мы уже откатили миграцию, стейджинг лежал',
+  };
+  const out = commit(
+    [
+      {
+        n: 0,
+        type: 'phrase',
+        front: 'roll back a migration',
+        form: 'откатили',
+        context: 'мы уже откатили миграцию',
+        back: 'откатить миграцию',
+        example: 'We roll back a migration before the index finishes.',
+        ipa: 'ɹoʊl bæk',
+        cefr: 'B1',
+      },
+    ],
+    { ...pair, records: [record] },
+  );
+  assert.equal(out.added, 1);
+  const card = out.cards[0];
+  assert.equal(card.form, 'откатили');
+  assert.equal(card.ipa, 'ɹoʊl bæk');
+  assert.equal(card.source, 'мы уже откатили миграцию', 'the clause becomes “where it came from”, not the whole record');
+});
+
+test('a rewritten clause, a form nobody met and a pronunciation that is not IPA are dropped, not repaired', () => {
+  const pair = { native: 'ru', target: 'en' };
+  const record = { ts: '2026-09-04T09:30:00.000Z', source: 'prompt', lang: 'ru', text: 'давай задеплоим это на прод' };
+  const out = commit(
+    [
+      {
+        n: 0,
+        type: 'phrase',
+        front: 'deploy to production',
+        form: 'rolled back',
+        context: 'We deploy tonight',
+        back: 'выкатить на прод',
+        example: 'We deploy to production every Friday afternoon.',
+        ipa: '/dɪˈplɔɪ/',
+      },
+    ],
+    { ...pair, records: [record] },
+  );
+  assert.equal(out.added, 1, 'the card itself is sound');
+  const card = out.cards[0];
+  assert.equal(card.form, '', 'a form that is not in its context is no form');
+  assert.equal(card.ipa, '', 'slashes are not IPA');
+  assert.equal(card.source, 'давай задеплоим это на прод', 'and the record falls back to being the provenance');
+});
+
+test('an English word card is levelled by the shipped list, a phrase by the builder', () => {
+  const pair = { native: 'ru', target: 'en' };
+  const out = commit(
+    [
+      { front: 'duplicate', back: 'дубликат', type: 'word', cefr: 'A1' },
+      { front: 'roll back a build', back: 'откатить сборку', type: 'phrase', cefr: 'A1' },
+    ],
+    pair,
+  );
+  assert.equal(out.added, 2);
+  const byFront = new Map(out.cards.map((card) => [card.front, card]));
+  assert.equal(byFront.get('duplicate').cefr, 'B2', 'the graded list outranks the guess');
+  assert.equal(byFront.get('roll back a build').cefr, 'A1', 'a phrase is not in the list and keeps its label');
+});

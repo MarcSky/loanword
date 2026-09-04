@@ -12,7 +12,7 @@ const RUN = process.env.LOANWORD_PERF === '1';
 const CARDS = Number(process.env.LOANWORD_PERF_CARDS) || 50_000;
 const REVIEWS = Number(process.env.LOANWORD_PERF_REVIEWS) || 500_000;
 
-export const BUDGET_MS = {
+const BUDGET_MS = {
   log: 30,
   composition: 150,
   perCardMicros: 20,

@@ -1,13 +1,17 @@
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { clozeOf } from './session.mjs';
 import { scriptLetters, scriptOf } from './lang.mjs';
+import { MAX_CHARS } from './limits.mjs';
+import { CEFR_LEVELS, PLUGIN_ROOT } from './store-paths.mjs';
 import { wordCount, words } from './words.mjs';
 
 export { wordCount, words };
 
-export const MAX_FRONT_WORDS = 4;
-export const MAX_BACK_WORDS = 4;
-export const PICKS_PER_PROMPT = 3;
-export const BRACKETS = /[[\]{}()（）［］｛｝【】〔〕]/;
+const MAX_FRONT_WORDS = 4;
+const MAX_BACK_WORDS = 4;
+const PICKS_PER_PROMPT = 3;
+const BRACKETS = /[[\]{}()（）［］｛｝【】〔〕]/;
 
 const SENTENCE_END = /[.!?…。！？؟।॥]$/u;
 const OTHER_SCRIPT_TOLERANCE = 2;
@@ -28,7 +32,7 @@ export function budget(records) {
 export const flat = (text) => String(text ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
 const unpunctuated = (text) => flat(text).replace(/[.!?…。！？؟।॥]+$/u, '');
 
-export const isSentence = (text, lang) =>
+const isSentence = (text, lang) =>
   SENTENCE_END.test(String(text ?? '').trim()) || wordCount(text, lang) > MAX_BACK_WORDS;
 
 export function writtenIn(text, language, otherLanguage) {
@@ -38,6 +42,55 @@ export function writtenIn(text, language, otherLanguage) {
 }
 
 export const EXAMPLE_WARNING = 'an example without the front in it';
+export const FORM_WARNING = 'a met form that is not in the context beside it';
+export const IPA_WARNING = 'a pronunciation that is not written in IPA';
+
+const IPA_CHARS = /^[\p{Script=Latin}\p{Script=Greek}\u0250-\u02AF\u02B0-\u02FF\u0300-\u036F\u1D00-\u1DBF\u2C60-\u2C7F ()|‖‿.\-]+$/u;
+
+const ANCHOR_LANGUAGES = new Set(['en']);
+
+const anchors = new Map();
+
+export function anchorList(lang) {
+  const code = String(lang || '').toLowerCase().slice(0, 2);
+  if (anchors.has(code)) return anchors.get(code);
+  const list = new Map();
+  const file = join(PLUGIN_ROOT, 'data', 'cefr', `${code}.tsv`);
+  if (ANCHOR_LANGUAGES.has(code) && existsSync(file)) {
+    for (const line of readFileSync(file, 'utf8').split('\n')) {
+      const [word, , level] = line.split('\t');
+      if (word && CEFR_LEVELS.includes(level)) list.set(word, level);
+    }
+  }
+  anchors.set(code, list);
+  return list;
+}
+
+export function anchorLevel(front, lang) {
+  const word = String(front ?? '').trim().toLowerCase();
+  if (!word || /[^a-z'-]/.test(word)) return '';
+  return anchorList(lang).get(word) || '';
+}
+
+export function keepForm(card) {
+  const form = String(card?.form ?? '').trim();
+  if (!form) return '';
+  const context = flat(String(card?.context ?? ''));
+  return context && context.includes(flat(form)) ? form : '';
+}
+
+export function keepContext(card, record) {
+  const context = String(card?.context ?? '').trim();
+  if (!context || context.length > MAX_CHARS.context) return '';
+  const text = flat(String(record?.text ?? ''));
+  return text && text.includes(flat(context)) ? context : '';
+}
+
+export function keepIpa(card) {
+  const ipa = String(card?.ipa ?? '').trim();
+  if (!ipa || ipa.length > MAX_CHARS.ipa) return '';
+  return IPA_CHARS.test(ipa) ? ipa : '';
+}
 
 export function keywordsIn(keywords, pair) {
   const list = (Array.isArray(keywords) ? keywords : []).filter((word) => typeof word === 'string');
@@ -87,6 +140,8 @@ export function vet(card, pair, { stopWords = new Set(), record = null } = {}) {
   if (example && front.length >= 2 && !clozeOf({ front, example })) {
     issues.warn.push(EXAMPLE_WARNING);
   }
+  if (String(card.form ?? '').trim() && !keepForm(card)) issues.warn.push(FORM_WARNING);
+  if (String(card.ipa ?? '').trim() && !keepIpa(card)) issues.warn.push(IPA_WARNING);
   return issues;
 }
 

@@ -83,13 +83,13 @@ esac
   const out = await repair({ apply: true });
   assert.equal(out.broken, 2);
   assert.equal(out.repaired, 1);
-  assert.equal(out.dropped, 0, 'vet never deletes a card');
+  assert.equal(out.dropped, 0, 'this deck holds no repeat, so nothing is deleted');
 
   const fixed = db.cardById('aaaaaaaa0a');
   assert.equal(fixed.back, 'duplicated code');
   assert.deepEqual(fixed.keywords, ['მიმოხილვა']);
   assert.match(fixed.example, /დუბლირებული კოდი/);
-  assert.equal(fixed.concept, db.conceptKey('duplicated code'));
+  assert.equal(fixed.concept, db.conceptOf(DECK, 'duplicated code'));
   const after = db.stateOfCard('aaaaaaaa0a');
   assert.equal(after.reps, before.reps);
   assert.equal(after.due, before.due, 'the schedule is untouched');
@@ -113,4 +113,31 @@ test('a second run stands down while one holds the lock', async () => {
   rmSync(lockFile(), { force: true });
   assert.equal(busy(), false);
   assert.equal(readProgress(), null);
+});
+
+test('a second card for a word the deck already teaches is a repeat, and --apply drops the later one', async () => {
+  const { repeatsOf } = await import('./vet.mjs');
+  const deck = db.deckId('en', 'de');
+  db.insertCards(
+    [
+      seed('r1', 'duplizierter Code', 'duplicated code', { deck_id: deck, created_at: '2026-01-01T00:00:00.000Z' }),
+      seed('r2', 'doppelter Code', 'duplicate code', { deck_id: deck, created_at: '2026-01-02T00:00:00.000Z' }),
+      seed('r3', 'duplizierter Code', 'duplicate code', { deck_id: deck, created_at: '2026-01-03T00:00:00.000Z' }),
+      seed('r4', 'Duplikat', 'duplicate', { deck_id: deck, created_at: '2026-01-04T00:00:00.000Z' }),
+    ],
+    ['bbbbbbbb01', 'bbbbbbbb02', 'bbbbbbbb03', 'bbbbbbbb04'],
+  );
+
+  const repeats = repeatsOf(db.cardsOfDeck(deck), 'de');
+  assert.deepEqual(repeats.map((card) => card.id), ['bbbbbbbb03'], 'one word twice is the repeat, another wording is not');
+
+  writeJson(paths.settings, { ...JSON.parse(readFileSync(paths.settings, 'utf8')), native: 'en', target: 'de' });
+  const out = await repair({ apply: true });
+  assert.equal(out.repeats, 1);
+  assert.equal(out.dropped, 1);
+  assert.equal(db.cardById('bbbbbbbb03').deleted_at !== null, true, 'the later wording is thrown away');
+  assert.equal(db.countCards(deck), 3, 'the oldest card for the word stays');
+
+  const again = await repair({});
+  assert.equal(again.repeats, 0, 'a second pass has nothing to drop');
 });

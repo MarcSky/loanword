@@ -39,6 +39,7 @@ export function leftovers(data = DATA) {
   }
 
   if (size(paths.logRotated)) found.push({ path: paths.logRotated, why: 'rotated log' });
+  if (size(paths.tuning)) found.push({ path: paths.tuning, why: 'what the builder learned about this runner' });
 
   return found.map((entry) => ({ ...entry, bytes: size(entry.path) }));
 }

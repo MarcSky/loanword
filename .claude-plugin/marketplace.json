@@ -1,12 +1,15 @@
 {
   "name": "loanword",
-  "owner": { "name": "MarcSky", "url": "https://github.com/MarcSky" },
-  "description": "Loanword turns your Claude Code sessions into personal vocabulary flashcards.",
+  "owner": {
+    "name": "MarcSky",
+    "url": "https://github.com/MarcSky"
+  },
+  "description": "A Claude Code plugin that turns the words you reach for while working into your own study material. Instead of someone else's word list, you learn the language your real projects speak, and you review it right where you work. Everything stays on your computer. Build your own Quizlet or Duolingo out of your own data.",
   "plugins": [
     {
       "name": "loanword",
       "source": "./",
-      "description": "Turn your Claude Code sessions into a personal phrasebook. Learn the words you actually needed today."
+      "description": "Turn the words you actually needed today into flashcards, made from your own work and reviewed right where you code: your own Quizlet, built from your own data."
     }
   ]
 }

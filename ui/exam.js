@@ -31,9 +31,20 @@ export function eligibleCards(cards) {
   return cards.filter((card) => !card.isKnown);
 }
 
-export function buildTest(cards, { count = DEFAULT_COUNT, answerWith = 'both', types = ['mc'], random = Math.random } = {}) {
-  const asked = TYPES.filter((type) => types.includes(type));
+export function freshFirst(cards, seen = [], random = Math.random) {
+  const asked = new Set(seen);
   const deck = shuffle(cards, random);
+  if (!asked.size) return deck;
+  const fresh = deck.filter((card) => !asked.has(card.id));
+  return fresh.length ? [...fresh, ...deck.filter((card) => asked.has(card.id))] : deck;
+}
+
+export function buildTest(
+  cards,
+  { count = DEFAULT_COUNT, answerWith = 'both', types = ['mc'], seen = [], random = Math.random } = {},
+) {
+  const asked = TYPES.filter((type) => types.includes(type));
+  const deck = freshFirst(cards, seen, random);
   const pool = deck.slice(0, Math.max(0, Math.min(count, cards.length)));
   const nearby = deck.slice(0, Math.max(DISTRACTOR_POOL, pool.length));
   if (!asked.length || !pool.length) return [];

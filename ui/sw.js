@@ -1,4 +1,4 @@
-const CACHE = 'loanword-shell-v10';
+const CACHE = 'loanword-shell-v18';
 
 const SHELL = [
   '/',
@@ -10,6 +10,7 @@ const SHELL = [
   'answer.js',
   'quiz.js',
   'plan.js',
+  'level.js',
   'categories.js',
   'chapters.js',
   'limits.js',
@@ -25,13 +26,16 @@ const SHELL = [
   'settings.js',
   'shell.js',
   'icons.svg',
-  'favicon.svg',
+  'favicon.png',
+  'logo-mark.png',
+  'logo-lockup.png',
+  'logo-lockup-dark.png',
   'manifest.webmanifest',
   'art/offline-error.webp',
   'art/offline-error-dark.webp',
 ];
 
-const LIVE = /^\/(state|due|stats|settings|grade|session|cloze|intervals|speech|build|clone|alphabet|produce|rewrite|delete|restore|favorite|known|card|export(\.csv)?|api|stop|i18n)(\/|\?|$)/;
+const LIVE = /^\/(state|due|stats|settings|grade|session|cloze|intervals|speech|build|clone|alphabet|produce|rewrite|delete|restore|favorite|known|card|export(\.csv)?|api|stop|i18n|queue|duplicates|stopwords|words|topic|categories|deck)(\/|\?|$)/;
 
 const VENDOR = 'vendor/webawesome/';
 

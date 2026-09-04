@@ -70,6 +70,7 @@ const HELP = {
   capture: () => [t('Capture into'), t('Which languages today’s prompts are turned into cards for. The queue and the build are per language, so two decks that teach the same language fill from the same capture — turning it off stops both.')],
   mode: () => [t('What gets captured'), t('<b>Active</b> takes your own prompts and shows how a native speaker would have put it. <b>Passive</b> takes unfamiliar words out of the assistant’s replies. <b>Both</b> does each.')],
   level: () => [t('Floor level'), t('Words below this CEFR level never become cards. Leave it open if you want everything.')],
+  phonetics: () => [t('Phonetics'), t('A card carries the pronunciation of its word in IPA. eSpeak NG writes it on this machine for nothing when it is installed; otherwise the builder writes it, at a few tokens a card.')],
   model: () => [t('Which model writes your cards'), t('Every card is written by a Claude you already have: the trainer runs <code>claude -p</code> on this machine as a bare completion, so nothing is sent anywhere else and no API key is needed. <b>Sonnet</b> is the default: it follows the lexis rules and judges level. <b>Haiku</b> is cheaper and enough for a language close to yours, but it is the model that wrote definitions where translations were asked for. <b>Opus</b> for the stubborn cases. Every call is logged with its tokens and cost below.')],
   usage: () => [t('Spent on cards'), t('Every model call the trainer makes is logged with its tokens, from the result Claude Code reports. The builder runs as a bare completion — no tools, no project context — so a batch of twenty records costs the records and the brief, nothing else. Changing the model only changes the calls from now on; the line per model shows what each one has used.')],
   autoBuild: () => [t('Building at session end'), t('When a work session leaves ten or more captured records behind, the cards are built in the background.')],
@@ -86,6 +87,14 @@ const HELP = {
   export: () => [t('Export to Anki'), t('Anki → File → Import, field separator “;”, fields front, back, reading, example, tags.')],
   data: () => [t('Where your deck lives'), t('One SQLite file, <code>loanword.db</code>, in the plugin data directory, with <code>settings.json</code> and the capture queues beside it. Copy it while the trainer is closed and you have a backup.')],
   privacy: () => [t('Privacy'), t('Secrets are scrubbed before anything is written, code and tool output are never captured, and the trainer binds <code>127.0.0.1</code> only. No accounts, no telemetry.')],
+};
+
+const abilityHint = () => {
+  const ability = app.ability;
+  if (!ability || !ability.n) return '';
+  return ability.confident
+    ? t('Estimated {band} from {n} answers · set a floor to override', { band: ability.band, n: ability.n })
+    : t('Not enough answers yet — {n} of {min}', { n: ability.n, min: ability.min });
 };
 
 const stat = (name, text) => `<span class="usage-stat">${icon(name, 'icon-sm icon')}${esc(text)}</span>`;
@@ -437,7 +446,12 @@ function renderSettings() {
               `<option value="${level}" ${cfg.level === level ? 'selected' : ''}>${level} · ${esc(levelBlurb(level))}</option>`,
           ).join('')}
         </select>`,
-        { help: 'level' },
+        { help: 'level', hint: abilityHint() },
+      )}
+      ${setting(
+        t('Phonetics'),
+        choices('phonetics', [['auto', 'Automatic'], ['off', 'Off']], cfg.phonetics || 'auto'),
+        { help: 'phonetics' },
       )}
       ${setting(
         t('Build at session end'),

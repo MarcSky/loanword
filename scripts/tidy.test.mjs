@@ -64,3 +64,13 @@ test('with the flag it removes exactly what it listed, and nothing else', () => 
 test.after(() => {
   rmSync(DATA, { recursive: true, force: true });
 });
+
+test('what the builder learned about the runner is safe to throw away', () => {
+  writeFileSync(paths.tuning, JSON.stringify({ shape: 'plain', records: 5 }));
+  const found = leftovers(DATA);
+  const entry = found.find((row) => row.path === paths.tuning);
+  assert.ok(entry, 'tuning.json is listed');
+  assert.match(entry.why, /learned/);
+  rmSync(paths.tuning, { force: true });
+  assert.equal(leftovers(DATA).some((row) => row.path === paths.tuning), false);
+});

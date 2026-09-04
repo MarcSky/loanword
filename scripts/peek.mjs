@@ -66,7 +66,7 @@ export function pickPeek(rows, pick = [], random = Math.random) {
   return window[Math.floor(random() * window.length)] || null;
 }
 
-export const LINE_WIDTH = 72;
+const LINE_WIDTH = 72;
 
 export const slotNow = (intervalSeconds, now = Date.now()) =>
   Math.floor(now / (Math.max(1, Number(intervalSeconds) || 1) * 1000));

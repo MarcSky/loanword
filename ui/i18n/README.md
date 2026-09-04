@@ -46,7 +46,7 @@ node scripts/i18n.mjs audit de       # just one
 ```
 
 Write `<code>.json` with those keys and run `audit` until it is clean. Or ask
-Claude to do it — `/loanword:review` offers once when the dictionary for your
+Claude to do it — `/loanword:start` offers once when the dictionary for your
 native language is missing, and the translation is done by the same
 subscription that builds your cards. No API key, nothing leaves the machine.
 

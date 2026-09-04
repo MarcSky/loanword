@@ -18,6 +18,7 @@ import {
   langAttrs,
   languageName,
   meta,
+  isDark,
   pct,
   reducedMotion,
   refresh,
@@ -30,6 +31,7 @@ import {
   toast,
 } from './core.js';
 
+import { MAX_CHARS } from './limits.js';
 import { checkTyped, ratingFor } from './answer.js';
 import { buildChoices as pickChoices, studyAction } from './quiz.js';
 import { followUp, holdNewCards, progressAt, requeue, shouldHoldNewCards, shuffle } from './plan.js';
@@ -182,8 +184,10 @@ const noteRow = (card) =>
 const exampleRow = (card) =>
   card.example ? `<p class="example" ${langAttrs(app.config.target)}>${esc(card.example)}</p>` : '';
 
-const readingRow = (card) =>
-  card.reading ? `<p class="reading" lang="und" dir="ltr">${esc(card.reading)}</p>` : '';
+const pronunciationRows = (card) =>
+  `${card.reading ? `<p class="reading" lang="und" dir="ltr">${esc(card.reading)}</p>` : ''}${
+    card.ipa ? `<p class="ipa" lang="und" dir="ltr">${esc(card.ipa)}</p>` : ''
+  }`;
 
 function speakButton(card) {
   if (!canSpeak(app.config.target)) return '';
@@ -230,7 +234,7 @@ function gradeButtons(session) {
 function presentBody(session, card) {
   return {
     ask: `<div class="prompt" ${langAttrs(app.config.target)}>${esc(card.front)}</div>
-      ${readingRow(card)}
+      ${pronunciationRows(card)}
       ${speakButton(card)}`,
     tell: `<div class="reveal">
         <div class="answer" ${langAttrs(app.config.native)}>${esc(card.back)}</div>
@@ -252,12 +256,12 @@ function flashcardBody(session, card, reversed) {
   const answerLang = reversed ? app.config.target : app.config.native;
   return {
     ask: `<div class="prompt" ${langAttrs(promptLang)}>${esc(prompt)}</div>
-      ${reversed ? '' : readingRow(card)}
+      ${reversed ? '' : pronunciationRows(card)}
       ${reversed ? '' : speakButton(card)}`,
     tell: session.revealed
       ? `<div class="reveal">
           <div class="answer" ${langAttrs(answerLang)}>${esc(answer)}</div>
-          ${reversed ? readingRow(card) : ''}
+          ${reversed ? pronunciationRows(card) : ''}
           ${reversed ? speakButton(card) : ''}
           ${keywordRow(card)}
           ${exampleRow(card)}
@@ -311,7 +315,7 @@ function typedBody(session, card, mode) {
   return {
     ask,
     tell: `<div class="typed" ${state ? `data-state="${state}"` : ''}>
-        <input id="typed" type="text" autocomplete="off" autocapitalize="off" spellcheck="false"
+        <input id="typed" type="text" maxlength="${MAX_CHARS.context}" autocomplete="off" autocapitalize="off" spellcheck="false"
           ${langAttrs(app.config.target)}
           value="${esc(session.typed)}" ${result ? 'readonly' : ''}
           placeholder="${esc(t('type it in {lang}', { lang: String(app.config.target || '').toUpperCase() }))}"
@@ -325,7 +329,7 @@ function typedBody(session, card, mode) {
       ${
         result
           ? `${verdict(card, result.correct, result.verdict)}
-             ${readingRow(card)}
+             ${pronunciationRows(card)}
              ${mode === 'cloze' ? '' : exampleRow(card)}
              ${noteRow(card)}
              ${nextButton()}`
@@ -432,7 +436,7 @@ function produceBlock(session, summary) {
     <p class="field-hint" style="margin:4px 0 8px">${esc(
       t('Use two of these: {words}', { words: summary.words.slice(0, 5).join(', ') }),
     )}</p>
-    <textarea class="input" name="sentence" rows="2" ${langAttrs(app.config.target)}
+    <textarea class="input" name="sentence" rows="2" maxlength="${MAX_CHARS.sentence}" ${langAttrs(app.config.target)}
       aria-label="${esc(t('Your sentence'))}"></textarea>
     <button class="btn" type="submit" style="margin-top:8px">${esc(t('Get one line back'))}</button>
   </form>`;
@@ -450,11 +454,12 @@ function renderSummary(page, session) {
 
   const accuracy = summary.accuracy || 0;
   page.dataset.idle = '1';
+  const sessionArt = accuracy >= 0.95 ? 'session-clean' : accuracy >= 0.7 ? 'session-mixed' : 'session-hard';
   page.innerHTML = `<div class="stage">
     <div class="summary enter">
       <div style="display:grid;place-items:center;gap:var(--s-4)">
         <div class="art-frame" style="max-width:220px">
-          <img class="art" src="art/${accuracy >= 0.95 ? 'session-clean' : accuracy >= 0.7 ? 'session-mixed' : 'session-hard'}.webp"
+          <img class="art" data-art="${sessionArt}" src="art/${sessionArt}${isDark() ? '-dark' : ''}.webp"
             alt="${esc(t('Flat pastel illustration of index cards on a desk, no text'))}">
         </div>
         ${ring(accuracy, { size: 88, label: pct(accuracy), hole: 'var(--panel)' })}

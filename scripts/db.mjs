@@ -7,7 +7,7 @@ import { DATA, CATEGORIES, CEFR_LEVELS, LEECH_LAPSES, paths } from './store-path
 const require = createRequire(import.meta.url);
 
 export const DB_FILE = join(DATA, 'loanword.db');
-export const SCHEMA_VERSION = 9;
+export const SCHEMA_VERSION = 10;
 
 export const wordsOf = (text) =>
   String(text ?? '')
@@ -84,13 +84,15 @@ CREATE TABLE IF NOT EXISTS cards (
   reading    TEXT NOT NULL DEFAULT '',
   origin_id  TEXT,
   known      INTEGER NOT NULL DEFAULT 0,
-  concept    TEXT NOT NULL DEFAULT ''
+  concept    TEXT NOT NULL DEFAULT '',
+  topic      TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS cards_deck        ON cards(deck_id, deleted_at);
 CREATE INDEX IF NOT EXISTS cards_deck_cat    ON cards(deck_id, category, deleted_at);
 CREATE INDEX IF NOT EXISTS cards_deck_cefr   ON cards(deck_id, cefr, deleted_at);
 CREATE INDEX IF NOT EXISTS cards_origin      ON cards(deck_id, origin_id);
 CREATE INDEX IF NOT EXISTS cards_concept     ON cards(deck_id, concept);
+CREATE INDEX IF NOT EXISTS cards_deck_topic  ON cards(deck_id, topic);
 
 CREATE TABLE IF NOT EXISTS known_words (
   target TEXT NOT NULL,
@@ -258,6 +260,12 @@ const MIGRATIONS = {
     const fill = handle.prepare('UPDATE cards SET concept = ? WHERE id = ?');
     for (const row of handle.prepare('SELECT id, back FROM cards').all()) fill.run(conceptKey(row.back), row.id);
   },
+
+  10: (handle) => {
+    const columns = new Set(handle.prepare('PRAGMA table_info(cards)').all().map((row) => row.name));
+    if (!columns.has('topic')) handle.exec("ALTER TABLE cards ADD COLUMN topic TEXT NOT NULL DEFAULT ''");
+    handle.exec('CREATE INDEX IF NOT EXISTS cards_deck_topic ON cards(deck_id, topic)');
+  },
 };
 
 const stamp = () => new Date().toISOString().replace(/[:.]/g, '-');
@@ -415,7 +423,7 @@ export function deckPairsWithCounts() {
 const plain = (rows) => rows.map((row) => ({ ...row }));
 
 const CARD_COLUMNS =
-  'id, deck_id, type, front, back, keywords, example, pos, cefr, note, category, project, source, ts, created_at, starred, reading, origin_id, known, concept';
+  'id, deck_id, type, front, back, keywords, example, pos, cefr, note, category, project, source, ts, created_at, starred, reading, origin_id, known, concept, topic';
 
 const NO_KEYWORDS = [];
 
@@ -444,7 +452,7 @@ export function insertCards(rows, ids) {
   const insert = stmt(`
     INSERT OR IGNORE INTO cards
       (${CARD_COLUMNS}, deleted_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`);
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`);
   let added = 0;
   for (let i = 0; i < rows.length; i++) {
     const card = rows[i];
@@ -469,6 +477,7 @@ export function insertCards(rows, ids) {
       card.origin_id || null,
       card.known ? 1 : 0,
       card.concept || conceptKey(card.back),
+      card.topic || '',
     ).changes;
     added += Number(changes);
   }
@@ -503,11 +512,12 @@ export const countCards = (deck) =>
 
 export const totalCards = () => get('SELECT COUNT(*) AS n FROM cards WHERE deleted_at IS NULL').n;
 
-const EDITABLE = new Set(['front', 'back', 'example', 'note', 'category', 'cefr', 'pos', 'type', 'reading']);
+const EDITABLE = new Set(['front', 'back', 'example', 'note', 'category', 'cefr', 'pos', 'type', 'reading', 'topic']);
 
 export function updateCard(id, patch) {
   const fields = Object.entries(patch).filter(([key]) => EDITABLE.has(key));
   if (!fields.length) return false;
+  if (typeof patch.back === 'string') fields.push(['concept', conceptKey(patch.back)]);
   const sql = `UPDATE cards SET ${fields.map(([key]) => `${key} = ?`).join(', ')} WHERE id = ?`;
   return Number(run(sql, ...fields.map(([, value]) => String(value ?? '')), id).changes) > 0;
 }
@@ -515,7 +525,10 @@ export function updateCard(id, patch) {
 export function rewriteCard(id, patch) {
   const fields = { ...patch };
   if (Array.isArray(fields.keywords)) fields.keywords = JSON.stringify(fields.keywords);
-  const allowed = ['example', 'note', 'keywords', 'reading'].filter((key) => fields[key] !== undefined);
+  if (typeof fields.back === 'string') fields.concept = conceptKey(fields.back);
+  const allowed = ['front', 'back', 'concept', 'example', 'note', 'keywords', 'reading', 'topic'].filter(
+    (key) => fields[key] !== undefined,
+  );
   if (!allowed.length) return false;
   const sql = `UPDATE cards SET ${allowed.map((key) => `${key} = ?`).join(', ')} WHERE id = ?`;
   return Number(run(sql, ...allowed.map((key) => String(fields[key] ?? '')), id).changes) > 0;
@@ -575,7 +588,35 @@ export const conceptsOfDeck = (deck) =>
     ),
   );
 
-export const setCategory = (id, category) => run('UPDATE cards SET category = ? WHERE id = ?', category, id);
+export function setFiling(id, { category, topic } = {}) {
+  const fields = [];
+  if (typeof category === 'string') fields.push(['category', category]);
+  if (typeof topic === 'string') fields.push(['topic', topic]);
+  if (!fields.length) return false;
+  const sql = `UPDATE cards SET ${fields.map(([key]) => `${key} = ?`).join(', ')} WHERE id = ?`;
+  return Number(run(sql, ...fields.map(([, value]) => value), id).changes) > 0;
+}
+
+export const renameTopic = (deck, category, from, to) =>
+  Number(
+    run(
+      'UPDATE cards SET topic = ? WHERE deck_id = ? AND category = ? AND topic = ? AND deleted_at IS NULL',
+      to,
+      deck,
+      category,
+      from,
+    ).changes,
+  );
+
+export const topicsOf = (deck) =>
+  plain(
+    all(
+      `SELECT category, topic, COUNT(*) AS n FROM cards
+       WHERE deck_id = ? AND deleted_at IS NULL AND topic != ''
+       GROUP BY category, topic ORDER BY n DESC, topic`,
+      deck,
+    ),
+  );
 
 export const setKnown = (id, on) => run('UPDATE cards SET known = ? WHERE id = ?', on ? 1 : 0, id);
 

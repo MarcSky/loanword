@@ -373,7 +373,7 @@ function renderOverview() {
           </div>
           ${
             app.category
-              ? wordList([...scoped].sort((a, b) => Number(b.isDue) - Number(a.isDue) || a.mastery - b.mastery))
+              ? wordList([...scoped].sort((a, b) => Number(b.isDue) - Number(a.isDue) || a.mastery - b.mastery), { by: 'topic' })
               : `<div class="cat-grid">${shown.map(categoryTile).join('')}</div>`
           }
 

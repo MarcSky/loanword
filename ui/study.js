@@ -63,11 +63,11 @@ export function buildChoices(card) {
   return pickChoices(card, app.cards, (list) => shuffle(list));
 }
 
-export async function startSession({ category = '', level = '', minutes, exclude = [] } = {}) {
+export async function startSession({ category = '', level = '', topic = '', minutes, exclude = [], include = [] } = {}) {
   const chosen = minutes || app.config.sessionMinutes || 10;
   let plan;
   try {
-    plan = await api('/session/start', { category, level, minutes: chosen, exclude });
+    plan = await api('/session/start', { category, level, topic, minutes: chosen, exclude, include });
   } catch (error) {
     toast(error.message || t('Nothing is due in that group yet'));
     return false;
@@ -77,6 +77,7 @@ export async function startSession({ category = '', level = '', minutes, exclude
     minutes: plan.minutes,
     category: plan.category,
     level: plan.level,
+    topic: plan.topic || '',
     queue: plan.steps,
     counts: plan.counts,
     planned: plan.steps.length,
@@ -299,12 +300,12 @@ function typedBody(session, card, mode) {
   const result = session.result;
   const state = result ? (result.correct ? (result.verdict === 'close' ? 'close' : 'right') : 'wrong') : '';
 
+  const [, tail, rest] = cloze ? String(cloze.after).match(/^([^\s\p{L}\p{N}]*)([\s\S]*)$/u) : ['', '', ''];
   const ask =
     mode === 'cloze' && cloze
-      ? `<div class="cloze" ${langAttrs(app.config.target)}>${esc(cloze.before)}<span class="gap">${
+      ? `<div class="cloze" ${langAttrs(app.config.target)}>${esc(cloze.before)}<span class="gap-tight"><span class="gap"><span class="gap-blank">${
           result ? esc(cloze.answer) : '…'
-        }</span>${esc(cloze.after)}</div>
-        <p class="lede" style="margin-top:10px" ${langAttrs(app.config.native)}>${esc(card.back)}</p>`
+        }</span><span class="gap-hint" ${langAttrs(app.config.native)}>${esc(card.back)}</span></span>${esc(tail)}</span>${esc(rest)}</div>`
       : `<div class="prompt" ${langAttrs(app.config.native)}>${esc(card.back)}</div>`;
 
   return {

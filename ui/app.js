@@ -18,6 +18,7 @@ import {
   t,
 } from './core.js';
 import { bindTips, hideTip } from './charts.js';
+import { RANGES, clampInt } from './limits.js';
 import { railOpen, railState } from './shell.js';
 import { setRail } from './core.js';
 
@@ -103,9 +104,10 @@ document.addEventListener('input', (event) => {
   }
   if (!field.dataset.setting) return;
   const key = field.dataset.setting;
-  const numeric = key === 'dailyLimit' || key === 'weeklyGoal' || key === 'peekEvery';
-  const value = numeric ? Number(field.value) : field.value;
-  if (value === app.config[key]) return;
+  const range = RANGES[key];
+  const value = range ? clampInt(field.value, range) : field.value;
+  if (value === undefined || value === app.config[key]) return;
+  if (range && String(value) !== field.value) field.value = String(value);
   saveSetting(key, value).then(async () => {
     if (key === 'uiLang') {
       await loadLanguage();

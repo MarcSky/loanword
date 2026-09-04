@@ -11,7 +11,9 @@ import {
 } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { scriptLetters } from './lang.mjs';
+import { scriptLetters, trimToSentence } from './lang.mjs';
+import { broken, keywordsIn, reasonsOf, vet } from './lexis.mjs';
+import { MAX_CHARS, RANGES, SESSION_LENGTHS, USAGE_WINDOWS, clampInt, intIn } from './limits.mjs';
 import { parsePick } from './peek.mjs';
 import { CODES, isPickable, scriptOf } from './languages.mjs';
 import { categoriesOf, knownField } from './categories.mjs';
@@ -109,6 +111,63 @@ export function log(message) {
   }
 }
 
+export function recordUsage(entry) {
+  try {
+    ensureData();
+    appendFileSync(paths.usage, `${JSON.stringify({ ts: new Date().toISOString(), ...entry })}\n`);
+  } catch {
+  }
+}
+
+const round = (value) => Number(Number(value || 0).toFixed(4));
+
+const noUsage = () => ({ calls: 0, input: 0, cacheRead: 0, cacheWrite: 0, sent: 0, output: 0, cost: 0, byModel: {} });
+
+const before = (row, since) => since && String(row.ts || '').slice(0, 10) < String(since).slice(0, 10);
+
+function countUsage(totals, row) {
+  const model = String(row.model || 'unknown');
+  const own = totals.byModel[model] || { calls: 0, sent: 0, output: 0, cost: 0 };
+  totals.calls += 1;
+  own.calls += 1;
+  for (const key of ['input', 'cacheRead', 'cacheWrite', 'output', 'cost']) {
+    const value = Number(row[key]) || 0;
+    totals[key] += value;
+    if (key in own) own[key] += value;
+  }
+  const sent = (Number(row.input) || 0) + (Number(row.cacheRead) || 0) + (Number(row.cacheWrite) || 0);
+  totals.sent += sent;
+  own.sent += sent;
+  totals.byModel[model] = own;
+  return totals;
+}
+
+function roundedUsage(totals) {
+  totals.cost = round(totals.cost);
+  for (const own of Object.values(totals.byModel)) own.cost = round(own.cost);
+  return totals;
+}
+
+const dayBack = (days) => new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
+
+export function usageTotals(since = null) {
+  const totals = noUsage();
+  for (const row of readJsonl(paths.usage)) {
+    if (!before(row, since)) countUsage(totals, row);
+  }
+  return roundedUsage(totals);
+}
+
+export function usageWindows() {
+  const windows = Object.entries(USAGE_WINDOWS).map(([key, days]) => [key, dayBack(days), noUsage()]);
+  for (const row of readJsonl(paths.usage)) {
+    for (const [, since, totals] of windows) {
+      if (!before(row, since)) countUsage(totals, row);
+    }
+  }
+  return Object.fromEntries(windows.map(([key, , totals]) => [key, roundedUsage(totals)]));
+}
+
 const MODES = ['active', 'passive', 'both'];
 const THEMES = ['light', 'dark', 'system'];
 const STUDY_MODES = ['flashcards', 'learn'];
@@ -117,7 +176,7 @@ const SPEECH_MODES = ['off', 'reveal', 'ask'];
 const PEEK_MODES = ['off', 'on'];
 export const MODELS = ['haiku', 'sonnet', 'opus'];
 export const EXERCISES = ['flashcards', 'learn', 'cloze', 'type', 'reverse'];
-export const SESSION_LENGTHS = [5, 10, 15];
+export { SESSION_LENGTHS };
 const LANG_CODE = /^[a-z]{2}$/;
 
 const peekMode = (value) => {
@@ -136,10 +195,7 @@ const echoMode = (value) => {
   return ECHO_MODES.includes(value) ? value : undefined;
 };
 
-const peekEveryFrom = (value) => {
-  const minutes = Number(value);
-  return Number.isFinite(minutes) && minutes >= 1 && minutes <= 120 ? Math.floor(minutes) : 15;
-};
+const peekEveryFrom = (value) => clampInt(value, RANGES.peekEvery) ?? RANGES.peekEvery.fallback;
 
 function envConfig(env = process.env) {
   const limit = Number(env.CLAUDE_PLUGIN_OPTION_DAILY_LIMIT);
@@ -152,7 +208,7 @@ function envConfig(env = process.env) {
     mode: MODES.includes((env.CLAUDE_PLUGIN_OPTION_MODE || '').toLowerCase())
       ? env.CLAUDE_PLUGIN_OPTION_MODE.toLowerCase()
       : 'both',
-    dailyLimit: Number.isFinite(limit) && limit > 0 ? Math.min(Math.floor(limit), 500) : 15,
+    dailyLimit: (limit > 0 && clampInt(limit, RANGES.dailyLimit)) || RANGES.dailyLimit.fallback,
     autoBuild: env.CLAUDE_PLUGIN_OPTION_AUTO_BUILD !== 'false',
     echo: echoMode(env.CLAUDE_PLUGIN_OPTION_ECHO === 'true' || env.CLAUDE_PLUGIN_OPTION_ECHO) ?? 'off',
     level: CEFR_LEVELS.includes(level) ? level : '',
@@ -161,11 +217,11 @@ function envConfig(env = process.env) {
 
     field: '',
   categories: [],
-  model: 'haiku',
+  model: 'sonnet',
   uiLang: '',
     sessionMinutes: 10,
 
-    weeklyGoal: 5,
+    weeklyGoal: RANGES.weeklyGoal.fallback,
     showIntervals: true,
     speech: 'reveal',
     peek: peekMode(env.CLAUDE_PLUGIN_OPTION_PEEK) ?? 'off',
@@ -206,7 +262,7 @@ const SETTING_RULES = {
   targets: codeList,
   paused: codeList,
   mode: (v) => (MODES.includes(v) ? v : undefined),
-  dailyLimit: (v) => (Number.isFinite(v) && v >= 3 ? Math.min(Math.floor(v), 500) : undefined),
+  dailyLimit: (v) => intIn(v, RANGES.dailyLimit),
   autoBuild: (v) => (typeof v === 'boolean' ? v : undefined),
   model: (v) => (MODELS.includes(v) ? v : undefined),
   categories: (v) => (Array.isArray(v) ? categoriesOf(v) : undefined),
@@ -217,12 +273,12 @@ const SETTING_RULES = {
   studyMode: (v) => (STUDY_MODES.includes(v) ? v : undefined),
   uiLang: (v) => (v === '' || (typeof v === 'string' && LANG_CODE.test(String(v).toLowerCase())) ? String(v).toLowerCase() : undefined),
   sessionMinutes: (v) => (SESSION_LENGTHS.includes(Number(v)) ? Number(v) : undefined),
-  weeklyGoal: (v) => (Number.isFinite(v) && v >= 1 && v <= 7 ? Math.floor(v) : undefined),
+  weeklyGoal: (v) => intIn(v, RANGES.weeklyGoal),
   showIntervals: (v) => (typeof v === 'boolean' ? v : undefined),
   speech: (v) => (SPEECH_MODES.includes(v) ? v : undefined),
   peek: peekMode,
   peekPick: (v) => (v === undefined || v === null ? undefined : parsePick(v)),
-  peekEvery: (v) => (Number.isFinite(v) && v >= 1 && v <= 120 ? Math.floor(v) : undefined),
+  peekEvery: (v) => intIn(v, RANGES.peekEvery),
   produce: (v) => (typeof v === 'boolean' ? v : undefined),
   exercises: (v) => stringList(v, EXERCISES),
 };
@@ -540,11 +596,9 @@ export function tildify(path) {
   return typeof path === 'string' && path.startsWith(home) ? `~${path.slice(home.length)}` : path;
 }
 
-const MAX_FIELD_LENGTH = 2000;
-
 function text(value, fallback = '') {
   if (typeof value !== 'string') return fallback;
-  return value.trim().slice(0, MAX_FIELD_LENGTH);
+  return value.trim().slice(0, MAX_CHARS.field);
 }
 
 export function normalizeCategory(value) {
@@ -555,6 +609,17 @@ export function normalizeCategory(value) {
 export function normalizeCefr(value) {
   const level = String(value || '').toUpperCase().trim().slice(0, 2);
   return CEFR_LEVELS.includes(level) ? level : '';
+}
+
+export function normalizeTopic(value) {
+  if (typeof value !== 'string') return '';
+  return value
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s-]/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, MAX_CHARS.topic)
+    .trim();
 }
 
 const STEM = 4;
@@ -584,8 +649,6 @@ export function readingWanted(native, target) {
   return script !== 'latin' && script !== scriptOf(native);
 }
 
-const BRACKETS = /[[\]{}()（）［］｛｝【】〔〕]/;
-
 export function frequentWords(language) {
   const file = join(PLUGIN_ROOT, 'data', 'freq', `${String(language || '').toLowerCase().slice(0, 2)}.txt`);
   if (!existsSync(file)) return new Set();
@@ -598,6 +661,7 @@ export function frequentWords(language) {
 }
 
 const CARD_TYPES = new Set(['phrase', 'word', 'letter']);
+const MAX_SOURCE_LENGTH = 300;
 
 export function sidedByRecord(card, record, target) {
   const phrase = typeof record?.phrase === 'string' ? record.phrase.trim() : '';
@@ -615,14 +679,15 @@ function stampCard(card, pair, provenanceOf) {
 
   const source = provenanceOf(card);
   const wantsReading = readingWanted(pair.native, pair.target);
+  const keywords = (Array.isArray(card.keywords) ? card.keywords : [])
+    .filter((word) => typeof word === 'string')
+    .map((word) => text(word))
+    .filter(Boolean);
   return {
     type: CARD_TYPES.has(card.type) ? card.type : 'phrase',
     front,
     back,
-    keywords: (Array.isArray(card.keywords) ? card.keywords : [])
-      .filter((word) => typeof word === 'string')
-      .map((word) => text(word))
-      .filter(Boolean),
+    keywords: keywordsIn(keywords, pair),
     example: text(card.example),
     pos: text(card.pos),
     cefr: normalizeCefr(card.cefr) || normalizeCefr(source?.cefr),
@@ -630,6 +695,7 @@ function stampCard(card, pair, provenanceOf) {
 
     note: text(card.note),
     category: normalizeCategory(card.category || source?.category),
+    topic: normalizeTopic(card.topic),
 
     native: pair.native,
     target: pair.target,
@@ -638,8 +704,9 @@ function stampCard(card, pair, provenanceOf) {
     starred: !!source?.starred,
     origin_id: text(source?.origin) || null,
     record: source || null,
+    n: card.n,
 
-    source: text(source?.text).slice(0, 300),
+    source: trimToSentence(text(source?.text), MAX_SOURCE_LENGTH),
   };
 }
 
@@ -649,6 +716,7 @@ function provenanceReader(queue) {
   for (const row of queue) if (row && typeof row.origin === 'string') byOrigin.set(row.origin, row);
 
   return (card) => {
+    if (Number.isInteger(card.n) && queue[card.n]) return queue[card.n];
     if (typeof card.origin === 'string' && byOrigin.has(card.origin)) return byOrigin.get(card.origin);
     const front = String(card.front || '').toLowerCase();
     const back = String(card.back || '').toLowerCase();
@@ -660,12 +728,6 @@ function provenanceReader(queue) {
       }) || mostRecent
     );
   };
-}
-
-function rejectReason(card, stopWords) {
-  if (BRACKETS.test(card.front)) return 'a bracketed front';
-  if (card.type === 'word' && stopWords.has(card.front.toLowerCase())) return 'a stop-word card';
-  return '';
 }
 
 function classifyCards(newCards, pair, deck, queue) {
@@ -682,30 +744,32 @@ function classifyCards(newCards, pair, deck, queue) {
     const card = stampCard(raw, pair, provenanceOf);
     if (!card) continue;
 
-    const reason = rejectReason(card, stopWords);
-    if (reason) {
-      dropped += 1;
-      log(`commit dropped ${reason}: ${card.front.slice(0, 60)}`);
-      continue;
-    }
-
     const record = card.record;
     delete card.record;
+    delete card.n;
+
+    const sided = facing(sidedByRecord(card, record, pair.target));
+    const issues = vet(sided, pair, { stopWords, record });
+    if (broken(issues)) {
+      dropped += 1;
+      log(`commit dropped ${reasonsOf(issues)[0]}: ${sided.front.slice(0, 60)}`);
+      continue;
+    }
+    for (const warning of issues.warn) log(`commit warned ${warning}: ${sided.front.slice(0, 60)}`);
 
     const rewriting =
-      record?.source === 'rewrite' && card.origin_id && db.cardExists(card.origin_id)
-        ? db.cardById(card.origin_id)
+      record?.source === 'rewrite' && sided.origin_id && db.cardExists(sided.origin_id)
+        ? db.cardById(sided.origin_id)
         : null;
     if (rewriting?.deck_id === deck) {
-      rewrites.push({ id: card.origin_id, card });
+      rewrites.push({ id: sided.origin_id, card: sided });
       continue;
     }
 
-    if (db.isRetired(card.front)) continue;
-    const id = cardId(card);
+    if (db.isRetired(sided.front) || db.isRetired(card.front)) continue;
+    const id = cardId(sided);
     if (seen.has(id)) continue;
     seen.add(id);
-    const sided = facing(sidedByRecord(card, record, pair.target));
     const concept = db.conceptKey(sided.back);
     const twins = byConcept.get(concept) || [];
     if (sided.type !== 'letter' && twins.some((front) => sameWord(front, sided.front))) {
@@ -735,40 +799,66 @@ function rememberWords(target, queue, stamped) {
   saveKnownWords(target, known);
 }
 
+export const recordKey = (row) =>
+  JSON.stringify([row?.ts ?? null, row?.source ?? null, row?.text ?? row?.words ?? row?.letters ?? row?.origin ?? null]);
+
+export function dropFromQueue(file, records) {
+  const gone = new Set(records.map(recordKey));
+  if (!existsSync(file)) return 0;
+  const lines = readFileSync(file, 'utf8').split('\n').filter((line) => line.trim());
+  const kept = lines.filter((line) => {
+    try {
+      return !gone.has(recordKey(JSON.parse(line)));
+    } catch {
+      return true;
+    }
+  });
+  writeLines(file, kept);
+  return lines.length - kept.length;
+}
+
 export function commit(newCards, options = {}) {
   if (!Array.isArray(newCards)) throw new TypeError('commit expects a JSON array of cards');
 
   const cfg = config();
   const pair = { native: options.native || cfg.native, target: options.target || cfg.target };
   const file = queueFile(pair.target);
-  const queue = readJsonl(file);
+  const batch = Array.isArray(options.records) ? options.records : null;
+  const queue = batch || readJsonl(file);
   const deck = db.deckId(pair.native, pair.target);
 
   const { stamped, ids, rewrites, dropped } = classifyCards(newCards, pair, deck, queue);
   const nothing = { added: 0, rewritten: 0, dropped, queueCleared: 0, cards: [], target: pair.target };
-  if (!stamped.length && !rewrites.length) return nothing;
+  if (!stamped.length && !rewrites.length && !batch) return nothing;
 
-  const added = db.tx(() => {
-    for (const { id, card } of rewrites) {
-      db.rewriteCard(id, {
-        example: card.example,
-        note: card.note,
-        keywords: card.keywords,
-        reading: card.reading,
-      });
-    }
-    return db.insertCards(stamped, ids);
-  });
+  const added =
+    stamped.length || rewrites.length
+      ? db.tx(() => {
+          for (const { id, card } of rewrites) {
+            db.rewriteCard(id, {
+              front: card.front,
+              back: card.back,
+              example: card.example,
+              note: card.note,
+              keywords: card.keywords,
+              reading: card.reading,
+            });
+          }
+          return db.insertCards(stamped, ids);
+        })
+      : 0;
 
   rememberWords(pair.target, queue, stamped);
   writeSnapshots(pair.native, pair.target, { force: true });
-  writeFileSync(file, '');
+  if (batch) dropFromQueue(file, batch);
+  else writeFileSync(file, '');
+  const queueCleared = queue.length;
 
   return {
     added,
     rewritten: rewrites.length,
     dropped,
-    queueCleared: queue.length,
+    queueCleared,
     cards: stamped,
     target: pair.target,
   };

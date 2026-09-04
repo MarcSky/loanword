@@ -3,13 +3,17 @@
 import { spawn } from 'node:child_process';
 import { readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { isUnspaced } from './lang.mjs';
+import { isUnspaced, trimToSentence } from './lang.mjs';
+import { EXAMPLE_WARNING, broken, budget, flat, reasonsOf, vet } from './lexis.mjs';
+import * as db from './db.mjs';
 import {
   adoptQueue,
   captureTargets,
   commit,
   config,
   enabledCategories,
+  facing,
+  frequentWords,
   log,
   lockFile,
   MODELS,
@@ -19,41 +23,150 @@ import {
   readJson,
   readJsonl,
   readingWanted,
+  recordUsage,
+  sidedByRecord,
   writeJson,
   PLUGIN_ROOT,
 } from './store.mjs';
 
-export const BATCH_RECORDS = 60;
-const FALLBACK_MODEL = 'haiku';
+export const BATCH_RECORDS = 20;
+export const BUILD_CONCURRENCY = Number(process.env.LOANWORD_BUILD_CONCURRENCY) || 3;
+export const MAX_RECORD_CHARS = 400;
+export const TOPICS_PER_CATEGORY = 30;
+const FALLBACK_MODEL = 'sonnet';
 const BATCH_TIMEOUT_MS = 5 * 60_000;
 
 const STALE_LOCK_MS = 30 * 60_000;
 
-export function brief() {
+export const ROLES = {
+  prompt: 'lexicographer',
+  session: 'lexicographer',
+  clone: 'cloner',
+  rewrite: 'rewriter',
+  alphabet: 'alphabet',
+  pick: 'picker',
+};
+
+const ROLE_HEADINGS = {
+  lexicographer: 'Lexicographer',
+  cloner: 'Cloner',
+  rewriter: 'Rewriter',
+  alphabet: 'Alphabet',
+  picker: 'Picker',
+};
+
+export const roleOf = (record) => ROLES[record?.source] || 'lexicographer';
+
+export const EFFORT = { alphabet: 'low', filer: 'low', sentence: 'low' };
+
+export const effortFor = (kind) => EFFORT[kind] || 'medium';
+
+export function brief(role = '') {
   const md = readFileSync(join(PLUGIN_ROOT, 'agents', 'card-builder.md'), 'utf8');
-  return md.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, '').trim();
+  const body = md.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, '').trim();
+  const wanted = ROLE_HEADINGS[role];
+  if (!wanted) return body;
+  const others = Object.values(ROLE_HEADINGS).filter((heading) => heading !== wanted);
+  return body
+    .split(/^(?=## )/m)
+    .filter((section) => !others.some((heading) => section.startsWith(`## ${heading}\n`)))
+    .join('')
+    .trim();
 }
 
 export const chunk = (rows, size) =>
   Array.from({ length: Math.ceil(rows.length / size) }, (_, i) => rows.slice(i * size, i * size + size));
 
+export function dedupe(queue) {
+  const unique = [];
+  const twins = new Map();
+  const seen = new Map();
+  for (const row of queue) {
+    const prompt = !row.source || row.source === 'prompt';
+    const key = prompt && typeof row.text === 'string' ? flat(row.text) : '';
+    if (key && seen.has(key)) {
+      const kept = seen.get(key);
+      twins.set(kept, [...(twins.get(kept) || []), row]);
+      continue;
+    }
+    if (key) seen.set(key, row);
+    unique.push(row);
+  }
+  const skipped = queue.length - unique.length;
+  if (skipped) log(`build skipped ${skipped} repeated prompt(s)`);
+  return { unique, twins, skipped };
+}
+
+export function groupByRole(rows) {
+  const groups = new Map();
+  for (const row of rows) {
+    const role = roleOf(row);
+    if (!groups.has(role)) groups.set(role, []);
+    groups.get(role).push(row);
+  }
+  return groups;
+}
+
+export function topicLines(topics = []) {
+  const byCategory = new Map();
+  for (const row of Array.isArray(topics) ? topics : []) {
+    if (!row?.topic || !row.category) continue;
+    const list = byCategory.get(row.category) || [];
+    if (list.length < TOPICS_PER_CATEGORY) list.push(row.topic);
+    byCategory.set(row.category, list);
+  }
+  if (!byCategory.size) return ['TOPICS = (none yet)'];
+  return ['TOPICS =', ...[...byCategory].map(([category, list]) => `  ${category}: ${list.join(', ')}`)];
+}
+
+function recordLine(row, index) {
+  const { n, ...rest } = row;
+  const out = { n: Number.isInteger(n) ? n : index, ...rest };
+  if (typeof out.text === 'string' && out.text.length > MAX_RECORD_CHARS) {
+    out.text = trimToSentence(out.text, MAX_RECORD_CHARS);
+  }
+  return JSON.stringify(out);
+}
+
 export function promptFor(records, cfg) {
   return [
-    brief(),
-    '',
     '## This batch',
     '',
     `NATIVE = ${cfg.native}`,
     `TARGET = ${cfg.target}`,
     `CATEGORIES = ${enabledCategories(cfg).join(', ')}`,
-    `LIMIT = ${records.length}`,
+    `LIMIT = ${budget(records)}`,
     `LEVEL = ${cfg.level || '(no floor)'}`,
     `READING = ${readingWanted(cfg.native, cfg.target) ? 'yes' : 'no'}`,
     `UNSPACED = ${isUnspaced(cfg.target) ? 'yes' : 'no'}`,
+    ...topicLines(cfg.topics),
     '',
     'The queue records follow, one JSON object per line:',
     '',
-    records.map((row) => JSON.stringify(row)).join('\n'),
+    records.map(recordLine).join('\n'),
+  ].join('\n');
+}
+
+const NOT_FOR_REPAIR = new Set(['native', 'target', 'record']);
+
+export function repairPrompt(items, cfg) {
+  return [
+    '## Repair',
+    '',
+    `NATIVE = ${cfg.native}`,
+    `TARGET = ${cfg.target}`,
+    '',
+    'These cards broke the rules named beside them. Return the same JSON array, same `n` on each card, every field present, fixed. A back is the translation equivalent in NATIVE, one to four words, never a definition. An example contains the front verbatim. Keywords are TARGET. If a card cannot be fixed, omit it.',
+    '',
+    ...items.map(({ card, reasons, record }) => {
+      const fields = Object.fromEntries(Object.entries(card).filter(([key]) => !NOT_FOR_REPAIR.has(key)));
+      return JSON.stringify({
+        n: card.n,
+        ...fields,
+        reasons,
+        record: typeof record?.text === 'string' ? trimToSentence(record.text, MAX_RECORD_CHARS) : '',
+      });
+    }),
   ].join('\n');
 }
 
@@ -70,6 +183,19 @@ export function jsonArray(reply) {
 export const parseCards = jsonArray;
 
 export const STREAM_ARGS = ['--output-format', 'stream-json', '--include-partial-messages', '--verbose'];
+
+export const LEAN_ARGS = [
+  '--tools',
+  '',
+  '--no-session-persistence',
+  '--max-turns',
+  '1',
+  '--setting-sources',
+  '',
+  '--strict-mcp-config',
+  '--mcp-config',
+  '{"mcpServers":{}}',
+];
 
 export const cardsSoFar = (text) => (String(text).match(/"front"\s*:/g) || []).length;
 
@@ -106,6 +232,26 @@ export function replyText(out) {
     }
   }
   return streamed || finished || assistant || String(out);
+}
+
+const NO_COST = { input: 0, cacheRead: 0, cacheWrite: 0, output: 0, thinking: 0, cost: 0, ms: 0 };
+
+export function costOf(out) {
+  for (const line of String(out).split('\n')) {
+    const event = eventOf(line);
+    if (event?.type !== 'result') continue;
+    const usage = event.usage || {};
+    return {
+      input: Number(usage.input_tokens) || 0,
+      cacheRead: Number(usage.cache_read_input_tokens) || 0,
+      cacheWrite: Number(usage.cache_creation_input_tokens) || 0,
+      output: Number(usage.output_tokens) || 0,
+      thinking: Number(usage.output_tokens_details?.thinking_tokens) || 0,
+      cost: Number(event.total_cost_usd) || 0,
+      ms: Number(event.duration_ms) || 0,
+    };
+  }
+  return { ...NO_COST };
 }
 
 function run(args, prompt, onText) {
@@ -149,8 +295,9 @@ export const unknownFlag = (error) => /unknown (option|argument)|unrecognized|--
 
 export const modelFor = (cfg = config()) => (MODELS.includes(cfg.model) ? cfg.model : FALLBACK_MODEL);
 
-export async function ask(prompt, onCards = () => {}) {
-  const base = ['-p', '--model', modelFor()];
+export async function askFull(prompt, onCards = () => {}, { model = modelFor(), system = '', effort = 'medium' } = {}) {
+  const base = ['-p', '--model', model];
+  const joined = system ? `${system}\n\n${prompt}` : prompt;
   let text = '';
   let counted = 0;
   const watch = (piece) => {
@@ -162,13 +309,112 @@ export async function ask(prompt, onCards = () => {}) {
     onCards(cards);
   };
 
-  try {
-    return replyText(await run([...base, ...STREAM_ARGS], prompt, watch));
-  } catch (error) {
-    if (!unknownFlag(error)) throw error;
-    log('the lexicographer does not stream on this version; building without progress');
-    return replyText(await run(base, prompt, () => {}));
+  const attempts = [
+    {
+      args: [...base, ...LEAN_ARGS, '--effort', effort, ...(system ? ['--system-prompt', system] : []), ...STREAM_ARGS],
+      stdin: prompt,
+      onText: watch,
+    },
+    { args: [...base, ...STREAM_ARGS], stdin: joined, onText: watch },
+    { args: base, stdin: joined, onText: () => {} },
+  ];
+  const notes = [
+    'the lexicographer does not take the lean flags on this version; building with the full context',
+    'the lexicographer does not stream on this version; building without progress',
+  ];
+
+  for (const [index, attempt] of attempts.entries()) {
+    try {
+      const out = await run(attempt.args, attempt.stdin, attempt.onText);
+      return { text: replyText(out), usage: costOf(out) };
+    } catch (error) {
+      if (index === attempts.length - 1 || !unknownFlag(error)) throw error;
+      log(notes[index]);
+    }
   }
+}
+
+export async function ask(prompt, onCards = () => {}, options = {}) {
+  return (await askFull(prompt, onCards, options)).text;
+}
+
+export function triage(cards, records, pair, stopWords = new Set()) {
+  const kept = [];
+  const needsRepair = [];
+  const rejected = [];
+  for (const raw of Array.isArray(cards) ? cards : []) {
+    if (!raw || typeof raw !== 'object') continue;
+    const record = Number.isInteger(raw.n) ? records.find((row) => row.n === raw.n) || null : null;
+    const sided = facing(sidedByRecord({ ...raw, native: pair.native, target: pair.target }, record, pair.target));
+    const issues = vet(sided, pair, { stopWords, record });
+    if (issues.reject) {
+      rejected.push({ card: sided, reason: issues.reject });
+      log(`build dropped ${issues.reject}: ${String(sided.front ?? '').slice(0, 60)}`);
+    } else if (broken(issues)) needsRepair.push({ card: sided, reasons: reasonsOf(issues), record });
+    else if (issues.warn.includes(EXAMPLE_WARNING)) needsRepair.push({ card: sided, reasons: issues.warn, record, soft: true });
+    else kept.push(sided);
+  }
+  return { kept, needsRepair, rejected };
+}
+
+const replaced = (item, fixed) =>
+  fixed.some(
+    (card) =>
+      card.n === item.card.n &&
+      (flat(card.front) === flat(item.card.front) || flat(card.back) === flat(item.card.back)),
+  );
+
+async function repaired(first, records, pair, stopWords, { model, system, target }) {
+  const items = first.needsRepair;
+  const kept = [...first.kept];
+  let rejected = first.rejected.length;
+  if (!items.length) return { kept, rejected, repaired: 0 };
+
+  let fixed = [];
+  try {
+    const effort = effortFor('repair');
+    const { text, usage } = await askFull(repairPrompt(items, pair), () => {}, { model, system, effort });
+    const raw = parseCards(text);
+    recordUsage({ kind: 'repair', model, effort, target, records: items.length, cards: raw.length, ...usage });
+    const second = triage(raw, records, pair, stopWords);
+    fixed = [...second.kept, ...second.needsRepair.filter((item) => item.soft).map((item) => item.card)];
+    rejected += second.rejected.length;
+  } catch (error) {
+    log(`build repair failed: ${error.message}`);
+  }
+
+  kept.push(...fixed);
+  for (const item of items) {
+    if (replaced(item, fixed)) continue;
+    if (item.soft) kept.push(item.card);
+    else {
+      rejected += 1;
+      log(`build dropped ${item.reasons[0]}: ${String(item.card.front ?? '').slice(0, 60)}`);
+    }
+  }
+  log(`build repaired ${fixed.length} of ${items.length}`);
+  return { kept, rejected, repaired: fixed.length };
+}
+
+async function buildBatch({ role, records, pair, model, stopWords, target, onCards }) {
+  const system = brief(role);
+  const effort = effortFor(role);
+  const { text, usage } = await askFull(promptFor(records, pair), onCards, { model, system, effort });
+  const raw = parseCards(text);
+  recordUsage({ kind: role, model, effort, target, records: records.length, cards: raw.length, ...usage });
+  const first = triage(raw, records, pair, stopWords);
+  return repaired(first, records, pair, stopWords, { model, system, target });
+}
+
+export async function pool(items, limit, work) {
+  let next = 0;
+  const lanes = Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, async () => {
+    while (next < items.length) {
+      const index = next++;
+      await work(items[index], index);
+    }
+  });
+  await Promise.all(lanes);
 }
 
 const pidIn = (file) => {
@@ -230,6 +476,23 @@ export function queueSizes(cfg = config()) {
   });
 }
 
+export function batchesOf(queue) {
+  const { unique, twins } = dedupe(queue);
+  const batches = [];
+  for (const [role, rows] of groupByRole(unique)) {
+    for (const records of chunk(rows, BATCH_RECORDS)) {
+      batches.push({
+        role,
+        records: records.map((row, n) => ({ ...row, n })),
+        extras: records.flatMap((row) => twins.get(row) || []),
+      });
+    }
+  }
+  return batches;
+}
+
+const EMPTY_RUN = { added: 0, rewritten: 0, dropped: 0, queueCleared: 0, repaired: 0, rejected: 0, cards: [] };
+
 export async function buildOne(target, { onBatch = () => {}, cfg = config() } = {}) {
   const pair = { ...cfg, target };
   const file = queueFile(target);
@@ -241,37 +504,57 @@ export async function buildOne(target, { onBatch = () => {}, cfg = config() } = 
 
   writeFileSync(lockFile(target), String(process.pid));
   const startedAt = new Date().toISOString();
-  const batches = chunk(queue, BATCH_RECORDS);
-  const report = (done, batch) =>
+  const batches = batchesOf(queue);
+  const model = modelFor(cfg);
+  const stopWords = frequentWords(target);
+  const deck = db.deckIdIfAny(cfg.native, target);
+  pair.topics = deck === null ? [] : db.topicsOf(deck);
+
+  let done = 0;
+  let started = 0;
+  const report = (extra = 0) =>
     writeJson(progressFile(target), {
       target,
       total: queue.length,
-      done,
-      batch,
+      done: Math.min(queue.length, done + extra),
+      batch: Math.max(1, Math.min(started, batches.length)),
       batches: batches.length,
       startedAt,
     });
+  const totals = { ...EMPTY_RUN, cards: [] };
+  const failures = [];
+
   try {
-    const cards = [];
-    report(0, 1);
-    for (const [index, records] of batches.entries()) {
+    report();
+    await pool(batches, BUILD_CONCURRENCY, async ({ role, records, extras }, index) => {
+      started += 1;
       onBatch(index + 1, batches.length, target);
-      const built = index * BATCH_RECORDS;
-      report(built, index + 1);
-      cards.push(...parseCards(await ask(promptFor(records, pair), (n) => report(built + n, index + 1))));
-      report(built + records.length, index + 1);
+      try {
+        const built = await buildBatch({ role, records, pair, model, stopWords, target, onCards: (n) => report(n) });
+        const result = commit(built.kept, { native: cfg.native, target, records: [...records, ...extras] });
+        totals.added += result.added;
+        totals.rewritten += result.rewritten;
+        totals.dropped += result.dropped;
+        totals.queueCleared += result.queueCleared;
+        totals.repaired += built.repaired;
+        totals.rejected += built.rejected;
+        totals.cards.push(...result.cards);
+      } catch (error) {
+        failures.push(`batch ${index + 1} of ${batches.length}: ${error.message}`);
+        log(`build failed for ${target}, batch ${index + 1} of ${batches.length}: ${error.message}`);
+      }
+      done += records.length + extras.length;
+      report();
+    });
+
+    const summary = { target, records: queue.length, batches: batches.length, ...totals, cards: undefined };
+    log(`build ${JSON.stringify(summary)}`);
+    if (failures.length) {
+      const error = new Error(failures.join('; '));
+      error.result = { ...totals, target, batches: batches.length };
+      throw error;
     }
-    const result = commit(cards, { native: cfg.native, target });
-    log(
-      `build ${JSON.stringify({
-        target,
-        records: queue.length,
-        batches: batches.length,
-        added: result.added,
-        dropped: result.dropped,
-      })}`,
-    );
-    return { ...result, target, batches: batches.length };
+    return { ...totals, target, batches: batches.length };
   } finally {
     rmSync(lockFile(target), { force: true });
     rmSync(progressFile(target), { force: true });
@@ -288,18 +571,25 @@ export async function build({ onBatch = () => {}, target = '' } = {}) {
   const failures = [];
   for (const [index, outcome] of settled.entries()) {
     if (outcome.status === 'fulfilled') runs.push(outcome.value);
-    else failures.push({ target: targets[index], error: outcome.reason?.message || String(outcome.reason) });
+    else {
+      failures.push({ target: targets[index], error: outcome.reason?.message || String(outcome.reason) });
+      if (outcome.reason?.result) runs.push({ ...outcome.reason.result, failed: true });
+    }
   }
 
   for (const failure of failures) log(`build failed for ${failure.target}: ${failure.error}`);
 
-  const batches = runs.reduce((sum, run) => sum + (run.batches || 0), 0);
+  const sum = (key) => runs.reduce((total, run) => total + (run[key] || 0), 0);
+  const batches = sum('batches');
   return {
     runs,
     failures,
     batches,
-    added: runs.reduce((sum, run) => sum + (run.added || 0), 0),
-    queueCleared: runs.reduce((sum, run) => sum + (run.queueCleared || 0), 0),
+    added: sum('added'),
+    dropped: sum('dropped'),
+    repaired: sum('repaired'),
+    rejected: sum('rejected'),
+    queueCleared: sum('queueCleared'),
     cards: runs.flatMap((run) => run.cards || []),
     skipped: !batches && runs.every((run) => run.skipped) && runs.length ? runs[0].skipped : '',
   };
@@ -339,7 +629,12 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     });
     if (result.skipped) console.log(result.skipped);
     else if (!result.batches) console.log('Nothing captured yet — work a while and come back.');
-    else console.log(`${result.added} card(s) added from ${result.queueCleared} captured record(s).`);
+    else {
+      console.log(`${result.added} card(s) added from ${result.queueCleared} captured record(s).`);
+      if (result.repaired || result.rejected) {
+        console.log(`${result.repaired} card(s) repaired, ${result.rejected} refused by the lexis gate.`);
+      }
+    }
     for (const failure of result.failures) console.error(`${failure.target}: ${failure.error}`);
   } catch (error) {
     log(`build failed: ${error?.stack || error}`);

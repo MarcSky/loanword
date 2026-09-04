@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">Loanword robot teacher</title>
+  <desc id="desc">A symmetrical minimalist robot face wearing glasses, with a subtle open-book shape at its base.</desc>
+
+  <g fill="none" stroke="#29231f" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Head and the open-book cue share one continuous silhouette. -->
+    <path d="M512 858 414 790h-46c-58 0-104-46-104-104V364c0-72 58-130 130-130h236c72 0 130 58 130 130v322c0 58-46 104-104 104h-46Z" stroke-width="72"/>
+
+    <!-- Glasses double as the robot's eye housings. -->
+    <rect x="338" y="402" width="164" height="176" rx="46" stroke-width="58"/>
+    <rect x="522" y="402" width="164" height="176" rx="46" stroke-width="58"/>
+    <path d="M264 490h45m193 0h20m164 0h74" stroke-width="58"/>
+  </g>
+
+  <!-- Calm, friendly eyes. -->
+  <circle cx="420" cy="490" r="39" fill="#9eddbf"/>
+  <circle cx="604" cy="490" r="39" fill="#9eddbf"/>
+  <circle cx="420" cy="490" r="16" fill="#29231f"/>
+  <circle cx="604" cy="490" r="16" fill="#29231f"/>
+
+  <!-- Minimal robot hardware. -->
+  <rect x="424" y="148" width="176" height="54" rx="27" fill="#29231f"/>
+  <rect x="166" y="408" width="62" height="164" rx="31" fill="#29231f"/>
+  <rect x="796" y="408" width="62" height="164" rx="31" fill="#29231f"/>
+
+  <!-- Two pages make the teacher/book reference legible without adding detail. -->
+  <path d="M347 727c58 2 113 18 165 77-19-78-65-109-136-109h-29Z" fill="#9eddbf"/>
+  <path d="M677 727c-58 2-113 18-165 77 19-78 65-109 136-109h29Z" fill="#9eddbf"/>
+</svg>

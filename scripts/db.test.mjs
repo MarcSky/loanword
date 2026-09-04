@@ -485,3 +485,150 @@ test('a deck can list the meanings it carries more than once', () => {
   assert.deepEqual(db.conceptsShared(deck), [], 'throwing one away closes the group');
   assert.deepEqual(db.conceptsShared(db.deckId('ru', 'nb')), []);
 });
+
+const CARDS_V9 = `
+CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS decks (
+  id INTEGER PRIMARY KEY, native TEXT NOT NULL, target TEXT NOT NULL, UNIQUE (native, target));
+CREATE TABLE IF NOT EXISTS cards (
+  id TEXT PRIMARY KEY, deck_id INTEGER NOT NULL REFERENCES decks(id),
+  type TEXT NOT NULL DEFAULT 'phrase', front TEXT NOT NULL, back TEXT NOT NULL,
+  keywords TEXT NOT NULL DEFAULT '[]', example TEXT NOT NULL DEFAULT '', pos TEXT NOT NULL DEFAULT '',
+  cefr TEXT NOT NULL DEFAULT '', note TEXT NOT NULL DEFAULT '', category TEXT NOT NULL DEFAULT 'everyday',
+  project TEXT NOT NULL DEFAULT '', source TEXT NOT NULL DEFAULT '', ts TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT '', starred INTEGER NOT NULL DEFAULT 0, deleted_at TEXT,
+  reading TEXT NOT NULL DEFAULT '', origin_id TEXT, known INTEGER NOT NULL DEFAULT 0, concept TEXT NOT NULL DEFAULT '');
+CREATE INDEX IF NOT EXISTS cards_concept ON cards(deck_id, concept);
+CREATE TABLE IF NOT EXISTS known_words (target TEXT NOT NULL, word TEXT NOT NULL, PRIMARY KEY (target, word));
+CREATE TABLE IF NOT EXISTS fsrs_state (
+  card_id TEXT PRIMARY KEY REFERENCES cards(id) ON DELETE CASCADE, deck_id INTEGER NOT NULL,
+  due TEXT NOT NULL, stability REAL NOT NULL DEFAULT 0, difficulty REAL NOT NULL DEFAULT 0,
+  elapsed_days REAL NOT NULL DEFAULT 0, scheduled_days REAL NOT NULL DEFAULT 0,
+  reps INTEGER NOT NULL DEFAULT 0, lapses INTEGER NOT NULL DEFAULT 0, state INTEGER NOT NULL DEFAULT 0,
+  learning_steps INTEGER NOT NULL DEFAULT 0, last_review TEXT);
+CREATE TABLE IF NOT EXISTS sessions (
+  id INTEGER PRIMARY KEY, deck_id INTEGER NOT NULL, started_at TEXT NOT NULL, ended_at TEXT,
+  day TEXT NOT NULL, minutes INTEGER NOT NULL DEFAULT 0, planned INTEGER NOT NULL DEFAULT 0,
+  reviewed INTEGER NOT NULL DEFAULT 0, correct INTEGER NOT NULL DEFAULT 0, duration_ms INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS junk (
+  id INTEGER PRIMARY KEY, card_id TEXT NOT NULL, deck_id INTEGER NOT NULL, ts TEXT NOT NULL,
+  day TEXT NOT NULL, reason TEXT NOT NULL DEFAULT '', front TEXT NOT NULL DEFAULT '');
+CREATE TABLE IF NOT EXISTS retired (front_key TEXT PRIMARY KEY);
+`;
+
+async function fixture9(name) {
+  const { DatabaseSync } = await import('node:sqlite');
+  const file = join(DATA, `${name}.db`);
+  rmSync(file, { force: true });
+  const handle = new DatabaseSync(file);
+  handle.exec(CARDS_V9);
+  handle.exec(REVIEWS_V3);
+  handle.prepare('INSERT INTO schema_version (version) VALUES (?)').run(9);
+  handle.prepare('INSERT INTO decks (native, target) VALUES (?, ?)').run('ru', 'en');
+  handle
+    .prepare('INSERT INTO cards (id, deck_id, front, back, concept, created_at) VALUES (?, 1, ?, ?, ?, ?)')
+    .run('abcdef0101', 'roll back', 'откатить', db.conceptKey('откатить'), '2026-01-01');
+  handle.close();
+  return file;
+}
+
+test('a v9 deck gains a topic column, keeps its rows, and ends with the fresh shape', async () => {
+  db.close();
+  const fresh = shapeOf(db.open(join(DATA, 'fresh10.db')));
+  db.close();
+  rmSync(paths.backups, { recursive: true, force: true });
+
+  const file = await fixture9('v9');
+  const handle = db.open(file);
+  const shape = shapeOf(handle);
+  assert.deepEqual(shape, fresh, 'the ladder ends where a new database starts');
+  assert.ok(fresh.cards.some((column) => column.startsWith('topic:TEXT:1:')));
+  assert.ok(fresh.__indexes.includes('cards_deck_topic'));
+  const row = handle.prepare('SELECT front, topic, concept FROM cards WHERE id = ?').get('abcdef0101');
+  assert.equal(row.front, 'roll back');
+  assert.equal(row.topic, '', 'old rows have no topic yet');
+  assert.equal(row.concept, db.conceptKey('откатить'), 'and nothing else moved');
+  assert.equal(db.get('SELECT version FROM schema_version').version, 10);
+  assert.ok(existsSync(paths.backups), 'a copy was taken before the ladder ran');
+  assert.ok(readdirSync(paths.backups).length >= 1);
+  db.close();
+  db.open();
+});
+
+test('a topic is stored, filed and grouped', () => {
+  db.open();
+  const home = db.deckId('ru', 'et');
+  const rows = [
+    card('t1', { deck_id: home, topic: 'code review', category: 'engineering' }),
+    card('t2', { deck_id: home, topic: 'code review', category: 'engineering' }),
+    card('t3', { deck_id: home, topic: 'airport', category: 'everyday' }),
+    card('t4', { deck_id: home, category: 'everyday' }),
+  ];
+  assert.equal(db.insertCards(rows, ['tttttttt01', 'tttttttt02', 'tttttttt03', 'tttttttt04']), 4);
+  assert.equal(db.cardById('tttttttt01').topic, 'code review');
+  assert.equal(db.cardById('tttttttt04').topic, '', 'no topic is the empty string, never null');
+  assert.deepEqual(db.topicsOf(home), [
+    { category: 'engineering', topic: 'code review', n: 2 },
+    { category: 'everyday', topic: 'airport', n: 1 },
+  ]);
+
+  assert.equal(db.setFiling('tttttttt04', { category: 'everyday', topic: 'airport' }), true);
+  assert.equal(db.cardById('tttttttt04').topic, 'airport');
+  assert.equal(db.setFiling('tttttttt03', { topic: 'travel' }), true, 'a topic alone is a filing');
+  assert.equal(db.cardById('tttttttt03').category, 'everyday');
+  assert.equal(db.cardById('tttttttt03').topic, 'travel');
+  assert.equal(db.setFiling('tttttttt03', {}), false);
+  assert.deepEqual(
+    db.topicsOf(home).map((row) => row.topic),
+    ['code review', 'airport', 'travel'],
+    'most cards first, then by label',
+  );
+  assert.ok(db.updateCard('tttttttt01', { topic: 'deploys' }));
+  assert.equal(db.cardById('tttttttt01').topic, 'deploys', 'the editor can move a card between topics');
+});
+
+test('a rewrite may change both sides, refreshes the concept, and never touches the schedule', () => {
+  db.open();
+  const home = db.deckId('ru', 'et');
+  db.insertCards([card('rw', { deck_id: home, front: 'stale', back: 'несвежий' })], ['rwrwrwrw01']);
+  const due = new Date('2026-10-01T00:00:00Z');
+  db.saveState('rwrwrwrw01', home, { due, stability: 12, difficulty: 5, reps: 4, lapses: 1, state: 2 });
+  const before = db.stateOfCard('rwrwrwrw01');
+
+  assert.equal(
+    db.rewriteCard('rwrwrwrw01', { front: 'stale data', back: 'устаревшие данные', example: 'Stale data misleads.', keywords: ['stale'] }),
+    true,
+  );
+  const row = db.cardById('rwrwrwrw01');
+  assert.equal(row.front, 'stale data');
+  assert.equal(row.back, 'устаревшие данные');
+  assert.equal(row.concept, db.conceptKey('устаревшие данные'), 'the meaning key follows the back');
+  assert.deepEqual(row.keywords, ['stale']);
+  const after = db.stateOfCard('rwrwrwrw01');
+  assert.equal(after.due, before.due);
+  assert.equal(after.reps, before.reps);
+  assert.equal(after.stability, before.stability);
+
+  assert.equal(db.rewriteCard('rwrwrwrw01', { deck_id: 999, id: 'hacked' }), false, 'only the six fields can be rewritten');
+  assert.equal(db.cardById('rwrwrwrw01').deck_id, home);
+
+  db.updateCard('rwrwrwrw01', { back: 'старые данные' });
+  assert.equal(db.cardById('rwrwrwrw01').concept, db.conceptKey('старые данные'), 'the editor keeps the concept in step too');
+});
+
+test('a chapter is renamed by moving every card of its topic, inside one category only', () => {
+  db.open();
+  const home = db.deckId('ru', 'et');
+  db.insertCards(
+    [
+      card('rn1', { deck_id: home, topic: 'rollouts', category: 'engineering' }),
+      card('rn2', { deck_id: home, topic: 'rollouts', category: 'engineering' }),
+      card('rn3', { deck_id: home, topic: 'rollouts', category: 'everyday' }),
+    ],
+    ['rnrnrnrn01', 'rnrnrnrn02', 'rnrnrnrn03'],
+  );
+  assert.equal(db.renameTopic(home, 'engineering', 'rollouts', 'releases'), 2);
+  assert.equal(db.cardById('rnrnrnrn01').topic, 'releases');
+  assert.equal(db.cardById('rnrnrnrn03').topic, 'rollouts', 'the same label under another category is another chapter');
+  assert.equal(db.renameTopic(home, 'engineering', 'rollouts', 'releases'), 0, 'nothing left to move');
+});

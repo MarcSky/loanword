@@ -116,18 +116,20 @@ test('session capture harvests target-language words, not sentences', () => {
 test('commit writes cards with provenance and clears the queue', () => {
   const cards = [
     {
+      n: 0,
       type: 'phrase',
-      front: 'hay que revertir la migración en ▮, pero no toques la clave ▮',
-      back: 'we need to roll back the migration',
+      front: 'roll back the migration',
+      back: 'revertir la migración',
       keywords: ['roll back'],
-      example: 'We rolled back the migration before the index finished rebuilding.',
+      example: 'We need to roll back the migration before the index finishes rebuilding.',
       pos: 'verb',
       cefr: 'B1',
     },
     {
+      n: 2,
       type: 'word',
       front: 'reconciliation',
-      back: 'conciliación, ajuste de estados',
+      back: 'conciliación',
       example: 'The reconciliation loop retries.',
       cefr: 'B2',
     },
@@ -137,7 +139,8 @@ test('commit writes cards with provenance and clears the queue', () => {
   assert.equal(queue().length, 0);
 
   const written = deck();
-  assert.equal(written[0].project, '~/api', 'card carries where it came from');
+  assert.ok(written.every((card) => card.project === '~/api'), 'each card carries where it came from, by record number');
+  assert.ok(written.every((card) => !card.source.includes('AKIAIOSFODNN7EXAMPLE')), 'and the scrubbed text is what is kept');
   assert.ok(written[0].ts);
 
   assert.equal(written[0].target, 'en', 'the card records which deck it belongs to');

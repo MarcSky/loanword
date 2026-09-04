@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
   AGAIN_GAP,
   AGAIN_GAP_MAX,
@@ -413,4 +414,18 @@ test('typing is asked only for short fronts; a long phrase is recalled, never sp
   const seen = { seen: true, stability: 400, reps: 1, hasDistractors: true, example: '' };
   assert.equal(exerciseFor({ ...seen, front: 'restore' }), 'type');
   assert.notEqual(exerciseFor({ ...seen, front: 'you do not have to restore the old plugin' }), 'type');
+});
+
+test('the cloze hint is rendered inside the gap, under the rule', () => {
+  const study = readFileSync(new URL('../ui/study.js', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('../ui/app.css', import.meta.url), 'utf8');
+  assert.match(study, /class="gap"><span class="gap-blank">/);
+  assert.match(study, /class="gap-hint"/);
+  const cloze = study.slice(study.indexOf('class="cloze"'), study.indexOf('class="prompt"'));
+  assert.doesNotMatch(cloze, /class="lede"/, 'the meaning is no longer a paragraph under the sentence');
+  const gap = css.slice(css.indexOf('.cloze .gap {'), css.indexOf('.cloze .gap-blank'));
+  assert.match(gap, /display: inline-flex/);
+  assert.match(gap, /flex-direction: column/);
+  assert.match(gap, /vertical-align: baseline/);
+  assert.ok(css.includes('.cloze .gap-hint {'));
 });

@@ -17,7 +17,8 @@ without tables and without padding:
 - total cards / how many have been shown / learned (`stability` ≥ 21 days);
 - how many are due right now;
 - streak in days, and how much of today's limit is already reviewed;
-- the five hardest — `hardest`, ranked by lapses.
+- the five hardest — `hardest`, ranked by lapses;
+- what the cards have cost — `usage.cost` in dollars and `usage.calls`, one line.
 
 The numbers cover the **open deck** — the language pair currently in the
 settings. Other pairs keep their own cards and schedules; say so only if it is

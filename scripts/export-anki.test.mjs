@@ -63,6 +63,13 @@ test('the tags say which deck, level and domain a card came from', () => {
   assert.ok(tags.includes('project:api'), 'the last path segment, not the whole path');
 });
 
+test('a topic becomes a tag, with its spaces joined', () => {
+  const [, row] = lines(toCsv([card({ topic: 'code review' })], CFG));
+  assert.ok(row.split(';').pop().includes('topic:code_review'));
+  const [, bare] = lines(toCsv([card({ topic: '' })], CFG));
+  assert.ok(!bare.includes('topic:'), 'no topic, no tag');
+});
+
 test('a card carrying its own pair is tagged with that, not with the open deck', () => {
   const [, row] = lines(toCsv([card({ native: 'es', target: 'ka' })], CFG));
   const tags = row.split(';').pop();

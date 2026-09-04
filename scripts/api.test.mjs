@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -876,4 +876,100 @@ test('a deck can be deleted, and the trainer moves to one that is left', async (
   assert.ok(!after.body.pairs.some((pair) => pair.target === 'sv' && pair.total > 0));
   const restored = await post('/restore', { id: 'bbbbbbbb01' });
   assert.equal(restored.status, 200, 'the cards are only put aside, so one can come back');
+});
+
+test('a word tapped in an example is queued as a pick, junk and repeats dropped', async () => {
+  const { RANGES } = await import('./limits.mjs');
+  const queue = join(DATA, 'queue.en.jsonl');
+  rmSync(queue, { force: true });
+
+  const stops = await get('/stopwords');
+  assert.equal(stops.body.lang, 'en');
+  assert.ok(stops.body.skip.includes('the'), 'the interface knows which words not to offer');
+
+  const nothing = await post('/words', { words: ['the', '  '], example: 'We roll back the migration tonight.' });
+  assert.equal(nothing.status, 400, 'a tap on nothing but a stop-word builds nothing');
+
+  const { status, body } = await post('/words', {
+    words: ['rolled', 'ROLLED', 'the', 'migration'],
+    example: 'We roll back the migration tonight.',
+  });
+  assert.equal(status, 200);
+  assert.equal(body.queued, 2, 'the repeat and the stop-word never reach the builder');
+
+  const rows = readFileSync(queue, 'utf8').trim().split('\n').map((line) => JSON.parse(line));
+  assert.deepEqual(rows.map((row) => row.text), ['rolled', 'migration']);
+  assert.ok(rows.every((row) => row.source === 'pick' && row.lang === 'en'));
+  assert.equal(rows[0].example, 'We roll back the migration tonight.', 'the sentence travels with the word');
+
+  const again = await post('/words', { words: ['rolled', 'MIGRATION'], example: 'We roll back the migration tonight.' });
+  assert.equal(again.status, 400, 'a word already waiting in the queue is never queued twice');
+
+  const owned = await post('/words', { words: ['that said'], example: 'That said, the tests are green.' });
+  assert.equal(owned.status, 400, 'and neither is a word the deck already teaches');
+
+  const listed = await get('/stopwords');
+  assert.ok(listed.body.skip.includes('rolled'), 'what is queued joins the list, so the sheet stops offering it');
+
+  rmSync(queue, { force: true });
+  const many = await post('/words', {
+    words: Array.from({ length: RANGES.picks.max + 8 }, (_, i) => `word${i}`),
+    example: 'one sentence',
+  });
+  assert.equal(many.body.queued, RANGES.picks.max, 'a batch is capped by the range, never by a number typed here');
+});
+
+test('the state carries what the cards have cost, and every card its topic', async () => {
+  const { body } = await get('/state');
+  for (const window of ['d1', 'd7', 'd30']) {
+    assert.equal(typeof body.usage[window].calls, 'number', `the panel can show the last ${window}`);
+    assert.equal(typeof body.usage[window].cost, 'number');
+  }
+  assert.ok(body.usage.d1.calls <= body.usage.d30.calls, 'a shorter window never holds more');
+  assert.ok(body.cards.every((card) => typeof card.topic === 'string'));
+  assert.equal(typeof body.stats.usage.calls, 'number', 'and the stats skill sees the same number');
+});
+
+test('a topic is editable, normalised, and scopes a session', async () => {
+  const { body } = await post('/card', { id: id(0), topic: ' Code Review! ' });
+  assert.equal(body.card.topic, 'code review');
+  await post('/card', { id: id(3), topic: 'code review' });
+
+  const scoped = await post('/session/start', { minutes: 10, topic: 'code review' });
+  assert.equal(scoped.status, 200);
+  assert.equal(scoped.body.topic, 'code review');
+  assert.ok(scoped.body.steps.every((step) => [id(0), id(3)].includes(step.id)));
+
+  const unknown = await post('/session/start', { minutes: 10, topic: 'astrology' });
+  assert.equal(unknown.status, 200);
+  assert.equal(unknown.body.topic, '', 'a topic nobody has is ignored, not obeyed');
+  assert.ok(unknown.body.steps.length >= scoped.body.steps.length);
+});
+
+test('a session can be limited to the cards of one chapter', async () => {
+  const { status, body } = await post('/session/start', { minutes: 10, include: [id(2)] });
+  assert.equal(status, 200);
+  assert.ok(body.steps.length >= 1);
+  assert.ok(body.steps.every((step) => step.id === id(2)));
+
+  const capped = await post('/session/start', {
+    minutes: 10,
+    include: [id(2), ...Array.from({ length: 300 }, () => 'deadbeef00')],
+  });
+  assert.equal(capped.status, 200);
+  assert.ok(capped.body.steps.every((step) => step.id === id(2)), 'unknown ids never count, and the list is cut at two hundred');
+});
+
+test('a chapter can be renamed from the deck, and the name is normalised', async () => {
+  await post('/card', { id: id(4), topic: 'idioms' });
+  await post('/card', { id: id(5), topic: 'idioms' });
+  const { status, body } = await post('/topic/rename', { category: 'phrasing', from: 'idioms', to: ' Set Phrases! ' });
+  assert.equal(status, 200);
+  assert.equal(body.moved, 1, 'only the card filed under that category moves');
+  assert.equal(body.topic, 'set phrases');
+  const state = await get('/state');
+  assert.equal(state.body.cards.find((card) => card.id === id(4)).topic, 'set phrases');
+  assert.equal(state.body.cards.find((card) => card.id === id(5)).topic, 'idioms');
+  assert.equal((await post('/topic/rename', { category: 'phrasing', from: 'set phrases', to: '   ' })).status, 400);
+  assert.equal((await post('/topic/rename', { category: 'astrology', from: 'set phrases', to: 'x' })).status, 400, 'an unknown category never falls back to everyday');
 });

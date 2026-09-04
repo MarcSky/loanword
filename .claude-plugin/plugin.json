@@ -43,7 +43,7 @@
       "description": "Cap on new cards per day. The FSRS review queue is not limited by this number",
       "default": 15,
       "min": 3,
-      "max": 50
+      "max": 100
     },
     "auto_build": {
       "type": "boolean",

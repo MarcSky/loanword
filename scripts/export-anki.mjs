@@ -23,6 +23,7 @@ function tags(card, cfg) {
     card.cefr ? `cefr:${card.cefr}` : null,
     card.category ? `cat:${card.category}` : null,
     card.type ? `type:${card.type}` : null,
+    card.topic ? `topic:${String(card.topic).replace(/\s+/g, '_')}` : null,
     project ? `project:${project.replace(/\s+/g, '_')}` : null,
   ]
     .filter(Boolean)

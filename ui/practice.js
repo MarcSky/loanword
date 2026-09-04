@@ -12,6 +12,7 @@ import {
   go,
   icon,
   langAttrs,
+  categoryKeys,
   meta,
   pct,
   reducedMotion,
@@ -26,6 +27,8 @@ import { checkTyped } from './answer.js';
 import { buildChoices, frontOf } from './quiz.js';
 import { shuffle } from './plan.js';
 import { sayButton, speak } from './speak.js';
+import { clampInt } from './limits.js';
+import { chapterKey, inChapter, namedChapters, titleOf } from './chapters.js';
 import { ANSWER_WITH, DEFAULT_COUNT, TYPES, buildTest, eligibleCards, isAnswered, scoreTest, sortCounts } from './exam.js';
 
 const TABS = [
@@ -48,26 +51,62 @@ const practice = () => {
       cards: null,
       learn: null,
       test: null,
+      chapter: app.practice?.chapter || '',
       testConfig: { count: DEFAULT_COUNT, answerWith: 'both', types: ['mc'] },
     };
   }
   return app.practice;
 };
 
-const studyPool = () => {
-  const open = eligibleCards(app.cards);
-  return open.length ? open : app.cards;
+const scopedCards = () => {
+  const key = practice().chapter;
+  if (!key) return app.cards;
+  const owned = app.cards.filter(inChapter(key));
+  return owned.length ? owned : app.cards;
 };
 
-const leftOut = () => app.cards.length - eligibleCards(app.cards).length;
+const studyPool = () => {
+  const scope = scopedCards();
+  const open = eligibleCards(scope);
+  return open.length ? open : scope;
+};
+
+const leftOut = () => {
+  const scope = scopedCards();
+  return scope.length - eligibleCards(scope).length;
+};
+
+function chapterPicker() {
+  const rows = namedChapters(app.cards, categoryKeys());
+  if (rows.length < 2) return '';
+  const wanted = practice().chapter;
+  const current = rows.some((row) => chapterKey(row) === wanted) ? wanted : '';
+  return `<label class="practice-scope">
+    <span class="micro">${esc(t('Chapter'))}</span>
+    <select class="select" id="practice-chapter" aria-label="${esc(t('Chapter'))}">
+      <option value="">${esc(t('All'))} (${esc(tn(app.cards.length, 'card', 'cards'))})</option>
+      ${rows
+        .map((row) => {
+          const key = chapterKey(row);
+          return `<option value="${esc(key)}" ${current === key ? 'selected' : ''}>${esc(meta(row.category).label)} · ${esc(
+            titleOf(row.topic) || t('Unsorted'),
+          )} (${row.n})</option>`;
+        })
+        .join('')}
+    </select>
+  </label>`;
+}
 
 function tabs(active) {
-  return `<div class="segmented practice-tabs" role="tablist">
-    ${TABS.map(
-      ([key, label, ic]) => `<button role="tab" data-act="practice-tab" data-value="${key}" aria-pressed="${active === key}" aria-selected="${active === key}">
-        ${icon(ic, 'icon-sm icon')} ${esc(t(label))}
-      </button>`,
-    ).join('')}
+  return `<div class="practice-bar">
+    <div class="segmented practice-tabs" role="tablist">
+      ${TABS.map(
+        ([key, label, ic]) => `<button role="tab" data-act="practice-tab" data-value="${key}" aria-pressed="${active === key}" aria-selected="${active === key}">
+          ${icon(ic, 'icon-sm icon')} ${esc(t(label))}
+        </button>`,
+      ).join('')}
+    </div>
+    ${chapterPicker()}
   </div>`;
 }
 
@@ -88,7 +127,7 @@ function deckRun() {
   if (!state.cards) {
     state.cards = {
       deck: state.deck,
-      order: app.cards.map((card) => card.id),
+      order: scopedCards().map((card) => card.id),
       index: 0,
       flipped: false,
       sorting: false,
@@ -171,7 +210,6 @@ function renderCards(page) {
   page.innerHTML = `${tabs('cards')}
     <div class="stage practice-stage">
       ${cardFace(card, run)}
-      <div class="flip-hint">${icon('keyboard', 'icon-sm icon')} <b>${esc(t('Hint'))}</b> ${t('Press <kbd>space</kbd> or click the card to flip it')}</div>
       <div class="practice-controls">
         <button class="btn ${run.sorting ? 'btn-primary' : ''}" data-act="sort-toggle" aria-pressed="${run.sorting}">
           ${icon('arrows-left-right', 'icon-sm icon')} ${esc(run.sorting ? t('Stop sorting') : t('Sort cards'))}
@@ -272,7 +310,7 @@ function learnCard(run) {
 }
 
 function renderLearn(page) {
-  if (!app.cards.length) return (page.innerHTML = tabs('learn') + nothingHere());
+  if (!scopedCards().length) return (page.innerHTML = tabs('learn') + nothingHere());
   const run = learnRun();
   const card = learnCard(run);
   if (!card) {
@@ -466,7 +504,7 @@ function questionCard(q, run, index, total) {
 }
 
 function renderTest(page) {
-  if (!app.cards.length) return (page.innerHTML = tabs('test') + nothingHere());
+  if (!scopedCards().length) return (page.innerHTML = tabs('test') + nothingHere());
   const run = practice().test;
   if (!run) return testSettings(page);
   const total = run.questions.length;
@@ -656,7 +694,7 @@ Object.assign(ACTIONS, {
   'test-start': () => {
     const state = practice();
     const cfg = state.testConfig;
-    cfg.count = Number($('#exam-count')?.value) || cfg.count;
+    cfg.count = clampInt($('#exam-count')?.value, { min: 1, max: Math.max(1, studyPool().length) }) ?? cfg.count;
     cfg.answerWith = $('#exam-side')?.value || cfg.answerWith;
     const questions = buildTest(studyPool(), cfg);
     if (!questions.length) return toast(t('Nothing to ask yet'));
@@ -708,6 +746,16 @@ document.addEventListener('change', (event) => {
   const run = practice().test;
   if (!run) return;
   setAnswer(Number(n), { ...(run.answers[Number(n)] || {}), [id]: field.value });
+});
+
+document.addEventListener('change', (event) => {
+  if (event.target.id !== 'practice-chapter') return;
+  const state = practice();
+  state.chapter = event.target.value;
+  state.cards = null;
+  state.learn = null;
+  state.test = null;
+  renderPractice();
 });
 
 document.addEventListener('keydown', (event) => {

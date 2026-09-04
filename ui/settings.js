@@ -33,6 +33,7 @@ import {
   toast,
 } from './core.js';
 import { captureSwitches, deckChips, watchBuild } from './overview.js';
+import { RANGES, USAGE_WINDOWS } from './limits.js';
 
 const THEMES = [
   { value: 'light', icon: 'sun' },
@@ -65,11 +66,12 @@ const HELP = {
   decks: () => [t('Language profiles'), t('Each pair is its own deck, with its own cards and its own schedule. Opening another one never touches the first. The switch says whether today’s prompts are captured into that language; every language left on fills its own queue, and they never wait on each other.')],
   ui: () => [t('Interface language'), t('Separate from what you are learning. Changing your target language never changes this.')],
   clone: () => [t('Copying a deck'), t('The concepts travel: your own phrasing, the domain, the level, the star. The new side is written fresh and starts from zero — no schedule is ever copied, and the deck you copy from is not touched.')],
-  topics: () => [t('Categories'), t('Every card is filed under one category, and the ones you pick here are the only ones the builder may use. Pick a field to set them all at once, or choose by hand. Three are always on: set phrases, connectors and everyday words. Drop a category and the cards it held move to Everyday — file them again to place them properly.')],
+  topics: () => [t('Categories'), t('Every card is filed under one category, and the ones you pick here are the only ones the builder may use. Pick a field to set them all at once, or choose by hand. Three are always on: set phrases, connectors and everyday words. Drop a category and the cards it held move to Everyday — file them again to place them properly. Filing again also gives every card a topic — code review, airport, standup — which the Deck shows as chapters.')],
   capture: () => [t('Capture into'), t('Which languages today’s prompts are turned into cards for. The queue and the build are per language, so two decks that teach the same language fill from the same capture — turning it off stops both.')],
   mode: () => [t('What gets captured'), t('<b>Active</b> takes your own prompts and shows how a native speaker would have put it. <b>Passive</b> takes unfamiliar words out of the assistant’s replies. <b>Both</b> does each.')],
   level: () => [t('Floor level'), t('Words below this CEFR level never become cards. Leave it open if you want everything.')],
-  model: () => [t('Which model writes your cards'), t('Every card is written by a Claude you already have: the trainer runs <code>claude -p</code> on this machine, so nothing is sent anywhere else and no API key is needed. <b>Haiku</b> is fast and cheap and enough for words in a language close to yours. <b>Sonnet</b> is worth it for translating between languages that share no script, and for judging level. <b>Opus</b> for the stubborn cases. The same model answers your one sentence of your own.')],
+  model: () => [t('Which model writes your cards'), t('Every card is written by a Claude you already have: the trainer runs <code>claude -p</code> on this machine as a bare completion, so nothing is sent anywhere else and no API key is needed. <b>Sonnet</b> is the default: it follows the lexis rules and judges level. <b>Haiku</b> is cheaper and enough for a language close to yours, but it is the model that wrote definitions where translations were asked for. <b>Opus</b> for the stubborn cases. Every call is logged with its tokens and cost below.')],
+  usage: () => [t('Spent on cards'), t('Every model call the trainer makes is logged with its tokens, from the result Claude Code reports. The builder runs as a bare completion — no tools, no project context — so a batch of twenty records costs the records and the brief, nothing else. Changing the model only changes the calls from now on; the line per model shows what each one has used.')],
   autoBuild: () => [t('Building at session end'), t('When a work session leaves ten or more captured records behind, the cards are built in the background.')],
   echo: () => [t('Echo'), t('<b>One line</b> opens every reply with the phrasing a native speaker would have used. <b>Weave</b> also asks Claude to work your ten weakest words into the answer. Both spend a line of every response.')],
   dailyLimit: () => [t('New cards per day'), t('A cap on unseen cards only. Reviews that are due are never held back — those are the ones that decay.')],
@@ -85,6 +87,42 @@ const HELP = {
   data: () => [t('Where your deck lives'), t('One SQLite file, <code>loanword.db</code>, in the plugin data directory, with <code>settings.json</code> and the capture queues beside it. Copy it while the trainer is closed and you have a backup.')],
   privacy: () => [t('Privacy'), t('Secrets are scrubbed before anything is written, code and tool output are never captured, and the trainer binds <code>127.0.0.1</code> only. No accounts, no telemetry.')],
 };
+
+const stat = (name, text) => `<span class="usage-stat">${icon(name, 'icon-sm icon')}${esc(text)}</span>`;
+
+let usageRange = 'd7';
+
+const usageRangePicker = () => `<div class="segmented" role="group" aria-label="${esc(t('Spent on cards'))}">
+    ${Object.entries(USAGE_WINDOWS)
+      .map(
+        ([key, days]) => `<button data-act="usage-range" data-value="${key}"
+          aria-pressed="${usageRange === key}">${days + 1}D</button>`,
+      )
+      .join('')}
+  </div>`;
+
+function usagePanel() {
+  const windows = app.usage || {};
+  const total = windows[usageRange] || { calls: 0, input: 0, output: 0, byModel: {} };
+  const number = new Intl.NumberFormat(UI_LANG || 'en');
+  const models = Object.entries(total.byModel || {}).sort((a, b) => b[1].output - a[1].output);
+  if (!windows.d30?.calls) return `<p class="field-hint">${esc(t('Nothing spent yet — the first build writes the first line here.'))}</p>`;
+  return `<div class="usage-row">
+      ${stat('lightning', tn(total.calls, 'call', 'calls'))}
+      ${stat('arrow-down-right', t('{n} tokens in', { n: number.format(total.sent || 0) }))}
+      ${stat('arrow-up-right', t('{n} tokens out', { n: number.format(total.output || 0) }))}
+    </div>
+    ${models
+      .map(
+        ([model, own]) => `<div class="usage-row usage-row-model">
+          <span class="usage-model">${icon('brain', 'icon-sm icon')}${esc(model[0].toUpperCase() + model.slice(1))}</span>
+          ${stat('lightning', tn(own.calls || 0, 'call', 'calls'))}
+          ${stat('arrow-down-right', t('{n} in', { n: number.format(own.sent || 0) }))}
+          ${stat('arrow-up-right', t('{n} out', { n: number.format(own.output || 0) }))}
+        </div>`,
+      )
+      .join('')}`;
+}
 
 const langOptions = (selected, exclude = '') =>
   LANGUAGES.filter(([code]) => code !== exclude)
@@ -407,17 +445,24 @@ function renderSettings() {
           aria-label="${esc(t('Build at session end'))}"></button>`,
         { help: 'autoBuild' },
       )}
-      ${setting(t('Which model writes your cards'), choices('model', MODELS, cfg.model || 'haiku'), { help: 'model' })}
+      ${setting(t('Which model writes your cards'), choices('model', MODELS, cfg.model || 'sonnet'), { help: 'model' })}
       ${setting(
         t('Echo the native phrasing'),
         choices('echo', [['off', 'Off'], ['line', 'One line'], ['weave', 'Weave my weakest words in']], cfg.echo || 'off'),
         { help: 'echo' },
       )}
 
+      </section><section class="panel settings-group"><div class="usage-head">
+        <h2 class="title">${esc(t('Spent on cards'))}${helpDot('usage')}</h2>
+        ${usageRangePicker()}
+      </div>
+      ${usagePanel()}
+
       </section><section class="panel settings-group"><h2 class="title">${esc(t('Study'))}</h2>
       ${setting(
         t('New cards per day'),
-        `<input class="input" type="number" min="3" max="50" step="1" value="${cfg.dailyLimit}" data-setting="dailyLimit">`,
+        `<input class="input" type="number" min="${RANGES.dailyLimit.min}" max="${RANGES.dailyLimit.max}" step="1"
+          value="${cfg.dailyLimit}" data-setting="dailyLimit">`,
         { help: 'dailyLimit' },
       )}
       ${setting(
@@ -486,7 +531,8 @@ function renderSettings() {
           <button class="switch" role="switch" data-setting="peek" aria-checked="${cfg.peek === 'on'}"
             aria-label="${esc(t('A card while Claude works'))}"></button>
           <label class="every">
-            <input class="input" type="number" min="1" max="120" step="1" value="${cfg.peekEvery ?? 15}"
+            <input class="input" type="number" min="${RANGES.peekEvery.min}" max="${RANGES.peekEvery.max}" step="1"
+              value="${cfg.peekEvery ?? RANGES.peekEvery.fallback}"
               data-setting="peekEvery" aria-label="${esc(t('Minutes between cards'))}">
             <span>${esc(t('min'))}</span>
           </label>
@@ -568,6 +614,10 @@ Object.assign(ACTIONS, {
   },
   'set-goal': async (value) => {
     await saveSetting('weeklyGoal', Number(value));
+    render();
+  },
+  'usage-range': (value) => {
+    usageRange = value;
     render();
   },
   'set-minutes': async (value) => {

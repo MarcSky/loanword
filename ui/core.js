@@ -1,6 +1,8 @@
 import { NAME_PAIRS, flagOf, isRtl, languageName, scriptOf } from './languages.js';
 import { flyDirection, swipeTint, swipeVerdict } from './quiz.js';
 import { railState } from './shell.js';
+import { summarize } from './chapters.js';
+import { SESSION_LENGTHS } from './limits.js';
 import { ALL_CATEGORIES, CATEGORY, CORE, FIELDS, categoriesForField, categoriesOf, groupByCategory } from './categories.js';
 
 
@@ -26,7 +28,7 @@ export const ROUTES = [
   { id: 'overview', label: 'Overview', icon: 'house' },
   { id: 'practice', label: 'Practice', icon: 'lightning' },
   { id: 'deck', label: 'Deck', icon: 'cards-three' },
-  { id: 'study', label: 'Quiz', icon: 'graduation-cap' },
+  { id: 'study', label: 'Study', icon: 'graduation-cap' },
   { id: 'analytics', label: 'Analytics', icon: 'chart-bar' },
   { id: 'settings', label: 'Settings', icon: 'gear-six' },
 ];
@@ -48,7 +50,7 @@ export const GRADES = [
   { n: 4, label: 'Easy', hint: 'instant', tint: 'grade-easy' },
 ];
 
-export const SESSION_LENGTHS = [5, 10, 15];
+export { SESSION_LENGTHS };
 
 export const SHORTCUTS = () => [
   ['1 – 6', t('Jump to a section')],
@@ -76,13 +78,16 @@ export const app = {
   route: 'overview',
   level: '',
   category: '',
-  deck: { category: '', level: '', status: 'all', query: '', view: 'list', editing: null },
+  deck: { category: '', level: '', status: 'all', query: '', view: 'list', editing: null, editReturn: '', topic: '', openAll: false },
   session: null,
   sync: null,
   export: null,
   duplicates: null,
+  chapter: null,
   dropping: null,
   opened: null,
+  picks: new Set(),
+  picking: false,
   adding: null,
   topics: null,
   filing: null,
@@ -218,6 +223,7 @@ export async function load() {
   app.pairs = state.pairs || [];
   app.uiLanguages = state.uiLanguages || [];
   app.stats = state.stats;
+  app.usage = state.usage || null;
   app.config = state.config;
   app.queued = state.queued || 0;
   app.building = !!state.building;
@@ -248,17 +254,7 @@ export const hideToast = () => {
 
 export const inLevel = (card, level) => !level || card.cefr === level;
 
-export function summarize(cards) {
-  const total = cards.length;
-  const seen = cards.filter((card) => !card.isNew);
-  return {
-    total,
-    seen: seen.length,
-    due: cards.filter((card) => card.isDue).length,
-    learned: cards.filter((card) => card.mastery >= 1).length,
-    mastery: total ? cards.reduce((sum, card) => sum + card.mastery, 0) / total : 0,
-  };
-}
+export { summarize };
 
 export function byCategory(level) {
   const buckets = groupByCategory(app.cards.filter((card) => inLevel(card, level)));

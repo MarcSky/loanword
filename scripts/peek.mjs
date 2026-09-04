@@ -66,6 +66,21 @@ export function pickPeek(rows, pick = [], random = Math.random) {
   return window[Math.floor(random() * window.length)] || null;
 }
 
+export const LINE_WIDTH = 72;
+
+export const slotNow = (intervalSeconds, now = Date.now()) =>
+  Math.floor(now / (Math.max(1, Number(intervalSeconds) || 1) * 1000));
+
+export function lineOf(rows, pick = [], { slot = 0, width = LINE_WIDTH } = {}) {
+  const pool = candidates(rows, pick).sort((a, b) => (Number(a.r) || 0) - (Number(b.r) || 0));
+  if (!pool.length) return '';
+  const card = pool[Math.abs(Math.trunc(Number(slot) || 0)) % pool.length];
+  const tail = !card.seen ? 'new' : isLeech(card) ? 'leech' : `${Math.round((Number(card.r) || 0) * 100)}%`;
+  const line = [`Loanword · ${card.front} — ${card.back}`, card.reading || '', tail].filter(Boolean).join(' · ');
+  const chars = [...line];
+  return chars.length > width ? `${chars.slice(0, Math.max(1, width - 1)).join('')}…` : line;
+}
+
 const RULE = '─'.repeat(46);
 
 export function renderPeek(card, cfg = {}) {
@@ -91,6 +106,12 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const { config, peekFile, readJsonl } = await import('./store.mjs');
   const cfg = config();
   const flag = (process.argv.find((arg) => arg.startsWith('--pick=')) || '').split('=')[1];
-  const card = pickPeek(readJsonl(peekFile(cfg.target)), flag ?? cfg.peekPick);
-  process.stdout.write(card ? renderPeek(card, cfg) : 'Nothing to show yet — build some cards first.\n');
+  const rows = readJsonl(peekFile(cfg.target));
+  if (process.argv.includes('--line')) {
+    const interval = Number((process.argv.find((arg) => arg.startsWith('--interval=')) || '').split('=')[1]) || 10;
+    process.stdout.write(`${lineOf(rows, flag ?? cfg.peekPick, { slot: slotNow(interval) })}\n`);
+  } else {
+    const card = pickPeek(rows, flag ?? cfg.peekPick);
+    process.stdout.write(card ? renderPeek(card, cfg) : 'Nothing to show yet — build some cards first.\n');
+  }
 }

@@ -121,3 +121,30 @@ test('a card never seen says so instead of claiming a recall score', () => {
   assert.ok(text.includes('new'));
   assert.ok(!text.includes('recall'));
 });
+
+import { lineOf, slotNow } from './peek.mjs';
+
+test('the status line shows the weakest card first and cycles on a fixed clock', () => {
+  const rows = [
+    { front: 'roll back', back: 'откатить', reading: '', seen: true, r: 0.62, lapses: 0, starred: false, cefr: 'B1' },
+    { front: 'quorum', back: 'кворум', reading: 'kvorum', seen: false, r: 0, lapses: 0, starred: false, cefr: 'B2' },
+    { front: 'flaky', back: 'нестабильный', reading: '', seen: true, r: 0.9, lapses: LEECH_LAPSES, starred: true, cefr: 'C1' },
+  ];
+  assert.equal(lineOf(rows), 'Loanword · quorum — кворум · kvorum · new', 'unseen cards sort first');
+  assert.equal(lineOf(rows, [], { slot: 1 }), 'Loanword · roll back — откатить · 62%');
+  assert.equal(lineOf(rows, [], { slot: 2 }), 'Loanword · flaky — нестабильный · leech');
+  assert.equal(lineOf(rows, [], { slot: 3 }), lineOf(rows), 'the slot wraps around the pool');
+  assert.equal(lineOf(rows, ['starred']), 'Loanword · flaky — нестабильный · leech', 'the peek filter narrows the pool');
+  assert.equal(lineOf(rows, ['C2']), '', 'an empty pool prints nothing');
+  assert.equal(lineOf([]), '');
+  const long = lineOf([{ ...rows[0], back: 'x'.repeat(200) }], [], { width: 30 });
+  assert.equal([...long].length, 30);
+  assert.ok(long.endsWith('…'));
+});
+
+test('the slot is the wall clock divided into intervals', () => {
+  assert.equal(slotNow(10, 25_000), 2);
+  assert.equal(slotNow(10, 29_999), 2);
+  assert.equal(slotNow(10, 30_000), 3);
+  assert.equal(slotNow(0, 5_000), 5, 'a nonsense interval falls back to one second');
+});

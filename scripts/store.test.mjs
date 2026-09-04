@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { isLanguage } from './lang.mjs';
@@ -21,6 +21,11 @@ const {
   fallbackPair,
   normalizeCategory,
   normalizeCefr,
+  normalizeTopic,
+  recordUsage,
+  usageTotals,
+  usageWindows,
+  dropFromQueue,
   saveKnownWords,
   sanitizeSettings,
   seedSettings,
@@ -91,6 +96,7 @@ test('config falls back to sane defaults', () => {
   assert.equal(cfg.mode, 'both');
   assert.equal(cfg.dailyLimit, 15);
   assert.equal(cfg.autoBuild, true);
+  assert.equal(cfg.model, 'sonnet', 'the model that follows the lexis rules writes the cards');
 });
 
 test('config rejects nonsense daily limits instead of trusting them', () => {
@@ -101,12 +107,22 @@ test('config rejects nonsense daily limits instead of trusting them', () => {
     ['', 15],
     ['7', 7],
     ['7.9', 7],
-    ['99999', 500],
+    ['99999', 100],
   ]) {
     process.env.CLAUDE_PLUGIN_OPTION_DAILY_LIMIT = value;
     assert.equal(config().dailyLimit, expected, `daily_limit=${value}`);
   }
   delete process.env.CLAUDE_PLUGIN_OPTION_DAILY_LIMIT;
+});
+
+test('a setting outside its range is refused, so the stored one survives', () => {
+  assert.deepEqual(sanitizeSettings({ dailyLimit: 101 }), {}, 'a hundred new cards a day is the ceiling');
+  assert.deepEqual(sanitizeSettings({ dailyLimit: 2 }), {});
+  assert.deepEqual(sanitizeSettings({ dailyLimit: 100 }), { dailyLimit: 100 });
+  assert.deepEqual(sanitizeSettings({ weeklyGoal: 8 }), {});
+  assert.deepEqual(sanitizeSettings({ peekEvery: 121 }), {});
+  assert.deepEqual(sanitizeSettings({ peekEvery: 120 }), { peekEvery: 120 });
+  assert.deepEqual(sanitizeSettings({ sessionMinutes: 12 }), {}, 'a session is five, ten or fifteen minutes');
 });
 
 test('readJsonl skips torn lines instead of failing the whole file', () => {
@@ -219,9 +235,10 @@ test('commit drops invalid cards, stamps provenance and clears the queue', () =>
     null,
     'not an object',
     { front: 'x'.repeat(5000), back: 'oversized' },
+    { n: 1, type: 'word', front: 'stale', back: 'obsoleto' },
   ]);
 
-  assert.equal(result.added, 3, 'blank, null and non-object entries never reach the deck');
+  assert.equal(result.added, 4, 'blank, null and non-object entries never reach the deck');
   assert.equal(result.queueCleared, 2);
   assert.equal(fileSize(queueFile(config().target)), 0);
 
@@ -232,6 +249,8 @@ test('commit drops invalid cards, stamps provenance and clears the queue', () =>
   assert.equal(word.project, '~/work/web');
   assert.equal(word.type, 'word');
   assert.ok(oversized.front.length <= 2000, 'fields are length-capped');
+  assert.equal(result.cards[3].project, '~/work/web', 'a numbered card points at its record, whatever its text');
+  assert.equal(result.cards[3].ts, '2026-08-02T00:00:00Z');
 
   const known = knownWords();
   assert.ok(known.has('quorum'));
@@ -993,6 +1012,141 @@ test('a reply entry that is not a card is dropped, not stamped', () => {
   assert.equal(added, 1);
   assert.equal(cards[0].front, 'roll back', 'commit faces the card before it is written');
   assert.equal(loadCards()[0].front, 'roll back', 'the deck reads target-first');
+});
+
+
+test('where a card came from is cut at a sentence, never mid-word', () => {
+  const pair = { native: 'en', target: 'ka' };
+  const first = 'We need to roll back the migration before the index finishes rebuilding, because the deploy is blocked and the on-call engineer is waiting for a green build.';
+  const second = 'Then review all the logic in the payments module, remove duplicated or unnecessary code, and make sure every exported function has a comment that says what it returns.';
+  const text = `${first} ${second}`;
+  assert.ok(text.length > 300 && text.length < 400, `fixture is ${text.length} characters`);
+  writeFileSync(queueFile('ka'), '');
+  appendJsonl(queueFile('ka'), [{ ts: '2026-09-03T00:00:00Z', project: '~/work/pay', source: 'prompt', text }]);
+  const { cards, added } = commit([{ n: 0, type: 'phrase', front: 'დუბლირებული კოდი', back: 'duplicated code' }], pair);
+  assert.equal(added, 1);
+  assert.equal(cards[0].source, first);
+  assert.ok(cards[0].source.length <= 300);
+  assert.equal(cards[0].project, '~/work/pay');
+});
+
+test('commit refuses a definition where a translation was asked for', () => {
+  const pair = { native: 'en', target: 'ka' };
+  writeFileSync(queueFile('ka'), '');
+  const before = readFileSync(paths.log, 'utf8').length;
+  const { added, dropped } = commit(
+    [
+      { front: 'მიმოხილვა', back: 'a look over something written' },
+      { front: 'მიმოხილვა', back: 'review' },
+    ],
+    pair,
+  );
+  assert.equal(added, 1);
+  assert.equal(dropped, 1);
+  assert.match(readFileSync(paths.log, 'utf8').slice(before), /definition/);
+});
+
+test("keywords in the learner's language are dropped from a Georgian card", () => {
+  const pair = { native: 'en', target: 'ka' };
+  writeFileSync(queueFile('ka'), '');
+  const { cards } = commit(
+    [{ front: 'გადამოწმება', back: 'verification', keywords: ['validation', 'მონაცემი', 'check'] }],
+    pair,
+  );
+  assert.deepEqual(cards[0].keywords, ['მონაცემი']);
+});
+
+test('a card in the wrong language is refused when the scripts can tell', () => {
+  const pair = { native: 'en', target: 'ka' };
+  writeFileSync(queueFile('ka'), '');
+  const { added, dropped } = commit([{ front: 'deployment', back: 'განლაგება' }], pair);
+  assert.equal(added, 1, 'a swapped card is faced the right way round, not dropped');
+  assert.equal(dropped, 0);
+  const swapped = commit([{ front: 'duplicated', back: 'code' }], pair);
+  assert.equal(swapped.added, 0);
+  assert.equal(swapped.dropped, 1, 'two English sides on a Georgian deck cannot be faced');
+});
+
+test('a topic is normalised onto the card, and nonsense becomes none', () => {
+  assert.equal(normalizeTopic('  Code Review! '), 'code review');
+  assert.equal(normalizeTopic('a'.repeat(40)).length, 24);
+  assert.equal(normalizeTopic(42), '');
+  assert.equal(normalizeTopic(null), '');
+  assert.equal(normalizeTopic('renting-a-flat'), 'renting-a-flat');
+  const pair = { native: 'en', target: 'ka' };
+  writeFileSync(queueFile('ka'), '');
+  const { cards } = commit([{ front: 'სტენდაპი', back: 'standup', topic: ' Daily Standup ' }], pair);
+  assert.equal(cards[0].topic, 'daily standup');
+  assert.equal(cardsForPair(pair).find((card) => card.front === 'სტენდაპი').topic, 'daily standup', 'and it is stored');
+});
+
+test('every model call is logged, and the totals add up', () => {
+  rmSync(paths.usage, { force: true });
+  assert.deepEqual(usageTotals(), { calls: 0, input: 0, cacheRead: 0, cacheWrite: 0, sent: 0, output: 0, cost: 0, byModel: {} });
+  recordUsage({ kind: 'lexicographer', model: 'sonnet', input: 273, output: 200, cost: 0.0123 });
+  recordUsage({ kind: 'repair', model: 'sonnet', input: 100, cacheRead: 50, output: 20, cost: 0.001 });
+  recordUsage({ kind: 'filer', model: 'haiku', input: 500, output: 40, cost: 0.0005 });
+  const totals = usageTotals();
+  assert.equal(totals.calls, 3);
+  assert.equal(totals.input, 873);
+  assert.equal(totals.cacheRead, 50);
+  assert.equal(totals.output, 260);
+  assert.equal(totals.cost, 0.0138);
+  assert.equal(totals.sent, 923, 'what was sent is the prompt plus everything read from or written to the cache');
+  assert.deepEqual(totals.byModel.haiku, { calls: 1, sent: 500, output: 40, cost: 0.0005 });
+  assert.equal(totals.byModel.sonnet.sent, 423);
+  assert.equal(totals.byModel.sonnet.calls, 2);
+  const lines = readJsonl(paths.usage);
+  assert.ok(lines.every((line) => typeof line.ts === 'string'));
+  const tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+  assert.equal(usageTotals(tomorrow).calls, 0, 'since narrows the window');
+  assert.equal(usageTotals(lines[0].ts.slice(0, 10)).calls, 3);
+  appendFileSync(paths.usage, `${JSON.stringify({ ts: '2020-01-01T00:00:00Z', model: 'opus', input: 9_000_000, output: 9_000_000, cost: 500 })}\n`);
+  const windows = usageWindows();
+  assert.equal(windows.d1.calls, 3, 'today only');
+  assert.equal(windows.d7.calls, 3);
+  assert.equal(windows.d30.calls, 3, 'a call from years ago is out of every window, so the panel never shows a frightening lifetime total');
+  assert.equal(usageTotals().calls, 4, 'the file still holds it');
+});
+
+test('a batch is dropped from the queue by identity, leaving the others', () => {
+  const file = queueFile('zu');
+  writeFileSync(file, '');
+  const rows = [
+    { ts: '2026-09-01T00:00:00Z', source: 'prompt', text: 'one' },
+    { ts: '2026-09-01T00:00:01Z', source: 'session', words: ['two', 'three'] },
+    { ts: '2026-09-01T00:00:02Z', source: 'prompt', text: 'four' },
+  ];
+  appendJsonl(file, rows);
+  assert.equal(dropFromQueue(file, [rows[0], { ...rows[1], n: 7 }]), 2);
+  assert.deepEqual(readJsonl(file), [rows[2]]);
+  assert.equal(dropFromQueue(file, [rows[0]]), 0, 'a record already gone is not counted twice');
+  assert.equal(dropFromQueue(queueFile('zz'), rows), 0, 'no file, nothing to drop');
+});
+
+test('commit with a batch consumes exactly those records, even when no card came out of them', () => {
+  const pair = { native: 'en', target: 'ka' };
+  const file = queueFile('ka');
+  writeFileSync(file, '');
+  const rows = [
+    { ts: '2026-09-02T00:00:00Z', project: '~/one', source: 'prompt', text: 'first record' },
+    { ts: '2026-09-02T00:00:01Z', project: '~/two', source: 'session', words: ['unread'] },
+    { ts: '2026-09-02T00:00:02Z', project: '~/three', source: 'prompt', text: 'third record' },
+  ];
+  appendJsonl(file, rows);
+  const batch = [{ ...rows[0], n: 0 }, { ...rows[2], n: 1 }];
+  const out = commit([{ n: 1, front: 'მესამე', back: 'third' }], { ...pair, records: batch });
+  assert.equal(out.added, 1);
+  assert.equal(out.queueCleared, 2);
+  assert.equal(out.cards[0].project, '~/three', 'n indexes the batch, not the file');
+  assert.deepEqual(readJsonl(file), [rows[1]], 'the record nobody read stays');
+  assert.equal(knownWords('ka').has('unread'), false);
+
+  const empty = commit([], { ...pair, records: [{ ...rows[1], n: 0 }] });
+  assert.equal(empty.added, 0);
+  assert.equal(empty.queueCleared, 1);
+  assert.deepEqual(readJsonl(file), [], 'a batch that produced nothing is still consumed');
+  assert.ok(knownWords('ka').has('unread'), 'and its words are remembered as seen');
 });
 
 test.after(() => {

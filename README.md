@@ -20,7 +20,10 @@ words into flashcards. The deck is yours because the gaps are yours.
 
 1. **You work as usual.** A hook collects the phrases you reached for.
 2. **A session ends.** Claude turns the queue into cards: the word, what it
-   means in your language, an example, a level (A1 to C2), a domain.
+   means in your language, an example, a level (A1 to C2), a domain. A gate
+   checks every card against the lexis rules and sends the broken ones back
+   once for repair; every call's tokens and cost are logged and shown in
+   Settings.
 3. **You open the trainer.** Pick 5, 10 or 15 minutes and review. FSRS decides
    when each card comes back.
 
@@ -118,6 +121,17 @@ touched. A new script also offers its alphabet as a starter deck.
 Piper, macOS `say` or eSpeak NG on this machine. `loanword speech --lang=ka`
 prints the one command that fetches a Piper voice — it never runs it, and no
 audio ever leaves the machine.
+
+**Words in your status line.** `/loanword:ticker` puts one card into Claude
+Code's status line — the weakest words of the open deck, a new one every ten
+seconds — read from the snapshot the trainer already writes, so it never
+opens the database or spends a model call. `/loanword:ticker off` restores
+what was there before.
+
+**Chapters.** Deck → Chapters groups the deck by domain and topic — code
+review, airport, standup — in parts of forty, closed until opened, each with
+its own Study button. Chapters are views computed from the cards, never an
+order of study.
 
 Interface language is separate from the pair you learn. English ships in the
 box; see [`ui/i18n/README.md`](ui/i18n/README.md) for the rest.

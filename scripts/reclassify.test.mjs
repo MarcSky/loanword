@@ -27,6 +27,31 @@ test('the filing prompt offers only the categories the learner chose', () => {
   assert.match(prompt, /"id":"aaaaaaaa01"/, 'each card goes in by id');
   assert.match(prompt, /"front":"roll back"/);
   assert.doesNotMatch(prompt, /"reps"/, 'and nothing the model has no use for');
+  assert.match(prompt, /topic/, 'the filer also labels a situation');
+  assert.match(prompt, /TOPICS = \(none yet\)/);
+  const labelled = promptFor(CARDS, { native: 'ru', target: 'en' }, [{ category: 'engineering', topic: 'code review', n: 3 }]);
+  assert.match(labelled, /engineering: code review/, 'labels already in use are offered for reuse');
+  assert.match(labelled, /exactly this list: engineering, process, collaboration, phrasing, connectors, everyday\./);
+});
+
+test('a topic alone is a filing, an over-long one is cut, and a no-op is not emitted', () => {
+  const allowed = ['everyday', 'engineering'];
+  const out = acceptedFilings(
+    [
+      { id: 'aaaaaaaa01', category: 'everyday', topic: ' Code Review ' },
+      { id: 'aaaaaaaa02', category: 'everyday', topic: 'x'.repeat(40) },
+    ],
+    CARDS,
+    allowed,
+  );
+  assert.deepEqual(out, [
+    { id: 'aaaaaaaa01', category: 'everyday', topic: 'code review' },
+    { id: 'aaaaaaaa02', category: 'everyday', topic: 'x'.repeat(24) },
+  ]);
+  const same = acceptedFilings([{ id: 'aaaaaaaa01', category: 'everyday', topic: '' }], CARDS, allowed);
+  assert.deepEqual(same, [], 'nothing changed, nothing written');
+  const kept = acceptedFilings([{ id: 'aaaaaaaa01', category: 'engineering' }], [{ ...CARDS[0], topic: 'deploys' }], allowed);
+  assert.deepEqual(kept, [{ id: 'aaaaaaaa01', category: 'engineering', topic: 'deploys' }], 'a reply without a topic keeps the one the card has');
 });
 
 test('a reply is read by the same reader the card builder uses', () => {
@@ -53,7 +78,7 @@ test('a filing is taken only for a card in the batch, into a category on the lis
     CARDS,
     allowed,
   );
-  assert.deepEqual(out, [{ id: 'aaaaaaaa02', category: 'marketing' }]);
+  assert.deepEqual(out, [{ id: 'aaaaaaaa02', category: 'marketing', topic: '' }]);
 });
 
 test('nothing is written when the model returns nonsense', () => {

@@ -9,13 +9,14 @@ import { join, normalize, resolve, sep } from 'node:path';
 import { createEmptyCard, fsrs, generatorParameters, Rating } from 'ts-fsrs';
 import * as analytics from './analytics.mjs';
 import { alphabetRecord, offerAlphabet } from './alphabet.mjs';
-import { ask, buildBeforeServing, buildInBackground, queueSizes } from './build.mjs';
+import { askFull, buildBeforeServing, buildInBackground, effortFor, modelFor, queueSizes } from './build.mjs';
 import * as filing from './reclassify.mjs';
 import { conceptsInto, copiedInto, planClone, selectForClone, sourcePair, suggestStarter } from './clone.mjs';
 import * as db from './db.mjs';
 import { toCsv, writeCsv } from './export-anki.mjs';
 import { languages as dictionaries } from './i18n.mjs';
 import { isRtl } from './languages.mjs';
+import { MAX_CHARS, MAX_IDS, RANGES, SESSION_LENGTHS, textIn } from './limits.mjs';
 import { ensureMigrated } from './migrate.mjs';
 import { candidates as peekCandidates } from './peek.mjs';
 import { clozeOf, planSession } from './session.mjs';
@@ -40,15 +41,20 @@ import {
   masteryOf,
   normalizeCategory,
   normalizeCefr,
+  normalizeTopic,
   paths,
+  frequentWords,
   peekFile,
   queueFile,
   readJsonl,
+  recordUsage,
   sameWord,
   saveKnownWords,
   SamePairError,
   saveSettings,
   tildify,
+  usageTotals,
+  usageWindows,
   wildFile,
   writeLines,
   writeSnapshots,
@@ -166,6 +172,7 @@ function stats(cfg = config(), loaded = deck(new Date(), cfg)) {
       }))
       .sort((a, b) => b.lapses - a.lapses || b.difficulty - a.difficulty)
       .slice(0, 5),
+    usage: usageTotals(),
   };
 }
 
@@ -256,6 +263,43 @@ function rewriteRecord(card, cfg, wrong = '') {
   };
 }
 
+function notWorthTapping(cfg) {
+  const queued = readJsonl(queueFile(cfg.target))
+    .filter((row) => row?.source === 'pick' && typeof row.text === 'string')
+    .map((row) => row.text.toLowerCase());
+  return new Set([...frequentWords(cfg.target), ...queued]);
+}
+
+function deckFronts(cfg) {
+  const deckId = db.deckIdIfAny(cfg.native, cfg.target);
+  if (deckId === null) return new Set();
+  return new Set(db.cardsOfDeck(deckId).map((card) => String(card.front || '').toLowerCase()));
+}
+
+function pickRecords(words, example, cfg) {
+  const sentence = textIn(example, MAX_CHARS.sentence);
+  const taken = new Set([...notWorthTapping(cfg), ...deckFronts(cfg)]);
+  const seen = new Set();
+  const records = [];
+  for (const raw of Array.isArray(words) ? words : []) {
+    const word = textIn(raw, MAX_CHARS.word);
+    const key = word.toLowerCase();
+    if (!word || seen.has(key) || taken.has(key)) continue;
+    seen.add(key);
+    records.push({
+      ts: new Date().toISOString(),
+      project: '',
+      session: '',
+      source: 'pick',
+      lang: cfg.target,
+      text: word,
+      example: sentence,
+    });
+    if (records.length >= RANGES.picks.max) break;
+  }
+  return records;
+}
+
 function remove(id, reason) {
   const cfg = config();
   const deckId = currentDeck(cfg);
@@ -310,6 +354,13 @@ if (argv[0] === 'migrate') {
 if (argv[0] === 'tidy') {
   const { tidy } = await import('./tidy.mjs');
   console.log(JSON.stringify(tidy({ remove: argv.includes('--remove') }), null, 2));
+  process.exit(0);
+}
+
+if (argv[0] === 'vet') {
+  const { repair } = await import('./vet.mjs');
+  console.log(JSON.stringify(await repair({ apply: argv.includes('--apply') }), null, 2));
+  db.close();
   process.exit(0);
 }
 
@@ -635,6 +686,7 @@ const server = createServer(async (req, res) => {
         alphabet: offerAlphabet({ native: cfg.native, target: cfg.target, cards }),
         starter: suggestStarter({ native: cfg.native, target: cfg.target, cards }),
         stats: stats(cfg, loaded),
+        usage: usageWindows(),
         cards: cards.map((card) => {
           const entry = state.get(card.id);
           return {
@@ -903,8 +955,24 @@ const server = createServer(async (req, res) => {
       const payload = await payloadOf(req, res);
       if (!payload) return;
       if (!knownId(payload.id)) return json(res, { error: 'unknown card id' }, 404);
-      const reason = String(payload.reason || '').slice(0, 200);
+      const reason = textIn(payload.reason, MAX_CHARS.reason);
       return json(res, remove(payload.id, reason));
+    }
+
+    if (req.method === 'GET' && url.pathname === '/stopwords') {
+      const cfg = config();
+      return json(res, { lang: cfg.target, skip: [...notWorthTapping(cfg)] });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/words') {
+      const payload = await payloadOf(req, res);
+      if (!payload) return;
+      const cfg = config();
+      const records = pickRecords(payload.words, payload.example, cfg);
+      if (!records.length) return json(res, { error: 'no words to build' }, 400);
+      appendJsonl(queueFile(cfg.target), records);
+      buildInBackground();
+      return json(res, { ok: true, queued: records.length, target: cfg.target });
     }
 
     if (req.method === 'POST' && url.pathname === '/rewrite') {
@@ -934,10 +1002,11 @@ const server = createServer(async (req, res) => {
       if (!knownId(payload.id)) return json(res, { error: 'unknown card id' }, 404);
       const patch = {};
       for (const key of ['front', 'back', 'example', 'note', 'reading']) {
-        if (typeof payload[key] === 'string') patch[key] = payload[key].trim().slice(0, 2000);
+        if (typeof payload[key] === 'string') patch[key] = textIn(payload[key], MAX_CHARS.field);
       }
       if (payload.category !== undefined) patch.category = normalizeCategory(payload.category);
       if (payload.cefr !== undefined) patch.cefr = normalizeCefr(payload.cefr);
+      if (payload.topic !== undefined) patch.topic = normalizeTopic(payload.topic);
       if (patch.front === '' || patch.back === '') {
         return json(res, { error: 'front and back cannot be empty' }, 400);
       }
@@ -945,6 +1014,19 @@ const server = createServer(async (req, res) => {
       const cfg = config();
       writeSnapshots(cfg.native, cfg.target, { force: true });
       return json(res, { ok: true, card: db.cardById(payload.id) });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/topic/rename') {
+      const payload = await payloadOf(req, res);
+      if (!payload) return;
+      const category = String(payload.category || '');
+      const from = normalizeTopic(payload.from);
+      const to = normalizeTopic(payload.to);
+      if (!CATEGORIES.includes(category)) return json(res, { error: 'unknown category' }, 400);
+      if (!to) return json(res, { error: 'a chapter needs a name' }, 400);
+      const cfg = config();
+      const moved = db.renameTopic(db.deckId(cfg.native, cfg.target), category, from, to);
+      return json(res, { ok: true, moved, topic: to });
     }
 
     if (req.method === 'POST' && url.pathname === '/session/start') {
@@ -955,13 +1037,20 @@ const server = createServer(async (req, res) => {
       const { id: deckId, state, cards, due } = deck(now, cfg);
       const category = CATEGORIES.includes(payload.category) ? payload.category : '';
       const level = CEFR_LEVELS.includes(payload.level) ? payload.level : '';
-      const minutes = [5, 10, 15].includes(Number(payload.minutes)) ? Number(payload.minutes) : cfg.sessionMinutes;
+      const minutes = SESSION_LENGTHS.includes(Number(payload.minutes)) ? Number(payload.minutes) : cfg.sessionMinutes;
       const exclude = new Set((Array.isArray(payload.exclude) ? payload.exclude : []).filter(knownId));
+      const wantedTopic = normalizeTopic(payload.topic);
+      const topic = wantedTopic && cards.some((card) => card.topic === wantedTopic) ? wantedTopic : '';
+      const include = new Set(
+        (Array.isArray(payload.include) ? payload.include : []).slice(0, MAX_IDS).filter(knownId),
+      );
 
       const asked = (card) =>
         !exclude.has(card.id) &&
         (!category || card.category === category) &&
-        (!level || card.cefr === level);
+        (!level || card.cefr === level) &&
+        (!topic || card.topic === topic) &&
+        (!include.size || include.has(card.id));
       const wanted = due.filter(asked);
       const unseen = cards.filter((card) => !state.has(card.id) && asked(card));
       const enough = cards.length >= 4;
@@ -991,7 +1080,7 @@ const server = createServer(async (req, res) => {
       if (!plan.steps.length) return json(res, { error: 'nothing is due in that group' }, 409);
 
       const sessionId = db.openSession(deckId, minutes, plan.steps.length);
-      return json(res, { sessionId, ...plan, category, level });
+      return json(res, { sessionId, ...plan, category, level, topic });
     }
 
     if (req.method === 'POST' && url.pathname === '/session/end') {
@@ -1039,7 +1128,7 @@ const server = createServer(async (req, res) => {
       if (!payload) return;
       const cfg = config();
       if (cfg.produce === false) return json(res, { error: 'production practice is switched off' }, 409);
-      const sentence = String(payload.sentence || '').trim().slice(0, 400);
+      const sentence = textIn(payload.sentence, MAX_CHARS.sentence);
       const words = (Array.isArray(payload.words) ? payload.words : [])
         .filter((word) => typeof word === 'string')
         .slice(0, 8);
@@ -1047,7 +1136,13 @@ const server = createServer(async (req, res) => {
 
       let reply;
       try {
-        reply = await ask(`${PRODUCE_BRIEF(cfg, words)}\n\nThe learner wrote:\n${sentence}\n`);
+        const effort = effortFor('sentence');
+        const answer = await askFull(`The learner wrote:\n${sentence}\n`, () => {}, {
+          system: PRODUCE_BRIEF(cfg, words),
+          effort,
+        });
+        reply = answer.text;
+        recordUsage({ kind: 'sentence', model: modelFor(cfg), effort, target: cfg.target, records: 1, cards: 0, ...answer.usage });
       } catch (error) {
         return json(res, { error: error.message }, 502);
       }

@@ -1,4 +1,4 @@
-const CACHE = 'loanword-shell-v7';
+const CACHE = 'loanword-shell-v10';
 
 const SHELL = [
   '/',
@@ -11,6 +11,9 @@ const SHELL = [
   'quiz.js',
   'plan.js',
   'categories.js',
+  'chapters.js',
+  'limits.js',
+  'words.js',
   'speak.js',
   'charts.js',
   'overview.js',

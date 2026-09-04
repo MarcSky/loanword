@@ -29,8 +29,12 @@ import {
   langAttrs,
 } from './core.js';
 import { sayButton } from './speak.js';
+import { chapterKey, chapterOf, chaptersOf, titleOf, topicsIn } from './chapters.js';
+import { MAX_CHARS, RANGES } from './limits.js';
+import { piecesOf } from './words.js';
 
 const VIEWS = [
+  { mode: 'chapters', icon: 'books', label: 'Chapters' },
   { mode: 'list', icon: 'list', label: 'List' },
   { mode: 'grid', icon: 'squares-four', label: 'Cards' },
 ];
@@ -44,10 +48,11 @@ const STATUSES = [
 ];
 
 function deckCards() {
-  const { category, level, status, query } = app.deck;
+  const { category, level, status, query, topic } = app.deck;
   const needle = query.trim().toLowerCase();
   return app.cards.filter((card) => {
     if (category && card.category !== category) return false;
+    if (topic && card.topic !== topic) return false;
     if (level && card.cefr !== level) return false;
     if (status === 'favorite' && !card.isFavorite) return false;
     if (status === 'due' && !card.isDue) return false;
@@ -94,41 +99,67 @@ const editButton = (card) => `<button class="star" data-act="edit-card" data-val
   ${icon('pencil-simple', 'icon-sm icon')}
 </button>`;
 
-function editRow(card) {
-  return `<li class="row" style="${tintOf(card.category)}" data-editing>
-    <form data-edit-form data-value="${card.id}" style="display:grid;gap:8px;width:100%">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-        <input class="edit" name="front" value="${esc(card.front)}" aria-label="${esc(t('Word'))}" required>
-        <input class="edit" name="back" value="${esc(card.back)}" aria-label="${esc(t('Meaning'))}" required>
-      </div>
-      <input class="edit" name="reading" value="${esc(card.reading || '')}" aria-label="${esc(t('Reading'))}"
-        placeholder="${esc(t('Romanised reading'))}">
-      <input class="edit" name="example" value="${esc(card.example || '')}" aria-label="${esc(t('Example'))}"
-        placeholder="${esc(t('Example'))}">
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-        <select class="edit" name="category" style="width:auto" aria-label="${esc(t('Domain'))}">
-          ${categoryKeys()
-            .map(
-              (key) =>
-                `<option value="${key}" ${card.category === key ? 'selected' : ''}>${esc(meta(key).label)}</option>`,
-            )
-            .join('')}
-        </select>
-        <select class="edit" name="cefr" style="width:auto" aria-label="${esc(t('Level'))}">
+const deckTopics = () =>
+  [...new Set(app.cards.map((card) => card.topic).filter(Boolean))].sort((one, other) => one.localeCompare(other));
+
+function cardField(label, control, wide = false) {
+  return `<label class="card-field${wide ? ' card-field-wide' : ''}">
+    <span class="micro">${esc(label)}</span>
+    ${control}
+  </label>`;
+}
+
+function cardForm(card) {
+  const text = (name, value, extra = '') =>
+    `<input class="edit" name="${name}" value="${esc(value || '')}" maxlength="${MAX_CHARS.field}" ${extra}>`;
+  return `
+    ${dialogHead(t('Edit card'), 'edit-cancel')}
+    <form data-edit-form data-value="${card.id}" class="card-form">
+      ${cardField(t('Word'), text('front', card.front, `required ${langAttrs(app.config.target)}`))}
+      ${cardField(t('Meaning'), text('back', card.back, `required ${langAttrs(app.config.native)}`))}
+      ${cardField(t('Example'), text('example', card.example, langAttrs(app.config.target)), true)}
+      ${cardField(t('Reading'), text('reading', card.reading, `placeholder="${esc(t('Romanised reading'))}" lang="und" dir="ltr"`))}
+      ${cardField(
+        t('Level'),
+        `<select class="edit" name="cefr">
           <option value="">${esc(t('No level'))}</option>
-          ${LEVELS.map(
-            (level) => `<option value="${level}" ${card.cefr === level ? 'selected' : ''}>${level}</option>`,
-          ).join('')}
-        </select>
-        <button class="btn btn-primary" type="submit" style="padding:6px 14px">${esc(t('Save'))} <kbd>↵</kbd></button>
-        <button class="btn btn-quiet" type="button" data-act="edit-cancel" style="padding:6px 14px">${esc(t('Cancel'))} <kbd>esc</kbd></button>
+          ${LEVELS.map((level) => `<option value="${level}" ${card.cefr === level ? 'selected' : ''}>${level}</option>`).join('')}
+        </select>`,
+      )}
+      ${cardField(
+        t('Domain'),
+        `<select class="edit" name="category">
+          ${categoryKeys()
+            .map((key) => `<option value="${key}" ${card.category === key ? 'selected' : ''}>${esc(meta(key).label)}</option>`)
+            .join('')}
+        </select>`,
+      )}
+      ${cardField(
+        t('Topic'),
+        `<select class="edit" name="topic">
+          <option value="" ${card.topic ? '' : 'selected'}>${esc(t('Unsorted'))}</option>
+          ${deckTopics()
+            .map((topic) => `<option value="${esc(topic)}" ${card.topic === topic ? 'selected' : ''}>${esc(titleOf(topic))}</option>`)
+            .join('')}
+        </select>`,
+      )}
+      ${cardField(t('Note'), text('note', card.note, `placeholder="${esc(t('Note'))}" ${langAttrs(app.config.native)}`), true)}
+      <div class="sync-foot card-field-wide">
+        <button class="btn" type="button" data-act="edit-cancel">${esc(t('Cancel'))} <kbd>esc</kbd></button>
+        <button class="btn btn-primary" type="submit">${esc(t('Save'))} <kbd>↵</kbd></button>
       </div>
-    </form>
-  </li>`;
+    </form>`;
+}
+
+function renderCardEditor() {
+  const box = $('#edit-body');
+  const card = app.cards.find((entry) => entry.id === app.deck.editing);
+  if (!box) return;
+  if (!card) return $('#edit').close();
+  box.innerHTML = cardForm(card);
 }
 
 function wordRow(card) {
-  if (app.deck.editing === card.id) return editRow(card);
   return `<li class="row" style="${tintOf(card.category)}" data-act="card-open" data-value="${card.id}"
     role="button" tabindex="0" aria-label="${esc(card.front)}">
     <span class="row-actions">
@@ -144,7 +175,101 @@ function wordRow(card) {
   </li>`;
 }
 
-export function wordList(cards) {
+function topicList(cards) {
+  const topics = topicsIn(cards);
+  if (topics.length <= 1) return `<ul class="rows">${cards.map(wordRow).join('')}</ul>`;
+  return topics
+    .map(({ topic, n }) => {
+      const owned = cards.filter((card) => (card.topic || '') === topic);
+      return `<div class="group" style="${tintOf(owned[0].category)}">
+        <h3 class="group-head">
+          <span class="group-icon">${icon('books', 'icon-sm icon')}</span>
+          ${esc(titleOf(topic) || t('Unsorted'))}
+          <span class="group-count">${n}</span>
+        </h3>
+        <ul class="rows">${owned.map(wordRow).join('')}</ul>
+      </div>`;
+    })
+    .join('');
+}
+
+export function topicChips(cards, active, action) {
+  const topics = topicsIn(cards).filter((entry) => entry.topic);
+  if (!topics.length) return '';
+  return `<div class="filters" role="group" aria-label="${esc(t('Filter by topic'))}">
+    <button class="chip chip-sm" data-act="${action}" data-value="" aria-pressed="${active === ''}">${esc(t('All'))}</button>
+    ${topics
+      .map(
+        ({ topic, n }) => `<button class="chip chip-sm" data-act="${action}" data-value="${esc(topic)}"
+          aria-pressed="${active === topic}">${esc(titleOf(topic))} <span class="count">${n}</span></button>`,
+      )
+      .join('')}
+  </div>`;
+}
+
+function chapterPanel(chapter) {
+  const info = categoryMeta(chapter.category);
+  const ids = chapter.cards.map((card) => card.id).join(',');
+  const open = !!app.deck.openAll;
+  return `<details class="chapter" style="${tintOf(chapter.category)}" ${open ? 'open' : ''}>
+    <summary>
+      <span class="group-icon">${icon(info.icon, 'icon-sm icon')}</span>
+      <span class="chapter-name">${esc(info.label)} · ${esc(titleOf(chapter.topic) || t('Unsorted'))}${
+        chapter.parts > 1 ? ` · ${esc(t('Part {n} of {m}', { n: chapter.part, m: chapter.parts }))}` : ''
+      }</span>
+      <button class="star chapter-edit" data-act="chapter-rename" data-value="${esc(chapterKey(chapter))}"
+        aria-label="${esc(t('Rename this chapter'))}">${icon('pencil-simple', 'icon-sm icon')}</button>
+      <span class="count">${chapter.total}</span>
+      <span class="meter" title="${esc(t('{n} mastered', { n: pct(chapter.mastery) }))}"><i style="width:${pct(chapter.mastery)}"></i></span>
+    </summary>
+    <div class="chapter-body">
+      <div class="chapter-actions">
+        <button class="btn" data-act="study-chapter" data-value="${ids}">
+          ${icon('play', 'icon-sm icon')} ${esc(t('Study this chapter'))}
+        </button>
+      </div>
+      <ul class="rows" ${open ? '' : `data-lazy="${ids}"`}>${open ? chapter.cards.map(wordRow).join('') : ''}</ul>
+    </div>
+  </details>`;
+}
+
+const chapterSize = (category, topic) =>
+  app.cards.filter((card) => card.category === category && (card.topic || '') === topic).length;
+
+function renderChapterDialog() {
+  const box = $('#chapter-body');
+  const chosen = app.chapter;
+  if (!box || !chosen) return;
+  const info = categoryMeta(chosen.category);
+  box.innerHTML = `
+    ${dialogHead(t('Rename this chapter'), 'chapter-close')}
+    <p class="lede" style="font-size:.9375rem">${esc(
+      t('A chapter is the topic its cards share. Rename it and every card in it moves along.'),
+    )}</p>
+    <form id="chapter-form" class="chapter-form">
+      <div class="chapter-form-was" style="${tintOf(chosen.category)}">
+        <span class="tag">${icon(info.icon)}${esc(info.label)}</span>
+        <span class="chapter-form-name">${esc(titleOf(chosen.topic) || t('Unsorted'))}</span>
+        <span class="count">${chapterSize(chosen.category, chosen.topic)}</span>
+      </div>
+      <label class="card-field">
+        <span class="micro">${esc(t('New name'))}</span>
+        <input class="edit" name="topic" value="${esc(titleOf(chosen.topic))}" maxlength="${MAX_CHARS.topic}" required
+          placeholder="${esc(titleOf(chosen.topic) || t('Unsorted'))}" aria-label="${esc(t('New name'))}">
+      </label>
+    </form>
+    <div class="sync-foot">
+      <button class="btn" data-act="chapter-close">${esc(t('Cancel'))}</button>
+      <button class="btn btn-primary" data-act="chapter-save">${esc(t('Save'))} <kbd>↵</kbd></button>
+    </div>`;
+}
+
+function chapterList(cards) {
+  return chaptersOf(cards, { order: categoryKeys() }).map(chapterPanel).join('');
+}
+
+export function wordList(cards, { by = 'category' } = {}) {
+  if (by === 'topic') return topicList(cards);
   const buckets = groupByCategory(cards);
   const groups = categoryKeys()
     .map((key) => ({ key, cards: buckets.get(key) || [] }))
@@ -195,7 +320,6 @@ function wordTable(cards) {
     </tr></thead>
     <tbody>${sorted
       .map((card) => {
-        if (app.deck.editing === card.id) return `<tr><td colspan="7"><ul class="rows">${editRow(card)}</ul></td></tr>`;
         const info = categoryMeta(card.category);
         const status = card.isNew ? t('never seen') : card.isDue ? t('due {when}', { when: relativeDay(card.due) }) : relativeDay(card.due);
         return `<tr style="${tintOf(card.category)}">
@@ -310,8 +434,60 @@ function twinGroup(group) {
   </div>`;
 }
 
+let building = false;
+let skipWords = new Set();
+
+async function loadSkipWords() {
+  const taken = new Set();
+  for (const owned of app.cards) taken.add(String(owned.front || '').toLowerCase());
+  const out = await api('/stopwords').catch(() => null);
+  for (const word of out?.skip || []) taken.add(word);
+  skipWords = taken;
+}
+
+const marks = (card) =>
+  piecesOf(card.example, app.config.target).map((piece, index) => ({
+    text: piece.segment,
+    index,
+    open: piece.isWordLike && !skipWords.has(piece.segment.toLowerCase()),
+  }));
+
+const picked = (marked) => marked.filter((mark) => mark.open && app.picks.has(mark.index));
+
+const pickableExample = (marked) =>
+  marked
+    .map((mark) =>
+      mark.open
+        ? `<button class="pick" data-act="pick-word" data-value="${mark.index}"
+            aria-pressed="${app.picks.has(mark.index)}">${esc(mark.text)}</button>`
+        : esc(mark.text),
+    )
+    .join('');
+
+function pickBar(marked) {
+  const chosen = picked(marked).length;
+  return `<div class="pick-bar">
+    <p class="field-hint">${esc(t('Tap a word you do not know'))}</p>
+    <div class="pick-actions">
+      <button class="btn" data-act="pick-cancel">${esc(t('Cancel'))}</button>
+      <button class="btn btn-primary" data-act="pick-create" ${chosen && !building ? '' : 'disabled'}>
+        ${icon('plus', 'icon-sm icon')} ${esc(t('Make cards'))}
+        ${chosen ? `<span class="count">${chosen}</span>` : ''}
+      </button>
+    </div>
+  </div>`;
+}
+
+const pickButton = (card) =>
+  card.example && !app.picking
+    ? `<button class="btn" data-act="pick-start">
+        ${icon('plus', 'icon-sm icon')} ${esc(t('Make cards'))}
+      </button>`
+    : '';
+
 function cardCard(card) {
   const info = categoryMeta(card.category);
+  const marked = app.picking && card.example ? marks(card) : [];
   const words = (card.keywords || []).filter(
     (word) => ![card.front, card.back].some((side) => String(side).toLowerCase() === String(word).toLowerCase()),
   );
@@ -327,7 +503,14 @@ function cardCard(card) {
     <div class="card-front" ${langAttrs(app.config.target)}>${esc(card.front)}</div>
     ${card.reading ? `<div class="reading" lang="und" dir="ltr">${esc(card.reading)}</div>` : ''}
     <div class="card-back" ${langAttrs(app.config.native)}>${esc(card.back)}</div>
-    ${card.example ? `<p class="example" ${langAttrs(app.config.target)}>${esc(card.example)}</p>` : ''}
+    ${
+      card.example
+        ? `<p class="example${marked.length ? ' example-pick' : ''}" ${langAttrs(app.config.target)}>${
+            marked.length ? pickableExample(marked) : esc(card.example)
+          }</p>`
+        : ''
+    }
+    ${marked.length ? pickBar(marked) : ''}
     ${card.note ? `<p class="note">${icon('warning-circle', 'icon-sm icon')} ${esc(card.note)}</p>` : ''}
     ${
       words.length
@@ -359,11 +542,16 @@ function cardCard(card) {
       <div><span class="l">${esc(t('Lapses'))}</span><span class="v">${card.lapses || 0}</span></div>
     </div>
 
+    <p class="field-hint">${esc(
+      t('Mastery is the FSRS stability of this card against 21 days: 100% means it should still be there in three weeks.'),
+    )}</p>
+
     <div class="sync-foot" style="justify-content:space-between">
-      <span style="display:flex;gap:8px">
+      <span>
         ${starButton(card)}${sayButton(card)}${editButton(card)}${rewriteButton(card)}
       </span>
-      <span style="display:flex;gap:8px">
+      <span>
+        ${pickButton(card)}
         <button class="btn btn-danger" data-act="card-drop" data-value="${card.id}">
           ${icon('trash', 'icon-sm icon')} ${esc(t('Delete it'))}
         </button>
@@ -425,17 +613,18 @@ function renderDeck() {
   const fresh = cards.filter((card) => card.isNew).length;
 
   $('#page-deck').innerHTML = `
-    <div class="page-head">
+    <div class="page-head deck-head">
       <div>
         <h1>${t('Your deck')}</h1>
         <p class="lede">${esc(tn(app.cards.length, 'card', 'cards'))}</p>
       </div>
-      <div class="page-actions">
+      <div class="deck-tools">
         <label class="search">
           ${icon('magnifying-glass', 'icon-sm icon')}
           <input class="input" id="deck-search" type="search" placeholder="${esc(t('Search words, translations, examples'))}"
             value="${esc(query)}" aria-label="${esc(t('Search the deck'))}">
         </label>
+      <div class="page-actions">
         ${
           app.duplicates?.groups.length
             ? `<button class="btn" data-act="twins-open">
@@ -443,8 +632,14 @@ function renderDeck() {
               </button>`
             : ''
         }
+        ${
+          app.deck.view === 'chapters'
+            ? ''
+            : `<button class="btn" data-act="deck-view" data-value="chapters">${icon('books', 'icon-sm icon')} ${esc(t('Chapters'))}</button>`
+        }
         <button class="btn" data-act="export" title="${esc(t('CSV for Anki: File → Import, separator ;'))}">${icon('download-simple', 'icon-sm icon')} ${esc(t('Export for Anki'))}</button>
         ${fresh ? `<button class="btn btn-primary" data-act="practice-tab" data-value="learn">${icon('sparkle', 'icon-sm icon')} ${esc(t('Learn {n} new', { n: fresh }))}</button>` : ''}
+      </div>
       </div>
     </div>
 
@@ -466,11 +661,20 @@ function renderDeck() {
     </div>
 
     ${categoryChips(app.deck.category, 'deck-category')}
+    ${app.deck.category ? topicChips(app.cards.filter((card) => card.category === app.deck.category), app.deck.topic, 'deck-topic') : ''}
     ${levelChips(app.deck.level, 'deck-level')}
 
     <div class="section-head">
       <h2 class="title">${esc(cards.length ? tn(cards.length, 'card', 'cards') : t('Nothing matches'))}</h2>
       <div style="display:flex;gap:8px">
+        ${
+          app.deck.view === 'chapters'
+            ? `<button class="btn" data-act="chapters-fold">
+                ${icon(app.deck.openAll ? 'minus' : 'plus', 'icon-sm icon')}
+                ${esc(app.deck.openAll ? t('Collapse all') : t('Open all'))}
+              </button>`
+            : ''
+        }
         ${
           cards.some((card) => card.isDue)
             ? `<button class="btn" data-act="start-filtered">
@@ -486,7 +690,9 @@ function renderDeck() {
       cards.length
         ? app.deck.view === 'grid'
           ? `<div class="deck-grid">${cards.map(wordCard).join('')}</div>`
-          : `<div class="panel panel-table">${wordTable(cards)}</div>`
+          : app.deck.view === 'chapters'
+            ? `<div class="chapters">${chapterList(cards)}</div>`
+            : `<div class="panel panel-table">${wordTable(cards)}</div>`
         : emptyState({
             art: {
               src: 'empty-filter.webp',
@@ -500,8 +706,6 @@ function renderDeck() {
 
   const search = $('#deck-search');
   if (search && document.activeElement !== search) search.setSelectionRange(query.length, query.length);
-  const editing = $('[data-edit-form] input');
-  if (editing) editing.focus();
 }
 
 async function removeCard(card) {
@@ -522,7 +726,47 @@ async function removeCard(card) {
 Object.assign(ACTIONS, {
   'deck-category': (value) => {
     app.deck.category = value;
+    app.deck.topic = '';
     renderDeck();
+  },
+  'deck-topic': (value) => {
+    app.deck.topic = value;
+    renderDeck();
+  },
+  'chapters-fold': () => {
+    app.deck.openAll = !app.deck.openAll;
+    renderDeck();
+  },
+  'chapter-rename': (value) => {
+    const chosen = chapterOf(value);
+    if (!chosen) return;
+    app.chapter = chosen;
+    $('#chapter').showModal();
+    renderChapterDialog();
+    $('#chapter-form input')?.focus();
+  },
+  'chapter-close': () => $('#chapter').close(),
+  'chapter-save': async () => {
+    const chosen = app.chapter;
+    const field = $('#chapter-form input');
+    if (!chosen || !field) return;
+    const to = field.value.trim().toLocaleLowerCase();
+    if (!to || to === chosen.topic) return $('#chapter').close();
+    try {
+      const out = await api('/topic/rename', { category: chosen.category, from: chosen.topic, to });
+      $('#chapter').close();
+      const { refresh } = await import('./core.js');
+      await refresh();
+      toast(t('{n} cards moved to “{topic}”', { n: out.moved, topic: titleOf(out.topic) }));
+    } catch (error) {
+      toast(error.message || t('Could not save'), 'error');
+    }
+  },
+  'study-chapter': async (value) => {
+    const include = String(value || '').split(',').filter(Boolean);
+    if (!include.length) return;
+    const { startSession } = await import('./study.js');
+    await startSession({ include });
   },
   'deck-level': (value) => {
     app.deck.level = value;
@@ -543,17 +787,20 @@ Object.assign(ACTIONS, {
     renderDeck();
   },
   'deck-reset': () => {
-    app.deck = { ...app.deck, category: '', level: '', status: 'all', query: '' };
+    app.deck = { ...app.deck, category: '', level: '', status: 'all', query: '', topic: '' };
     renderDeck();
   },
   'edit-card': (id) => {
+    if ($('#card').open) {
+      app.deck.editReturn = id;
+      $('#card').close();
+    }
     app.deck.editing = id;
-    render();
+    $('#edit').showModal();
+    renderCardEditor();
+    $('#edit-body input')?.focus();
   },
-  'edit-cancel': () => {
-    app.deck.editing = null;
-    render();
-  },
+  'edit-cancel': () => $('#edit').close(),
   export: () => {
     const decks = (app.pairs || []).filter((pair) => pair.total > 0);
     if (decks.length < 2) return (location.href = '/export.csv');
@@ -570,10 +817,52 @@ Object.assign(ACTIONS, {
   'export-close': () => $('#export').close(),
   'card-open': (id) => {
     app.opened = id;
+    app.picks = new Set();
+    app.picking = false;
     $('#card').showModal();
     renderCard();
   },
   'card-close': () => $('#card').close(),
+  'pick-start': async () => {
+    app.picking = true;
+    app.picks = new Set();
+    renderCard();
+    await loadSkipWords();
+    renderCard();
+  },
+  'pick-cancel': () => {
+    app.picking = false;
+    app.picks = new Set();
+    renderCard();
+  },
+  'pick-word': (value) => {
+    const index = Number(value);
+    if (app.picks.has(index)) app.picks.delete(index);
+    else if (app.picks.size >= RANGES.picks.max) {
+      return toast(t('At most {n} words at a time', { n: RANGES.picks.max }), 'error');
+    } else app.picks.add(index);
+    renderCard();
+  },
+  'pick-create': async () => {
+    const card = app.cards.find((entry) => entry.id === app.opened);
+    const words = card && card.example ? picked(marks(card)).map((mark) => mark.text) : [];
+    if (!words.length || building) return;
+    building = true;
+    renderCard();
+    try {
+      await api('/words', { words, example: card.example });
+    } catch (error) {
+      building = false;
+      renderCard();
+      return toast(error.message || t('Could not build those cards'), 'error');
+    }
+    building = false;
+    for (const word of words) skipWords.add(word.toLowerCase());
+    app.picks = new Set();
+    app.picking = false;
+    renderCard();
+    toast(t('Building your cards'));
+  },
   'card-drop': async (id) => {
     const card = app.cards.find((entry) => entry.id === id);
     if (!card) return;
@@ -669,8 +958,26 @@ Object.assign(ACTIONS, {
   },
   'start-filtered': async () => {
     const { startSession } = await import('./study.js');
-    await startSession({ category: app.deck.category, level: app.deck.level });
+    await startSession({ category: app.deck.category, level: app.deck.level, topic: app.deck.topic });
   },
+});
+
+document.addEventListener(
+  'toggle',
+  (event) => {
+    const rows = event.target.matches?.('details.chapter[open]') && event.target.querySelector('.rows[data-lazy]');
+    if (!rows) return;
+    const wanted = new Set(rows.dataset.lazy.split(','));
+    rows.innerHTML = app.cards.filter((card) => wanted.has(card.id)).map(wordRow).join('');
+    delete rows.dataset.lazy;
+  },
+  true,
+);
+
+document.addEventListener('submit', (event) => {
+  if (event.target.id !== 'chapter-form') return;
+  event.preventDefault();
+  ACTIONS['chapter-save']();
 });
 
 document.addEventListener('submit', async (event) => {
@@ -689,7 +996,7 @@ document.addEventListener('submit', async (event) => {
         haystack: [card.front, card.back, card.example, ...(card.keywords || [])].join(' ').toLowerCase(),
       };
     }
-    app.deck.editing = null;
+    $('#edit').close();
     render();
     toast(t('Saved'));
   } catch (error) {
@@ -701,6 +1008,16 @@ modal('export', () => {
   app.export = null;
 });
 modal('twins');
+modal('chapter', () => {
+  app.chapter = null;
+});
+
+modal('edit', () => {
+  app.deck.editing = null;
+  const back = app.deck.editReturn;
+  app.deck.editReturn = '';
+  if (back && app.cards.some((card) => card.id === back)) ACTIONS['card-open'](back);
+});
 
 modal('card', () => {
   app.opened = null;

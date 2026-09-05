@@ -137,6 +137,7 @@ core.app.config = {
   speech: 'reveal',
   peek: 'off',
   peekEvery: 15,
+  tickerEvery: 30,
   peekPick: {},
   produce: true,
   phonetics: 'auto',

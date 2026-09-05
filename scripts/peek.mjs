@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { CEFR_LEVELS, LEECH_LAPSES } from './store-paths.mjs';
+import { RANGES, clampInt } from './limits.mjs';
 import { scriptOf } from './languages.mjs';
 
 export const PEEK_POOLS = ['starred', 'slipping', 'leech', 'new'];
@@ -68,6 +69,11 @@ export function pickPeek(rows, pick = [], random = Math.random) {
 
 const LINE_WIDTH = 72;
 
+export const intervalOf = (argv = [], cfg = {}) => {
+  const flag = (argv.find((arg) => String(arg).startsWith('--interval=')) || '').split('=')[1];
+  return clampInt(flag, RANGES.tickerEvery) ?? clampInt(cfg.tickerEvery, RANGES.tickerEvery) ?? RANGES.tickerEvery.fallback;
+};
+
 export const slotNow = (intervalSeconds, now = Date.now()) =>
   Math.floor(now / (Math.max(1, Number(intervalSeconds) || 1) * 1000));
 
@@ -103,15 +109,17 @@ export function renderPeek(card, cfg = {}) {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const { config, peekFile, readJsonl } = await import('./store.mjs');
-  const cfg = config();
-  const flag = (process.argv.find((arg) => arg.startsWith('--pick=')) || '').split('=')[1];
-  const rows = readJsonl(peekFile(cfg.target));
-  if (process.argv.includes('--line')) {
-    const interval = Number((process.argv.find((arg) => arg.startsWith('--interval=')) || '').split('=')[1]) || 10;
-    process.stdout.write(`${lineOf(rows, flag ?? cfg.peekPick, { slot: slotNow(interval) })}\n`);
-  } else {
-    const card = pickPeek(rows, flag ?? cfg.peekPick);
-    process.stdout.write(card ? renderPeek(card, cfg) : 'Nothing to show yet — build some cards first.\n');
-  }
+  setImmediate(async () => {
+    const { config, peekFile, readJsonl } = await import('./store.mjs');
+    const cfg = config();
+    const flag = (process.argv.find((arg) => arg.startsWith('--pick=')) || '').split('=')[1];
+    const rows = readJsonl(peekFile(cfg.target));
+    if (process.argv.includes('--line')) {
+      const interval = intervalOf(process.argv, cfg);
+      process.stdout.write(`${lineOf(rows, flag ?? cfg.peekPick, { slot: slotNow(interval) })}\n`);
+    } else {
+      const card = pickPeek(rows, flag ?? cfg.peekPick);
+      process.stdout.write(card ? renderPeek(card, cfg) : 'Nothing to show yet — build some cards first.\n');
+    }
+  });
 }

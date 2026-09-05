@@ -1,6 +1,6 @@
 ---
 name: ticker
-description: Show one Loanword card at a time in the Claude Code status line — the weakest words of the open deck, a new one every few seconds. Use when the user asks for words in the status line, a vocabulary ticker, or to turn it off.
+description: A vocabulary widget inside Claude Code — one card at a time in the status line under the prompt, the weakest words of the open deck, a new one every few seconds, so a working session teaches you words while you work. Use when the user asks for words in the status line, a vocabulary ticker, or to turn it off.
 disable-model-invocation: false
 allowed-tools: Bash, Read, Edit
 ---
@@ -13,8 +13,14 @@ card from the open deck's snapshot — weakest first, cycling on a fixed clock,
 never opening the database:
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/peek.mjs" --line --interval=10
+node "${CLAUDE_PLUGIN_ROOT}/scripts/peek.mjs" --line
 ```
+
+How long a word stays is the `tickerEvery` setting (seconds, 5…300, default
+30), changed in the trainer's Settings or with `ticker_every` in the plugin
+options. `--interval=N` on the command line overrides it; leave the flag off so
+the setting rules. The status line cannot redraw faster than its own
+`refreshInterval`, so keep that at or below `tickerEvery`.
 
 It prints `Loanword · front — back · reading · 63%` (or `· new`, `· leech`),
 or an empty line when there is nothing to show. `--pick=` narrows it like the
@@ -31,7 +37,7 @@ peek setting (`starred,slipping,B2`).
 ```json
 "statusLine": {
   "type": "command",
-  "command": "node <absolute plugin root>/scripts/peek.mjs --line --interval=10",
+  "command": "node <absolute plugin root>/scripts/peek.mjs --line",
   "refreshInterval": 10
 }
 ```
@@ -40,11 +46,12 @@ If a `statusLine.command` already exists, offer to chain it instead of
 replacing it, and remember the previous command in `statusLine.loanwordPrevious`:
 
 ```json
-"command": "<existing command> | tr -d '\n'; printf ' · '; node <absolute plugin root>/scripts/peek.mjs --line --interval=10"
+"command": "<existing command> | tr -d '\n'; printf ' · '; node <absolute plugin root>/scripts/peek.mjs --line"
 ```
 
-`/loanword:ticker 30` uses 30 seconds for both `--interval` and
-`refreshInterval` (the minimum Claude Code accepts is 1).
+`/loanword:ticker 30` writes 30 into `tickerEvery` (PATCH the trainer's
+settings, or edit `settings.json` beside the deck) and sets `refreshInterval`
+to the same number. The minimum Claude Code accepts is 1.
 
 ## Turning it off
 

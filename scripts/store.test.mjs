@@ -499,6 +499,19 @@ test('cards written before decks existed are pinned by the migration, not by a l
   assert.equal(cardsForPair({ native: 'es', target: 'en' }).length, 1);
 });
 
+test('dropping a language from the capture list stays dropped', () => {
+  resetDecks();
+  saveSettings({ native: 'en', target: 'es' });
+  saveSettings({ targets: ['de', 'ka'] });
+  assert.deepEqual(config().targets.sort(), ['de', 'es', 'ka'], 'the open deck is always captured');
+
+  const saved = saveSettings({ targets: ['de', 'es'] });
+  assert.deepEqual(saved.targets.sort(), ['de', 'es'], 'a deleted deck does not come back from the stored list');
+
+  saveSettings({ dailyLimit: 20 });
+  assert.deepEqual(config().targets.sort(), ['de', 'es'], 'a patch about something else leaves the list alone');
+});
+
 test('legacyPair cannot be set from a request body', () => {
   resetDecks();
   saveSettings({ native: 'es', target: 'en', legacyPair: { native: 'zz', target: 'zz' } });

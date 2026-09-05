@@ -664,5 +664,8 @@
   "{n} tokens out": "{n} टोकन आउटपुट",
   "{n} tomorrow": "कल {n}",
   "{r} reviews · {n} new": "{r} रिव्यू · {n} नए",
-  "“Good · 4 d” instead of “got it”. Seeing the consequence makes the choice honest.": "«आ गया» की जगह «ठीक · 4 दि.»। नतीजा दिखे तो चुनाव ईमानदार होता है।"
+  "“Good · 4 d” instead of “got it”. Seeing the consequence makes the choice honest.": "«आ गया» की जगह «ठीक · 4 दि.»। नतीजा दिखे तो चुनाव ईमानदार होता है।",
+  "sec": "से",
+  "Words in the Claude Code status line": "Claude Code की स्टेटस लाइन में शब्द",
+  "The status line is the line Claude Code prints under your prompt. <code>/loanword:ticker</code> puts one word of the open deck there, the weakest first, and this is how long a word stays before the next one takes its place. Claude Code redraws that line on its own clock, so a number below its refresh interval changes nothing.": "स्टेटस लाइन वह पंक्ति है जो Claude Code आपके प्रॉम्प्ट के नीचे दिखाता है। <code>/loanword:ticker</code> वहाँ खुली डेक का एक शब्द रखता है, सबसे कमज़ोर पहले, और यहाँ तय होता है कि अगला शब्द आने से पहले हर शब्द कितनी देर टिके। Claude Code उस पंक्ति को अपनी घड़ी से दोबारा खींचता है, इसलिए उसके रिफ़्रेश अंतराल से छोटा नंबर कुछ नहीं बदलता।"
 }

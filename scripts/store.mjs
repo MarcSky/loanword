@@ -233,6 +233,7 @@ function envConfig(env = process.env) {
     peek: peekMode(env.CLAUDE_PLUGIN_OPTION_PEEK) ?? 'off',
     peekPick: parsePick(env.CLAUDE_PLUGIN_OPTION_PEEK_PICK || ''),
     peekEvery: peekEveryFrom(env.CLAUDE_PLUGIN_OPTION_PEEK_EVERY),
+    tickerEvery: clampInt(env.CLAUDE_PLUGIN_OPTION_TICKER_EVERY, RANGES.tickerEvery) ?? RANGES.tickerEvery.fallback,
     produce: true,
     phonetics: 'auto',
     exercises: ['flashcards', 'learn', 'cloze', 'type', 'reverse'],
@@ -286,6 +287,7 @@ const SETTING_RULES = {
   peek: peekMode,
   peekPick: (v) => (v === undefined || v === null ? undefined : parsePick(v)),
   peekEvery: (v) => intIn(v, RANGES.peekEvery),
+  tickerEvery: (v) => intIn(v, RANGES.tickerEvery),
   produce: (v) => (typeof v === 'boolean' ? v : undefined),
   phonetics: (v) => (PHONETICS.includes(v) ? v : undefined),
   exercises: (v) => stringList(v, EXERCISES),
@@ -363,7 +365,7 @@ export function saveSettings(patch) {
   if (native === target) {
     throw new SamePairError(`${native} cannot be both the language you write in and the one you learn`);
   }
-  const wanted = [...(merged.targets || []), target, ...(clean.target ? [] : before.targets || [])];
+  const wanted = [...(merged.targets || []), target];
   merged.target = target;
   merged.targets = [...new Set(wanted)].filter((code) => code !== native);
   merged.paused = [...new Set(merged.paused || [])].filter((code) => merged.targets.includes(code));

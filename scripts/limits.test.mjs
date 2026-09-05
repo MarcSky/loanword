@@ -67,6 +67,10 @@ test('the ranges the interface offers are the ones the plugin manifest promises'
   assert.equal(every.min, RANGES.peekEvery.min);
   assert.equal(every.max, RANGES.peekEvery.max);
   assert.equal(every.default, RANGES.peekEvery.fallback);
+  const ticker = manifest.userConfig.ticker_every;
+  assert.equal(ticker.min, RANGES.tickerEvery.min);
+  assert.equal(ticker.max, RANGES.tickerEvery.max);
+  assert.equal(ticker.default, RANGES.tickerEvery.fallback);
   assert.deepEqual(SESSION_LENGTHS, [5, 10, 15]);
   assert.equal(MAX_IDS, 200);
   assert.deepEqual(RANGES.picks, { min: 1, max: 12, fallback: 12 }, 'one sheet of tapped words');
@@ -81,5 +85,6 @@ test('the settings screen offers exactly the range the rules enforce', () => {
   const source = readFileSync(new URL('../ui/settings.js', import.meta.url), 'utf8');
   assert.match(source, /min="\$\{RANGES\.dailyLimit\.min\}" max="\$\{RANGES\.dailyLimit\.max\}"/);
   assert.match(source, /min="\$\{RANGES\.peekEvery\.min\}" max="\$\{RANGES\.peekEvery\.max\}"/);
+  assert.match(source, /min="\$\{RANGES\.tickerEvery\.min\}" max="\$\{RANGES\.tickerEvery\.max\}"/);
   assert.doesNotMatch(source, /max="50"/, 'a hard-coded bound is a bound that drifts');
 });

@@ -688,5 +688,8 @@
   "{n} tokens out": "{n} токенов на выходе",
   "{n} tomorrow": "{n} завтра",
   "{r} reviews · {n} new": "{r} повторений · {n} новых",
-  "“Good · 4 d” instead of “got it”. Seeing the consequence makes the choice honest.": "«Нормально · 4 д» вместо «вспомнил». Когда видно последствие, выбор становится честным."
+  "“Good · 4 d” instead of “got it”. Seeing the consequence makes the choice honest.": "«Нормально · 4 д» вместо «вспомнил». Когда видно последствие, выбор становится честным.",
+  "sec": "с",
+  "Words in the Claude Code status line": "Слова в строке состояния Claude Code",
+  "The status line is the line Claude Code prints under your prompt. <code>/loanword:ticker</code> puts one word of the open deck there, the weakest first, and this is how long a word stays before the next one takes its place. Claude Code redraws that line on its own clock, so a number below its refresh interval changes nothing.": "Строка состояния — это строка, которую Claude Code печатает под вашим запросом. <code>/loanword:ticker</code> помещает туда по одному слову открытой колоды, начиная с самых слабых, а здесь задаётся, сколько слово держится, прежде чем его сменит следующее. Claude Code перерисовывает эту строку по своим часам, поэтому число меньше его интервала обновления ничего не изменит."
 }

@@ -195,7 +195,7 @@ function topicList(cards) {
     .join('');
 }
 
-export function topicChips(cards, active, action) {
+function topicChips(cards, active, action) {
   const topics = topicsIn(cards).filter((entry) => entry.topic);
   if (!topics.length) return '';
   return `<div class="filters" role="group" aria-label="${esc(t('Filter by topic'))}">

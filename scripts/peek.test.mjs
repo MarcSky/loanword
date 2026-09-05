@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import {
   DEFAULT_EVERY_MINUTES,
   PEEK_POOLS,
@@ -122,7 +124,7 @@ test('a card never seen says so instead of claiming a recall score', () => {
   assert.ok(!text.includes('recall'));
 });
 
-import { lineOf, slotNow } from './peek.mjs';
+import { intervalOf, lineOf, slotNow } from './peek.mjs';
 
 test('the status line shows the weakest card first and cycles on a fixed clock', () => {
   const rows = [
@@ -147,4 +149,21 @@ test('the slot is the wall clock divided into intervals', () => {
   assert.equal(slotNow(10, 29_999), 2);
   assert.equal(slotNow(10, 30_000), 3);
   assert.equal(slotNow(0, 5_000), 5, 'a nonsense interval falls back to one second');
+});
+
+test('the ticker clock comes from the setting, and a flag on the command wins', () => {
+  assert.equal(intervalOf([], {}), 30, 'no flag and no setting is the default');
+  assert.equal(intervalOf([], { tickerEvery: 60 }), 60);
+  assert.equal(intervalOf(['--line', '--interval=15'], { tickerEvery: 60 }), 15, 'an installed command keeps its own pace');
+  assert.equal(intervalOf([], { tickerEvery: 4000 }), 300, 'a setting outside the range is pulled into it');
+  assert.equal(intervalOf(['--interval=abc'], { tickerEvery: 45 }), 45, 'nonsense on the command line falls back to the setting');
+});
+
+test('the status line command runs as its own entry point', () => {
+  const out = execFileSync(process.execPath, [fileURLToPath(new URL('peek.mjs', import.meta.url)), '--line'], {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+    timeout: 20_000,
+  });
+  assert.equal(typeof out, 'string', 'store.mjs imports peek.mjs, so a top-level await here deadlocks the cycle');
 });

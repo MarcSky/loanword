@@ -4,6 +4,7 @@ export const RANGES = {
   dailyLimit: { min: 3, max: 100, fallback: 15 },
   weeklyGoal: { min: 1, max: 7, fallback: 5 },
   peekEvery: { min: 1, max: 120, fallback: 15 },
+  tickerEvery: { min: 5, max: 300, fallback: 30 },
   picks: { min: 1, max: 12, fallback: 12 },
 };
 

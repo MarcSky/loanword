@@ -652,5 +652,8 @@
   "{n} tokens out": "输出 {n} token",
   "{n} tomorrow": "明天 {n}",
   "{r} reviews · {n} new": "{r} 次复习 · {n} 张新卡",
-  "“Good · 4 d” instead of “got it”. Seeing the consequence makes the choice honest.": "用“良好 · 4 天”代替“记得”。看到后果，选择才诚实。"
+  "“Good · 4 d” instead of “got it”. Seeing the consequence makes the choice honest.": "用“良好 · 4 天”代替“记得”。看到后果，选择才诚实。",
+  "sec": "秒",
+  "Words in the Claude Code status line": "Claude Code 状态栏里的单词",
+  "The status line is the line Claude Code prints under your prompt. <code>/loanword:ticker</code> puts one word of the open deck there, the weakest first, and this is how long a word stays before the next one takes its place. Claude Code redraws that line on its own clock, so a number below its refresh interval changes nothing.": "状态栏是 Claude Code 在你的提示下方打印的一行。<code>/loanword:ticker</code> 会把当前牌组的单词放在那里，最薄弱的优先；这里设置一个单词停留多久后由下一个接替。Claude Code 按自己的时钟重绘该行，因此小于其刷新间隔的数字不会有任何变化。"
 }

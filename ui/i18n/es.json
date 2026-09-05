@@ -675,5 +675,8 @@
   "{n} tokens out": "{n} tokens de salida",
   "{n} tomorrow": "{n} mañana",
   "{r} reviews · {n} new": "{r} repasos · {n} nuevas",
-  "“Good · 4 d” instead of “got it”. Seeing the consequence makes the choice honest.": "«Bien · 4 d» en vez de «lo tengo». Ver la consecuencia hace honesta la elección."
+  "“Good · 4 d” instead of “got it”. Seeing the consequence makes the choice honest.": "«Bien · 4 d» en vez de «lo tengo». Ver la consecuencia hace honesta la elección.",
+  "sec": "s",
+  "Words in the Claude Code status line": "Palabras en la barra de estado de Claude Code",
+  "The status line is the line Claude Code prints under your prompt. <code>/loanword:ticker</code> puts one word of the open deck there, the weakest first, and this is how long a word stays before the next one takes its place. Claude Code redraws that line on its own clock, so a number below its refresh interval changes nothing.": "La barra de estado es la línea que Claude Code imprime debajo de tu prompt. <code>/loanword:ticker</code> coloca allí una palabra del mazo abierto, la más floja primero, y aquí se fija cuánto se queda cada una antes de que la sustituya la siguiente. Claude Code repinta esa línea con su propio reloj, así que un número menor que su intervalo de refresco no cambia nada."
 }

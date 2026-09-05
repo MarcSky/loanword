@@ -675,5 +675,8 @@
   "{n} tokens out": "{n} jetons en sortie",
   "{n} tomorrow": "{n} demain",
   "{r} reviews · {n} new": "{r} révisions · {n} nouvelles",
-  "“Good · 4 d” instead of “got it”. Seeing the consequence makes the choice honest.": "« Bien · 4 j » au lieu de « je l’ai ». Voir la conséquence rend le choix honnête."
+  "“Good · 4 d” instead of “got it”. Seeing the consequence makes the choice honest.": "« Bien · 4 j » au lieu de « je l’ai ». Voir la conséquence rend le choix honnête.",
+  "sec": "s",
+  "Words in the Claude Code status line": "Des mots dans la barre d’état de Claude Code",
+  "The status line is the line Claude Code prints under your prompt. <code>/loanword:ticker</code> puts one word of the open deck there, the weakest first, and this is how long a word stays before the next one takes its place. Claude Code redraws that line on its own clock, so a number below its refresh interval changes nothing.": "La barre d’état est la ligne que Claude Code affiche sous votre invite. <code>/loanword:ticker</code> y place un mot du paquet ouvert, le plus fragile d’abord, et ceci règle la durée d’affichage d’un mot avant le suivant. Claude Code redessine cette ligne à son propre rythme : un nombre inférieur à son intervalle de rafraîchissement ne change rien."
 }

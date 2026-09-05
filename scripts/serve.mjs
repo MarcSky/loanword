@@ -57,6 +57,7 @@ import {
   frequentWords,
   peekFile,
   queueFile,
+  readJson,
   readJsonl,
   recordUsage,
   sameWord,
@@ -599,7 +600,7 @@ const TTY = !!process.stdout.isTTY && !process.env.NO_COLOR;
 const paint = (code, text) => (TTY ? `\x1b[${code}m${text}\x1b[0m` : text);
 const dim = (text) => paint(2, text);
 const bold = (text) => paint(1, text);
-const VERSION = readJson(join(PLUGIN_ROOT, 'package.json'))?.version || '0.0.0';
+const VERSION = readJson(join(PLUGIN_ROOT, 'package.json'), null)?.version || '0.0.0';
 
 function banner({ url, cfg, total, due, data, idleMinutes, version = VERSION }) {
   const rows = [
@@ -734,7 +735,7 @@ const server = createServer(async (req, res) => {
       const cfg = config();
       const lang = cfg.uiLang || cfg.native;
       const file = resolve(join(UI_ROOT, 'i18n', `${lang}.json`));
-      const strings = file.startsWith(UI_ROOT + sep) ? readJson(file) : null;
+      const strings = file.startsWith(UI_ROOT + sep) ? readJson(file, null) : null;
       const known = strings && typeof strings === 'object' && !Array.isArray(strings);
       return json(res, {
         lang: known ? lang : 'en',
@@ -1265,14 +1266,6 @@ const server = createServer(async (req, res) => {
     return res.end();
   }
 });
-
-function readJson(file) {
-  try {
-    return JSON.parse(readFileSync(file, 'utf8'));
-  } catch {
-    return null;
-  }
-}
 
 server.requestTimeout = 30_000;
 server.headersTimeout = 10_000;

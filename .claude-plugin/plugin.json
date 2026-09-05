@@ -91,6 +91,14 @@
       "default": 15,
       "min": 1,
       "max": 120
+    },
+    "ticker_every": {
+      "type": "number",
+      "title": "Seconds a word stays in the status line",
+      "description": "How long one word stays in the status line ticker (/loanword:ticker). The status line cannot redraw faster than its own refreshInterval",
+      "default": 30,
+      "min": 5,
+      "max": 300
     }
   }
 }

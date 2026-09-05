@@ -79,6 +79,7 @@ const HELP = {
   weeklyGoal: () => [t('Days a week'), t('The streak asks for a rhythm, not a run. Miss a Tuesday and nothing resets — the week is still there to be met.')],
   intervals: () => [t('Next interval'), t('“Good · 4 d” instead of “got it”. Seeing the consequence makes the choice honest.')],
   peek: () => [t('A card while Claude works'), t('Every prompt starts a wait. Loanword prints one card into the session while it lasts. Nothing is graded; it is a glance, not a test.')],
+  ticker: () => [t('Words in the Claude Code status line'), t('The status line is the line Claude Code prints under your prompt. <code>/loanword:ticker</code> puts one word of the open deck there, the weakest first, and this is how long a word stays before the next one takes its place. Claude Code redraws that line on its own clock, so a number below its refresh interval changes nothing.')],
   picks: () => [t('Which words to show'), t('Pick any mix. The states are combined — starred <b>or</b> slipping — and the levels narrow whatever that leaves. Choose nothing and every card is fair game.')],
   speech: () => [t('Speech'), t('Offline voices only: your browser’s local ones first, then Piper, <code>say</code> or eSpeak NG on this machine. Nothing is ever sent anywhere.')],
   produce: () => [t('One sentence of your own'), t('The summary asks for a sentence using two of today’s words and answers with one line. The sentence itself is never stored.')],
@@ -197,7 +198,7 @@ async function saveCategories(keys, field = 'custom') {
   await refresh();
 }
 
-function topicChips() {
+function categoryChips() {
   const counts = new Map();
   for (const card of app.cards) counts.set(card.category, (counts.get(card.category) || 0) + 1);
 
@@ -417,7 +418,7 @@ function renderSettings() {
       <p class="field-hint" style="margin:-4px 0 10px">${esc(
         t('The only categories the builder may use. Drop one and its cards move to Everyday.'),
       )}</p>
-      <div class="topic-chips">${topicChips()}</div>
+      <div class="topic-chips">${categoryChips()}</div>
       <div class="topic-actions">
         <button class="btn" data-act="topics-open">
           ${icon('plus', 'icon-sm icon')} ${esc(t('Add a category'))}
@@ -552,6 +553,18 @@ function renderSettings() {
           </label>
         </div>`,
         { help: 'peek' },
+      )}
+      ${setting(
+        t('Words in the Claude Code status line'),
+        `<div class="control-pair">
+          <label class="every">
+            <input class="input" type="number" min="${RANGES.tickerEvery.min}" max="${RANGES.tickerEvery.max}" step="1"
+              value="${cfg.tickerEvery ?? RANGES.tickerEvery.fallback}"
+              data-setting="tickerEvery" aria-label="${esc(t('Words in the Claude Code status line'))}">
+            <span>${esc(t('sec'))}</span>
+          </label>
+        </div>`,
+        { help: 'ticker' },
       )}
       ${
         cfg.peek === 'on'

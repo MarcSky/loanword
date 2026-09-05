@@ -26,9 +26,7 @@ turns those words into flashcards, and schedules them with FSRS.
 
 ## See it work
 
-<video src="https://github.com/MarcSky/loanword/raw/master/images/demo.mp4" controls muted width="100%">
-  <a href="https://github.com/MarcSky/loanword/raw/master/images/demo.mp4">Watch the demo</a>
-</video>
+![The trainer: the Overview, the deck, Chapters, and a graded test being set up](images/demo.webp)
 
 ## How it works
 

@@ -24,6 +24,12 @@ turns those words into flashcards, and schedules them with FSRS.
 - 35 languages in 13 scripts: Latin, Cyrillic, Greek, Hebrew, Arabic,
   Devanagari, Bengali, Thai, Ethiopic, Armenian, Georgian, Han, Hangul.
 
+## See it work
+
+<video src="https://github.com/MarcSky/loanword/raw/master/images/demo.mp4" controls muted width="100%">
+  <a href="https://github.com/MarcSky/loanword/raw/master/images/demo.mp4">Watch the demo</a>
+</video>
+
 ## How it works
 
 ![Five steps: you work, the words are captured, secrets are stripped, Claude writes the cards, the deck stays on your machine](images/readme-flow.webp)
@@ -53,9 +59,13 @@ mode. Needs Node 22.13 or newer.
 | `/loanword:stats` | Progress: learned, streak, hardest words                                |
 | `/loanword:ticker` | Claude Code widget with flashcards in the status line under your prompt |
 
-No build command: a session ending with ten or more records spawns a detached
-`claude -p`, and opening the trainer drains whatever came after. `loanword
-build` forces it.
+No build command. The Overview says how many records are waiting, and **Build
+now** opens the list first: one row per captured phrase, per language, so you
+throw away what you already know before it costs a model call. Turn on *Make
+cards automatically* in Settings if you would rather a session ending with ten
+or more records build them by itself. `loanword build` forces it, and the very
+first run — an empty deck with a full queue — builds without asking so the
+trainer has something to show.
 
 ### Ticker
 
@@ -85,7 +95,7 @@ Six screens, served off disk, no build step, no framework, no network.
 
 - **One queue per language** — `queue.<code>.jsonl`, all appended in the same
   hook pass, so two languages cost the same keystrokes as one.
-- **One switch per language** — Settings → *Capture into* pauses a language
+- **One switch per language** — Settings → *Collect words for* pauses a language
   without deleting its deck or schedule.
 - **One schedule per deck** — studying `en → de` never moves a card in
   `en → es`.
@@ -114,6 +124,10 @@ set in Settings beats the arithmetic.
   context, no session history.
 - Sonnet writes cards by default; Haiku and Opus are in Settings. Filing always
   runs on Haiku.
+- The Claude subscription you are already signed into pays for it. Settings →
+  *Use my API key* takes an Anthropic key instead; it is kept beside your deck
+  in `settings.json`, and the trainer only ever shows its first and last
+  characters.
 - Every call's tokens and cost are logged, per model, over 1, 7 or 30 days.
 - Nothing is asked twice: only cards the gate marked go back, one call a batch.
 - A call over `MAX_CALL_USD` (3, or `LOANWORD_MAX_CALL_USD`) halves its batch
@@ -157,7 +171,7 @@ the plugin data directory; the stored value wins.
 | `target_lang` | `en` | The language you are learning |
 | `mode` | `both` | `active`: your prompts; `passive`: assistant replies |
 | `daily_limit` | `15` | New cards per day, 3 to 100. Reviews are never capped |
-| `auto_build` | `true` | Build cards when a session ends |
+| `auto_build` | `false` | Build cards when a session ends, without asking |
 | `echo` | `off` | `line`: open every reply with the native phrasing of your prompt; `weave`: also work your ten weakest words into the answer |
 | `level` | — | `A1`…`C2`: words below this level never become cards |
 | `peek` | `false` | Print one card into the session while you wait for an answer |

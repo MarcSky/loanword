@@ -462,6 +462,28 @@ test('settings written from the browser are sanitised', async () => {
   await post('/settings', { dailyLimit: 15, exercises: ['flashcards', 'learn', 'cloze', 'type', 'reverse'] });
 });
 
+test('an API key is stored on this machine and never sent back to the browser', async () => {
+  const key = `sk-ant-api03-${'a1B2c3D4e5F6g7H8'.repeat(3)}`;
+  const masked = `${key.slice(0, 10)}…${key.slice(-4)}`;
+  const { body } = await post('/settings', { apiKey: key });
+  assert.equal(body.apiKey, masked, 'the answer carries the ends of the key, never the middle');
+
+  const shown = await (await fetch(`${BASE}/settings`)).json();
+  assert.equal(shown.apiKey, masked);
+  assert.equal(JSON.parse(readFileSync(paths.settings, 'utf8')).apiKey, key, 'the whole key stays on disk for the builder');
+
+  const echoed = await post('/settings', { apiKey: masked });
+  assert.equal(JSON.parse(readFileSync(paths.settings, 'utf8')).apiKey, key, 'the mask coming back never overwrites the key');
+  assert.equal(echoed.body.apiKey, masked);
+
+  const junk = await post('/settings', { apiKey: 'hunter2' });
+  assert.equal(junk.body.apiKey, masked, 'and neither does something that is not a key');
+
+  const cleared = await post('/settings', { apiKey: '' });
+  assert.equal(cleared.body.apiKey, '', 'turning the switch off deletes it');
+  assert.equal(JSON.parse(readFileSync(paths.settings, 'utf8')).apiKey, '');
+});
+
 test('the disabled exercises are honoured by the planner', async () => {
   await post('/settings', { exercises: ['flashcards'] });
   const { body } = await post('/session/start', { minutes: 10 });

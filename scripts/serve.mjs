@@ -56,6 +56,7 @@ import {
   paths,
   frequentWords,
   peekFile,
+  publicConfig,
   queueFile,
   readJson,
   readJsonl,
@@ -729,7 +730,7 @@ const server = createServer(async (req, res) => {
       });
     }
 
-    if (req.method === 'GET' && url.pathname === '/settings') return json(res, config());
+    if (req.method === 'GET' && url.pathname === '/settings') return json(res, publicConfig());
 
     if (req.method === 'GET' && url.pathname === '/i18n') {
       const cfg = config();
@@ -761,7 +762,7 @@ const server = createServer(async (req, res) => {
       adoptQueue(saved.target);
       const refiled = payload.categories ? db.refileToFallback(enabledCategories(saved)) : 0;
       if (refiled) log(`categories narrowed, ${refiled} card(s) moved to everyday`);
-      return json(res, { ...saved, refiled });
+      return json(res, { ...publicConfig(saved), refiled });
     }
 
     if (req.method === 'GET' && url.pathname === '/stats') return json(res, stats());

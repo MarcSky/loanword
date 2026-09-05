@@ -25,7 +25,7 @@ const INDIRECT = [
   'True or false', 'Multiple choice', 'Matching', 'Written', 'Term', 'Definition', 'Both',
   'Again', 'Hard', 'Good', 'Easy', 'no idea', 'barely', 'got it', 'instant',
   'Everything', 'Favourites', 'Due now', 'Never seen', 'Learned',
-  'active', 'passive', 'both', 'light', 'dark', 'system',
+  'My messages', 'Claude’s replies', 'light', 'dark', 'system',
   'leave', 'next card', 'pick an answer', 'again', 'hard', 'good', 'easy', 'junk',
   'show the answer', 'check your answer',
   'Analytics', 'Cloze', 'Type it', 'Reverse',

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { MAX_CHARS, MAX_IDS, RANGES, SESSION_LENGTHS, USAGE_WINDOWS, clampInt, intIn, numberField, textIn } from './limits.mjs';
+import { API_KEY, MAX_CHARS, MAX_IDS, RANGES, SESSION_LENGTHS, USAGE_WINDOWS, clampInt, intIn, numberField, textIn } from './limits.mjs';
 import { PLUGIN_ROOT } from './store-paths.mjs';
 
 test('a number inside its range is taken, one outside it is refused', () => {
@@ -48,6 +48,7 @@ test('every free-text control carries the cap the server cuts by', () => {
   assert.match(source('study.js'), /name="sentence"[^>]*maxlength="\$\{MAX_CHARS\.sentence\}"/);
   assert.match(source('practice.js'), /exam-written[^>]*maxlength="\$\{MAX_CHARS\.context\}"/);
   assert.match(source('deck.js'), /id="deck-search"[^>]*maxlength="\$\{MAX_CHARS\.field\}"/);
+  assert.match(source('settings.js'), /id="apikey-input"[^>]*maxlength="\$\{MAX_CHARS\.apiKey\}"/);
 });
 
 test('text is trimmed to its cap, and anything that is not text is empty', () => {
@@ -78,6 +79,10 @@ test('the ranges the interface offers are the ones the plugin manifest promises'
   assert.equal(MAX_CHARS.context, 160, 'a context is the clause, not the record');
   assert.equal(MAX_CHARS.ipa, 80, 'a transcription is one word, not a lesson');
   assert.equal(MAX_CHARS.failure, 160, 'why a build stopped is one line, not a stack trace');
+  assert.equal(MAX_CHARS.apiKey, 200, 'an API key is one line of characters, not a file');
+  assert.ok(API_KEY.test(`sk-ant-api03-${'x'.repeat(40)}`), 'an Anthropic key is what the field takes');
+  assert.ok(!API_KEY.test('sk-ant-'), 'the prefix alone is not a key');
+  assert.ok(!API_KEY.test(`sk-ant-api${'x'.repeat(200)}`), 'and neither is a paragraph');
   assert.deepEqual(USAGE_WINDOWS, { d1: 0, d7: 6, d30: 29 }, 'the spend panel offers 1D, 7D and 30D');
 });
 

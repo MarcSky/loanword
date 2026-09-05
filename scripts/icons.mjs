@@ -130,6 +130,8 @@ export const MAP = {
   star: ['star', 'regular'],
   'star-fill': ['star', 'fill'],
   eye: ['eye', 'regular'],
+  'eye-slash': ['eye-slash', 'regular'],
+  key: ['key', 'regular'],
   'squares-four': ['squares-four', 'regular'],
   'stack-duotone': ['stack', 'duotone'],
 };

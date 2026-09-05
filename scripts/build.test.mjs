@@ -18,6 +18,7 @@ const {
   chunk,
   heldBy,
   jsonArray,
+  objectsIn,
   progressIn,
   locked,
   parseCards,
@@ -135,10 +136,27 @@ test('a reply is read whether or not it arrives in a markdown fence', () => {
   assert.deepEqual(parseCards('[]'), []);
 });
 
+test('a batch is not thrown away because the model dropped one comma', () => {
+  const rows = [
+    { n: 1, front: 'roll back', back: 'откатить' },
+    { n: 2, front: 'ship it', back: 'выкатить' },
+    { n: 3, front: 'push back', back: 'возразить' },
+  ];
+  const dropped = `[${JSON.stringify(rows[0])},${JSON.stringify(rows[1])}\n${JSON.stringify(rows[2])}]`;
+  assert.deepEqual(parseCards(dropped), rows, 'every card the call paid for is kept');
+
+  const cut = `[${JSON.stringify(rows[0])},${JSON.stringify(rows[1])},{"n":3,"front":"push ba`;
+  assert.deepEqual(parseCards(cut), rows.slice(0, 2), 'a reply cut short keeps the cards that arrived whole');
+
+  assert.deepEqual(objectsIn(`{"a":"}{"}{"b":2}`), [{ a: '}{' }, { b: 2 }], 'a brace inside a string is not a card');
+  assert.deepEqual(objectsIn('{"a":{"b":1}}'), [{ a: { b: 1 } }], 'a nested object is one card, not two');
+});
+
 test('an unreadable reply raises rather than committing nonsense', () => {
   assert.throws(() => parseCards('I could not do that.'), /no JSON array/);
   assert.throws(() => parseCards(''), /no JSON array/);
   assert.throws(() => parseCards('[{"front": broken}]'), SyntaxError);
+  assert.throws(() => parseCards('I would write {} for an empty one.'), /no JSON array/, 'prose with a brace in it is still prose');
 });
 
 test('a second build stands down while one is running', () => {
@@ -734,6 +752,25 @@ test('every call carries a ceiling, and the lean flags collapse into --bare wher
   else process.env.ANTHROPIC_API_KEY = key;
   rmSync(paths.tuning, { force: true });
   forgetHelp();
+});
+
+test('a key typed into the settings is what the model call is billed to', async () => {
+  const { apiKeyed, buildEnv, shapeUsable } = await import('./build.mjs');
+  const key = `sk-ant-api03-${'k'.repeat(40)}`;
+  const stored = process.env.ANTHROPIC_API_KEY;
+  delete process.env.ANTHROPIC_API_KEY;
+
+  assert.equal(buildEnv({}, { apiKey: '' }).ANTHROPIC_API_KEY, undefined, 'no key, the subscription answers');
+  assert.equal(buildEnv({}, { apiKey: key }).ANTHROPIC_API_KEY, key, 'the stored key reaches the child process');
+  assert.equal(buildEnv({ PATH: '/bin' }, { apiKey: key }).PATH, '/bin', 'and the rest of the environment survives');
+
+  saveSettings({ native: 'ru', target: 'en', apiKey: key });
+  assert.equal(apiKeyed(), true, 'a stored key is a login like any other');
+  assert.equal(shapeUsable('bare'), true, 'so the cheapest shape of the command line is open again');
+  saveSettings({ apiKey: '' });
+  assert.equal(apiKeyed(), false, 'and turning the switch off gives the subscription back');
+
+  if (stored !== undefined) process.env.ANTHROPIC_API_KEY = stored;
 });
 
 test('a shape that cannot carry the login is never remembered into the next build', async () => {

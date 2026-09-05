@@ -142,6 +142,7 @@ core.app.config = {
   produce: true,
   phonetics: 'auto',
   showIntervals: true,
+  apiKey: '',
   uiLang: '',
   field: '',
 };
@@ -209,6 +210,62 @@ test('a deck with too few answers is told how many are still wanted, not given a
   assert.match(page, /12/, 'the answers so far');
   assert.match(page, /100/, 'and the number that makes an estimate worth showing');
   core.app.ability = { band: 'B2', theta: 0.4, n: 162, min: 100, ceiling: 'B2', confident: true, floor: '' };
+});
+
+test('the settings screen offers the key switch and shows only the ends of a stored key', () => {
+  core.app.route = 'settings';
+  core.app.config.apiKey = '';
+  core.render();
+  let page = document.querySelector('#page-settings').innerHTML;
+  assert.match(page, /data-act="apikey-toggle" aria-checked="false"/);
+  assert.match(page, /subscription/i, 'with no key the row says what writes the cards instead');
+
+  core.app.config.apiKey = 'sk-ant-api…9f2A';
+  core.render();
+  page = document.querySelector('#page-settings').innerHTML;
+  assert.match(page, /data-act="apikey-toggle" aria-checked="true"/);
+  assert.match(page, /sk-ant-api…9f2A/, 'the ends of the key are under the switch');
+  core.app.config.apiKey = '';
+});
+
+test('the key dialog hides what is typed until the eye is clicked', async () => {
+  core.app.config.apiKey = '';
+  await core.ACTIONS['apikey-toggle']();
+  let body = document.querySelector('#apikey-body').innerHTML;
+  assert.match(body, /type="password"/, 'a pasted key is stars until it is asked for');
+  assert.match(body, /data-act="apikey-eye"/);
+
+  core.ACTIONS['apikey-eye']();
+  body = document.querySelector('#apikey-body').innerHTML;
+  assert.match(body, /type="text"/, 'and the eye shows it');
+
+  core.ACTIONS['apikey-close']();
+  assert.equal(document.querySelector('#apikey-body').innerHTML, '', 'closing the dialog takes the key out of the page');
+});
+
+test('the key the learner types never reaches the state the page renders from', async () => {
+  const key = `sk-ant-api03-${'z'.repeat(40)}`;
+  const masked = `${key.slice(0, 10)}…${key.slice(-4)}`;
+  const before = globalThis.fetch;
+  let sent = null;
+  globalThis.fetch = async (path, options) => {
+    sent = JSON.parse(options.body);
+    return { ok: true, json: async () => ({ ...core.app.config, apiKey: masked }) };
+  };
+
+  core.app.route = 'settings';
+  core.app.config.apiKey = '';
+  await core.ACTIONS['apikey-toggle']();
+  document.querySelector('#apikey-input').value = key;
+  await core.ACTIONS['apikey-save']();
+  globalThis.fetch = before;
+
+  assert.equal(sent.apiKey, key, 'the whole key is what the trainer is given');
+  assert.equal(core.app.config.apiKey, masked, 'and only the mask is what comes back');
+  const page = document.querySelector('#page-settings').innerHTML;
+  assert.doesNotMatch(page, /z{8}/, 'the middle of the key is never drawn on the page');
+  assert.match(page, /sk-ant-api…zzzz/, 'the ends of it are');
+  core.app.config.apiKey = '';
 });
 
 test('a card shows the form it was met in and its pronunciation', () => {

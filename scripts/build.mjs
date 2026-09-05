@@ -184,12 +184,56 @@ export function repairPrompt(items, cfg) {
   ].join('\n');
 }
 
+export function objectsIn(text) {
+  const rows = [];
+  let depth = 0;
+  let from = -1;
+  let inString = false;
+  let escaped = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === '\\') escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') inString = true;
+    else if (ch === '{') {
+      if (depth === 0) from = i;
+      depth++;
+    } else if (ch === '}' && depth > 0) {
+      depth--;
+      if (depth > 0) continue;
+      try {
+        const row = JSON.parse(text.slice(from, i + 1));
+        if (Object.keys(row).length) rows.push(row);
+      } catch {}
+    }
+  }
+  return rows;
+}
+
 export function jsonArray(reply) {
   const text = String(reply || '').replace(/^\s*```(?:json)?\s*/i, '').replace(/```\s*$/, '');
   const start = text.indexOf('[');
   const end = text.lastIndexOf(']');
-  if (start < 0 || end <= start) throw new Error(`no JSON array in the reply: ${text.slice(0, 200)}`);
-  const rows = JSON.parse(text.slice(start, end + 1));
+  const array = start >= 0 && end > start ? text.slice(start, end + 1) : '';
+  let rows;
+  let broke;
+  if (array) {
+    try {
+      rows = JSON.parse(array);
+    } catch (error) {
+      broke = error;
+    }
+  }
+  if (rows === undefined) {
+    const salvaged = objectsIn(array || text);
+    if (!salvaged.length) throw broke || new Error(`no JSON array in the reply: ${text.slice(0, 200)}`);
+    log(`build salvaged ${salvaged.length} card(s) the model left in a malformed reply`);
+    return salvaged;
+  }
   if (!Array.isArray(rows)) throw new Error('the reply parsed to something other than an array');
   return rows;
 }
@@ -317,7 +361,7 @@ export function costOf(out) {
 function run(args, prompt, onText) {
   return new Promise((resolve, reject) => {
     const child = spawn('claude', args, {
-      env: { ...process.env, LOANWORD_BUILDING: '1' },
+      env: { ...buildEnv(), LOANWORD_BUILDING: '1' },
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     let out = '';
@@ -355,14 +399,18 @@ function run(args, prompt, onText) {
   });
 }
 
-export const apiKeyed = (env = process.env) => !!(env.ANTHROPIC_API_KEY || env.ANTHROPIC_AUTH_TOKEN);
+export const buildEnv = (env = process.env, cfg = config()) =>
+  cfg.apiKey ? { ...env, ANTHROPIC_API_KEY: cfg.apiKey } : env;
 
-export const shapeUsable = (shape, env = process.env) => shape !== 'bare' || apiKeyed(env);
+export const apiKeyed = (env = buildEnv()) => !!(env.ANTHROPIC_API_KEY || env.ANTHROPIC_AUTH_TOKEN);
+
+export const shapeUsable = (shape, env = buildEnv()) => shape !== 'bare' || apiKeyed(env);
 
 export const firstShape = () => {
+  const env = buildEnv();
   const remembered = readTuning().shape;
-  if (remembered && shapeUsable(remembered)) return remembered;
-  return apiKeyed() && supportsFlag('--bare') ? 'bare' : 'lean';
+  if (remembered && shapeUsable(remembered, env)) return remembered;
+  return apiKeyed(env) && supportsFlag('--bare') ? 'bare' : 'lean';
 };
 
 export const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

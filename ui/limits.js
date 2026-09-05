@@ -19,7 +19,10 @@ export const MAX_CHARS = {
   context: 160,
   ipa: 80,
   failure: 160,
+  apiKey: 200,
 };
+
+export const API_KEY = /^sk-ant-[A-Za-z0-9_-]{16,180}$/;
 
 export const MAX_IDS = 200;
 

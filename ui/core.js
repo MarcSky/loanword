@@ -590,7 +590,7 @@ function renderTopbar() {
         : ''
     }
     <details class="switcher lang-switcher" id="ui-switcher">
-      <summary aria-label="${esc(t('Interface language'))}">
+      <summary aria-label="${esc(t('App language'))}">
         <span class="flag">${flagOf(uiLang)}</span>
         <span class="lang">${esc(languageName(uiLang))}</span>
         ${icon('caret-down', 'icon-sm icon')}

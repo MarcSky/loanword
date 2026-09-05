@@ -269,7 +269,7 @@ test('export renders importable CSV', () => {
   assert.equal(written.split('\n').filter(Boolean).length, 2, 'header + one surviving card');
 });
 
-test('a full queue asks for a build when the session ends', () => {
+test('a full queue asks for a build when the session ends, but only if the learner asked for that', () => {
   writeFileSync(join(DATA, 'queue.en.jsonl'), '');
   writeFileSync(join(DATA, 'log.txt'), '');
   for (let i = 0; i < AUTO_BUILD_THRESHOLD; i++) {
@@ -280,6 +280,9 @@ test('a full queue asks for a build when the session ends', () => {
   assert.doesNotMatch(log(), /build requested/, 'a prompt on its own never starts one');
 
   capture('session', { transcript_path: join(DATA, 'nothing.jsonl') });
+  assert.doesNotMatch(log(), /build requested/, 'and the switch is off until the learner turns it on');
+
+  capture('session', { transcript_path: join(DATA, 'nothing.jsonl') }, { CLAUDE_PLUGIN_OPTION_AUTO_BUILD: 'true' });
   assert.match(log(), /build requested for 10 record\(s\)/);
 });
 

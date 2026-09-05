@@ -33,7 +33,7 @@ import {
   toast,
 } from './core.js';
 import { captureSwitches, deckChips, watchBuild } from './overview.js';
-import { RANGES, USAGE_WINDOWS } from './limits.js';
+import { API_KEY, MAX_CHARS, RANGES, USAGE_WINDOWS } from './limits.js';
 
 const THEMES = [
   { value: 'light', icon: 'sun' },
@@ -64,29 +64,30 @@ const EXERCISES = [
 
 const HELP = {
   decks: () => [t('Language profiles'), t('Each pair is its own deck, with its own cards and its own schedule. Opening another one never touches the first. The switch says whether today’s prompts are captured into that language; every language left on fills its own queue, and they never wait on each other.')],
-  ui: () => [t('Interface language'), t('Separate from what you are learning. Changing your target language never changes this.')],
+  ui: () => [t('App language'), t('Separate from what you are learning. Changing your target language never changes this.')],
   clone: () => [t('Copying a deck'), t('The concepts travel: your own phrasing, the domain, the level, the star. The new side is written fresh and starts from zero — no schedule is ever copied, and the deck you copy from is not touched.')],
   topics: () => [t('Categories'), t('Every card is filed under one category, and the ones you pick here are the only ones the builder may use. Pick a field to set them all at once, or choose by hand. Three are always on: set phrases, connectors and everyday words. Drop a category and the cards it held move to Everyday — file them again to place them properly. Filing again also gives every card a topic — code review, airport, standup — which the Deck shows as chapters.')],
-  capture: () => [t('Capture into'), t('Which languages today’s prompts are turned into cards for. The queue and the build are per language, so two decks that teach the same language fill from the same capture — turning it off stops both.')],
-  mode: () => [t('What gets captured'), t('<b>Active</b> takes your own prompts and shows how a native speaker would have put it. <b>Passive</b> takes unfamiliar words out of the assistant’s replies. <b>Both</b> does each.')],
-  level: () => [t('Floor level'), t('Words below this CEFR level never become cards. Leave it open if you want everything.')],
-  phonetics: () => [t('Phonetics'), t('A card carries the pronunciation of its word in IPA. eSpeak NG writes it on this machine for nothing when it is installed; otherwise the builder writes it, at a few tokens a card.')],
-  model: () => [t('Which model writes your cards'), t('Every card is written by a Claude you already have: the trainer runs <code>claude -p</code> on this machine as a bare completion, so nothing is sent anywhere else and no API key is needed. <b>Sonnet</b> is the default: it follows the lexis rules and judges level. <b>Haiku</b> is cheaper and enough for a language close to yours, but it is the model that wrote definitions where translations were asked for. <b>Opus</b> for the stubborn cases. Every call is logged with its tokens and cost below.')],
+  capture: () => [t('Collect words for'), t('Which languages today’s prompts are turned into cards for. The queue and the build are per language, so two decks that teach the same language fill from the same capture — turning it off stops both.')],
+  mode: () => [t('Where words come from'), t('<b>My messages</b> takes the prompts you write and shows how a native speaker would have put them. <b>Claude’s replies</b> takes the unfamiliar words out of the answers you get. <b>Both</b> does each.')],
+  level: () => [t('Skip words below this level'), t('Words below this CEFR level never become cards. Leave it open if you want everything.')],
+  phonetics: () => [t('Pronunciation (IPA)'), t('A card carries the pronunciation of its word in IPA. eSpeak NG writes it on this machine for nothing when it is installed; otherwise the builder writes it, at a few tokens a card.')],
+  model: () => [t('AI model'), t('Every card is written by a Claude you already have: the trainer runs <code>claude -p</code> on this machine as a bare completion, so nothing is sent anywhere else. <b>Sonnet</b> is the default: it follows the lexis rules and judges level. <b>Haiku</b> is cheaper and enough for a language close to yours, but it is the model that wrote definitions where translations were asked for. <b>Opus</b> for the stubborn cases. Every call is logged with its tokens and cost below.')],
+  apiKey: () => [t('Use my API key'), t('With the switch off, the cards are written by the Claude subscription you are already signed into. Paste an Anthropic key and every call is billed to that key instead. The key is kept on this machine, in the settings file beside your deck, and only its first and last characters are ever shown. Turning the switch off deletes it.')],
   usage: () => [t('Spent on cards'), t('Every model call the trainer makes is logged with its tokens, from the result Claude Code reports. The builder runs as a bare completion — no tools, no project context — so a batch of twenty records costs the records and the brief, nothing else. Changing the model only changes the calls from now on; the line per model shows what each one has used.')],
-  autoBuild: () => [t('Building at session end'), t('When a work session leaves ten or more captured records behind, the cards are built in the background.')],
-  echo: () => [t('Echo'), t('<b>One line</b> opens every reply with the phrasing a native speaker would have used. <b>Weave</b> also asks Claude to work your ten weakest words into the answer. Both spend a line of every response.')],
+  autoBuild: () => [t('Make cards automatically'), t('When a work session leaves ten or more captured records behind, the cards are built in the background.')],
+  echo: () => [t('Correct my phrasing in chat'), t('<b>One line</b> opens every reply with the phrasing a native speaker would have used. <b>Weave</b> also asks Claude to work your ten weakest words into the answer. Both spend a line of every response.')],
   dailyLimit: () => [t('New cards per day'), t('A cap on unseen cards only. Reviews that are due are never held back — those are the ones that decay.')],
-  weeklyGoal: () => [t('Days a week'), t('The streak asks for a rhythm, not a run. Miss a Tuesday and nothing resets — the week is still there to be met.')],
-  intervals: () => [t('Next interval'), t('“Good · 4 d” instead of “got it”. Seeing the consequence makes the choice honest.')],
-  peek: () => [t('A card while Claude works'), t('Every prompt starts a wait. Loanword prints one card into the session while it lasts. Nothing is graded; it is a glance, not a test.')],
-  ticker: () => [t('Words in the Claude Code status line'), t('The status line is the line Claude Code prints under your prompt. <code>/loanword:ticker</code> puts one word of the open deck there, the weakest first, and this is how long a word stays before the next one takes its place. Claude Code redraws that line on its own clock, so a number below its refresh interval changes nothing.')],
+  weeklyGoal: () => [t('Study days per week'), t('The streak asks for a rhythm, not a run. Miss a Tuesday and nothing resets — the week is still there to be met.')],
+  intervals: () => [t('Show when a card comes back'), t('“Good · 4 d” instead of “got it”. Seeing the consequence makes the choice honest.')],
+  peek: () => [t('Show a card while Claude works'), t('Every prompt starts a wait. Loanword prints one card into the session while it lasts. Nothing is graded; it is a glance, not a test.')],
+  ticker: () => [t('Word in the status line'), t('The status line is the line Claude Code prints under your prompt. <code>/loanword:ticker</code> puts one word of the open deck there, the weakest first, and this is how long a word stays before the next one takes its place. Claude Code redraws that line on its own clock, so a number below its refresh interval changes nothing.')],
   picks: () => [t('Which words to show'), t('Pick any mix. The states are combined — starred <b>or</b> slipping — and the levels narrow whatever that leaves. Choose nothing and every card is fair game.')],
-  speech: () => [t('Speech'), t('Offline voices only: your browser’s local ones first, then Piper, <code>say</code> or eSpeak NG on this machine. Nothing is ever sent anywhere.')],
-  produce: () => [t('One sentence of your own'), t('The summary asks for a sentence using two of today’s words and answers with one line. The sentence itself is never stored.')],
-  exercises: () => [t('Exercises'), t('Which questions the planner may ask. It picks by how well a card is known — recognition while it is new, production once it holds.')],
-  studyMode: () => [t('Default mode'), t('<b>Flashcards</b> asks you to recall and grade yourself. <b>Learn</b> offers four candidates and grades the click for you.')],
+  speech: () => [t('Read words aloud'), t('Offline voices only: your browser’s local ones first, then Piper, <code>say</code> or eSpeak NG on this machine. Nothing is ever sent anywhere.')],
+  produce: () => [t('Ask me to write a sentence'), t('The summary asks for a sentence using two of today’s words and answers with one line. The sentence itself is never stored.')],
+  exercises: () => [t('Question types'), t('Which questions the planner may ask. It picks by how well a card is known — recognition while it is new, production once it holds.')],
+  studyMode: () => [t('Default study mode'), t('<b>Flashcards</b> asks you to recall and grade yourself. <b>Learn</b> offers four candidates and grades the click for you.')],
   export: () => [t('Export to Anki'), t('Anki → File → Import, field separator “;”, fields front, back, reading, example, tags.')],
-  data: () => [t('Where your deck lives'), t('One SQLite file, <code>loanword.db</code>, in the plugin data directory, with <code>settings.json</code> and the capture queues beside it. Copy it while the trainer is closed and you have a backup.')],
+  data: () => [t('Where your cards are stored'), t('One SQLite file, <code>loanword.db</code>, in the plugin data directory, with <code>settings.json</code> and the capture queues beside it. Copy it while the trainer is closed and you have a backup.')],
   privacy: () => [t('Privacy'), t('Secrets are scrubbed before anything is written, code and tool output are never captured, and the trainer binds <code>127.0.0.1</code> only. No accounts, no telemetry.')],
 };
 
@@ -329,6 +330,51 @@ function renderDrop() {
     </div>`;
 }
 
+async function saveKey(key) {
+  app.config = await api('/settings', { apiKey: key });
+}
+
+function forgetKey() {
+  app.keyForm = null;
+  const box = $('#apikey-body');
+  if (box) box.innerHTML = '';
+}
+
+function closeKey() {
+  forgetKey();
+  $('#apikey').close();
+}
+
+function renderKey() {
+  const asked = app.keyForm;
+  const box = $('#apikey-body');
+  if (!asked || !box) return;
+
+  box.innerHTML = `
+    ${dialogHead(t('Anthropic API key'), 'apikey-close')}
+    <p class="lede" style="font-size:.9375rem">${esc(HELP.apiKey()[1])}</p>
+    <label class="field" style="margin-top:16px">
+      <span class="field-label">${esc(t('Paste your key'))}</span>
+      <div class="key-row">
+        <input class="input" id="apikey-input" type="${asked.shown ? 'text' : 'password'}"
+          value="${esc(asked.key)}" placeholder="sk-ant-…" autocomplete="off" spellcheck="false"
+          maxlength="${MAX_CHARS.apiKey}">
+        <button class="btn btn-quiet" data-act="apikey-eye" aria-pressed="${asked.shown}"
+          aria-label="${esc(asked.shown ? t('Hide the key') : t('Show the key'))}">
+          ${icon(asked.shown ? 'eye-slash' : 'eye', 'icon-sm icon')}
+        </button>
+      </div>
+    </label>
+    ${asked.bad ? `<p class="field-hint" role="alert">${esc(t('An Anthropic key starts with sk-ant-'))}</p>` : ''}
+    <div class="sync-foot">
+      <button class="btn" data-act="apikey-close">${esc(t('Cancel'))}</button>
+      <button class="btn btn-primary" data-act="apikey-save" ${asked.busy ? 'disabled' : ''}>
+        ${icon('key', 'icon-sm icon')} ${esc(t('Save'))}
+      </button>
+    </div>`;
+  $('#apikey-input')?.focus();
+}
+
 function renderSync() {
   const state = app.sync;
   const box = $('#sync-body');
@@ -383,7 +429,7 @@ function renderSettings() {
       </button>
 
       <div class="decks-head">
-        <span>${esc(t('Capture into'))}</span>
+        <span>${esc(t('Collect words for'))}</span>
         ${helpDot('capture')}
       </div>
       <p class="field-hint" style="margin:-4px 0 10px">${esc(
@@ -399,7 +445,7 @@ function renderSettings() {
           : ''
       }
 
-      ${setting(t('Interface language'), `<select class="select" data-setting="uiLang">
+      ${setting(t('App language'), `<select class="select" data-setting="uiLang">
           ${['en', ...(app.uiLanguages || [])]
             .filter((code, index, all) => all.indexOf(code) === index)
             .map(
@@ -434,12 +480,12 @@ function renderSettings() {
 
       </section><section class="panel settings-group"><h2 class="title">${esc(t('Capture'))}</h2>
       ${setting(
-        t('What gets captured'),
-        choices('mode', [['active', 'active'], ['passive', 'passive'], ['both', 'both']], cfg.mode),
+        t('Where words come from'),
+        choices('mode', [['active', 'My messages'], ['passive', 'Claude’s replies'], ['both', 'Both']], cfg.mode),
         { help: 'mode' },
       )}
       ${setting(
-        t('Floor level'),
+        t('Skip words below this level'),
         `<select class="select" data-setting="level">
           <option value="" ${!cfg.level ? 'selected' : ''}>${esc(t('No floor'))}</option>
           ${LEVELS.map(
@@ -450,21 +496,29 @@ function renderSettings() {
         { help: 'level', hint: abilityHint() },
       )}
       ${setting(
-        t('Phonetics'),
+        t('Pronunciation (IPA)'),
         choices('phonetics', [['auto', 'Automatic'], ['off', 'Off']], cfg.phonetics || 'auto'),
         { help: 'phonetics' },
       )}
       ${setting(
-        t('Build at session end'),
+        t('Make cards automatically'),
         `<button class="switch" role="switch" data-setting="autoBuild" aria-checked="${!!cfg.autoBuild}"
-          aria-label="${esc(t('Build at session end'))}"></button>`,
+          aria-label="${esc(t('Make cards automatically'))}"></button>`,
         { help: 'autoBuild' },
       )}
-      ${setting(t('Which model writes your cards'), choices('model', MODELS, cfg.model || 'sonnet'), { help: 'model' })}
       ${setting(
-        t('Echo the native phrasing'),
+        t('Correct my phrasing in chat'),
         choices('echo', [['off', 'Off'], ['line', 'One line'], ['weave', 'Weave my weakest words in']], cfg.echo || 'off'),
         { help: 'echo' },
+      )}
+
+      </section><section class="panel settings-group"><h2 class="title">${esc(t('Model'))}</h2>
+      ${setting(t('AI model'), choices('model', MODELS, cfg.model || 'sonnet'), { help: 'model' })}
+      ${setting(
+        t('Use my API key'),
+        `<button class="switch" role="switch" data-act="apikey-toggle" aria-checked="${!!cfg.apiKey}"
+          aria-label="${esc(t('Use my API key'))}"></button>`,
+        { help: 'apiKey', hint: cfg.apiKey || t('No key — your Claude subscription writes the cards') },
       )}
 
       </section><section class="panel settings-group"><div class="usage-head">
@@ -490,8 +544,8 @@ function renderSettings() {
         </div>`,
       )}
       ${setting(
-        t('Days a week'),
-        `<div class="segmented" role="group" aria-label="${esc(t('Days a week'))}">
+        t('Study days per week'),
+        `<div class="segmented" role="group" aria-label="${esc(t('Study days per week'))}">
           ${[1, 2, 3, 4, 5, 6, 7]
             .map(
               (days) => `<button data-act="set-goal" data-value="${days}"
@@ -502,14 +556,14 @@ function renderSettings() {
         { help: 'weeklyGoal' },
       )}
       ${setting(
-        t('Show the next interval'),
+        t('Show when a card comes back'),
         `<button class="switch" role="switch" data-setting="showIntervals" aria-checked="${cfg.showIntervals !== false}"
-          aria-label="${esc(t('Show the next interval'))}"></button>`,
+          aria-label="${esc(t('Show when a card comes back'))}"></button>`,
         { help: 'intervals' },
       )}
       ${setting(
-        t('Exercises'),
-        `<div class="filters" role="group" aria-label="${esc(t('Exercises'))}">
+        t('Question types'),
+        `<div class="filters" role="group" aria-label="${esc(t('Question types'))}">
           ${EXERCISES.map(
             ([key, label, blurb]) => `<button class="chip chip-sm" data-act="toggle-exercise" data-value="${key}"
               aria-pressed="${enabled.includes(key)}" title="${esc(t(blurb))}">${esc(t(label))}</button>`,
@@ -518,7 +572,7 @@ function renderSettings() {
         { help: 'exercises' },
       )}
       ${setting(
-        t('Default mode'),
+        t('Default study mode'),
         `<div class="segmented" role="group" aria-label="${esc(t('Default study mode'))}">
           ${['flashcards', 'learn']
             .map(
@@ -530,21 +584,21 @@ function renderSettings() {
         { help: 'studyMode' },
       )}
       ${setting(
-        t('Say it out loud'),
+        t('Read words aloud'),
         choices('speech', [['off', 'Off'], ['reveal', 'On reveal'], ['ask', 'Also at the start of Type it']], cfg.speech || 'reveal'),
         { help: 'speech' },
       )}
       ${setting(
-        t('One sentence of your own'),
+        t('Ask me to write a sentence'),
         `<button class="switch" role="switch" data-setting="produce" aria-checked="${cfg.produce !== false}"
-          aria-label="${esc(t('One sentence of your own'))}"></button>`,
+          aria-label="${esc(t('Ask me to write a sentence'))}"></button>`,
         { help: 'produce' },
       )}
       ${setting(
-        t('A card while Claude works'),
+        t('Show a card while Claude works'),
         `<div class="control-pair">
           <button class="switch" role="switch" data-setting="peek" aria-checked="${cfg.peek === 'on'}"
-            aria-label="${esc(t('A card while Claude works'))}"></button>
+            aria-label="${esc(t('Show a card while Claude works'))}"></button>
           <label class="every">
             <input class="input" type="number" min="${RANGES.peekEvery.min}" max="${RANGES.peekEvery.max}" step="1"
               value="${cfg.peekEvery ?? RANGES.peekEvery.fallback}"
@@ -555,12 +609,12 @@ function renderSettings() {
         { help: 'peek' },
       )}
       ${setting(
-        t('Words in the Claude Code status line'),
+        t('Word in the status line'),
         `<div class="control-pair">
           <label class="every">
             <input class="input" type="number" min="${RANGES.tickerEvery.min}" max="${RANGES.tickerEvery.max}" step="1"
               value="${cfg.tickerEvery ?? RANGES.tickerEvery.fallback}"
-              data-setting="tickerEvery" aria-label="${esc(t('Words in the Claude Code status line'))}">
+              data-setting="tickerEvery" aria-label="${esc(t('Word in the status line'))}">
             <span>${esc(t('sec'))}</span>
           </label>
         </div>`,
@@ -613,7 +667,7 @@ function renderSettings() {
         { help: 'export' },
       )}
       ${setting(
-        t('Where your deck lives'),
+        t('Where your cards are stored'),
         `<code class="path">loanword.db</code>`,
         { help: 'data' },
       )}
@@ -690,6 +744,7 @@ Object.assign(ACTIONS, {
 modal('sync', () => {
   app.sync = null;
 });
+modal('apikey', forgetKey);
 modal('drop', () => {
   app.dropping = null;
 });
@@ -813,6 +868,47 @@ Object.assign(ACTIONS, {
       asked.busy = false;
       renderDrop();
       toast(error.message || t('Could not delete that deck'), 'error');
+    }
+  },
+  'apikey-toggle': async () => {
+    if (!app.config.apiKey) {
+      app.keyForm = { key: '', shown: false, bad: false, busy: false };
+      $('#apikey').showModal();
+      return renderKey();
+    }
+    try {
+      await saveKey('');
+      toast(t('Your Claude subscription writes the cards again'));
+    } catch (error) {
+      toast(error.message || t('Could not save'), 'error');
+    }
+    render();
+  },
+  'apikey-close': closeKey,
+  'apikey-eye': () => {
+    const asked = app.keyForm;
+    if (!asked) return;
+    asked.key = $('#apikey-input')?.value ?? asked.key;
+    asked.shown = !asked.shown;
+    renderKey();
+  },
+  'apikey-save': async () => {
+    const asked = app.keyForm;
+    if (!asked || asked.busy) return;
+    asked.key = ($('#apikey-input')?.value ?? '').trim();
+    asked.bad = !API_KEY.test(asked.key);
+    if (asked.bad) return renderKey();
+    asked.busy = true;
+    renderKey();
+    try {
+      await saveKey(asked.key);
+      closeKey();
+      toast(t('Your key writes the cards from now on'));
+      render();
+    } catch (error) {
+      asked.busy = false;
+      renderKey();
+      toast(error.message || t('Could not save'), 'error');
     }
   },
   'sync-open': async () => {

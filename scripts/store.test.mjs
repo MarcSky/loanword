@@ -30,6 +30,7 @@ const {
   sanitizeSettings,
   seedSettings,
   saveSettings,
+  mirrorPluginConfig,
   fileSize,
   frequentWords,
   isLearned,
@@ -46,8 +47,10 @@ const {
   PEEK_ROWS,
   FRONTS_ROWS,
   CODES,
+  maskKey,
   masteryOf,
   paths,
+  publicConfig,
   decksOnDisk,
   facing,
   SamePairError,
@@ -95,7 +98,7 @@ test('config falls back to sane defaults', () => {
   assert.equal(cfg.target, 'en');
   assert.equal(cfg.mode, 'both');
   assert.equal(cfg.dailyLimit, 15);
-  assert.equal(cfg.autoBuild, true);
+  assert.equal(cfg.autoBuild, false, 'nothing is built behind the learner until they ask for it');
   assert.equal(cfg.model, 'sonnet', 'the model that follows the lexis rules writes the cards');
 });
 
@@ -367,6 +370,24 @@ test('sanitizeSettings refuses malformed values rather than storing them', () =>
   });
   assert.deepEqual(clean, {});
   assert.equal({}.polluted, undefined);
+});
+
+test('an API key is kept whole on disk and shown only by its ends', () => {
+  const key = `sk-ant-api03-${'x'.repeat(40)}`;
+  assert.deepEqual(sanitizeSettings({ apiKey: key }), { apiKey: key });
+  assert.deepEqual(sanitizeSettings({ apiKey: `  ${key}  ` }), { apiKey: key }, 'a pasted key brings whitespace with it');
+  assert.deepEqual(sanitizeSettings({ apiKey: 'hunter2' }), {}, 'something that is not a key is refused, never stored');
+  assert.deepEqual(sanitizeSettings({ apiKey: maskKey(key) }), {}, 'and the mask can never be saved back over the key');
+  assert.deepEqual(sanitizeSettings({ apiKey: '' }), { apiKey: '' }, 'the empty string is how the switch is turned off');
+
+  assert.equal(maskKey(key), `sk-ant-api…${key.slice(-4)}`);
+  assert.equal(maskKey(''), '', 'no key, nothing to show');
+
+  saveSettings({ apiKey: key });
+  assert.equal(config().apiKey, key, 'the builder reads the whole key');
+  assert.equal(publicConfig().apiKey, maskKey(key), 'the browser is only ever told the ends of it');
+  saveSettings({ apiKey: '' });
+  assert.equal(publicConfig().apiKey, '');
 });
 
 test('sanitizeSettings survives a body that is not an object', () => {
@@ -1363,4 +1384,46 @@ test('an English word card is levelled by the shipped list, a phrase by the buil
   const byFront = new Map(out.cards.map((card) => [card.front, card]));
   assert.equal(byFront.get('duplicate').cefr, 'B2', 'the graded list outranks the guess');
   assert.equal(byFront.get('roll back a build').cefr, 'A1', 'a phrase is not in the list and keeps its label');
+});
+
+test('the trainer writes its settings back into the plugin install dialog', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'loanword-cc-'));
+  const file = join(dir, 'settings.json');
+  writeFileSync(
+    file,
+    JSON.stringify({
+      enabledPlugins: { 'loanword@shop': true },
+      pluginConfigs: { 'loanword@shop': { options: { native_lang: 'ru', target_lang: 'en' } } },
+    }),
+  );
+
+  const cfg = { ...config(), native: 'en', target: 'es', dailyLimit: 30, echo: 'line', peek: 'on', peekPick: ['starred', 'B1'] };
+
+  const data = process.env.CLAUDE_PLUGIN_DATA;
+  assert.equal(mirrorPluginConfig(cfg, file), null, 'an overridden data directory is not the deck the dialog installed');
+
+  delete process.env.CLAUDE_PLUGIN_DATA;
+  assert.equal(mirrorPluginConfig(cfg, file), 'loanword@shop');
+  const written = JSON.parse(readFileSync(file, 'utf8'));
+  assert.deepEqual(written.pluginConfigs['loanword@shop'].options, {
+    native_lang: 'en',
+    target_lang: 'es',
+    mode: cfg.mode,
+    daily_limit: 30,
+    auto_build: cfg.autoBuild,
+    echo: 'line',
+    level: cfg.level,
+    peek: true,
+    peek_pick: 'starred,B1',
+    peek_every: cfg.peekEvery,
+    ticker_every: cfg.tickerEvery,
+  });
+  assert.deepEqual(written.enabledPlugins, { 'loanword@shop': true }, 'nothing else in the file moves');
+  assert.equal(mirrorPluginConfig(cfg, file), null, 'an unchanged dialog is not rewritten');
+
+  writeFileSync(file, JSON.stringify({ enabledPlugins: { 'ponytail@ponytail': true } }));
+  assert.equal(mirrorPluginConfig(cfg, file), null, 'a settings file without the plugin is left alone');
+
+  process.env.CLAUDE_PLUGIN_DATA = data;
+  rmSync(dir, { recursive: true, force: true });
 });

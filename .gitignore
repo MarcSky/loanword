@@ -223,3 +223,6 @@ loanword.db-shm
 # derived from images/branding by docs/design/brand/render.sh
 images/logo-mark-*.png
 images/avatar-*.png
+
+# the raw screen recording; images/demo.mp4 is the committed one
+images/video.mov

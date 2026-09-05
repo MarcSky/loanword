@@ -42,7 +42,7 @@
     },
     "mode": {
       "type": "string",
-      "title": "Capture mode",
+      "title": "Where words come from",
       "description": "active — your prompts only (how to say what you meant); passive — assistant replies only (new words from context); both — either",
       "default": "both"
     },
@@ -56,19 +56,19 @@
     },
     "auto_build": {
       "type": "boolean",
-      "title": "Auto-build on session end",
+      "title": "Make cards automatically",
       "description": "Offer to build cards at the end of a session once the queue holds 10 or more records",
-      "default": true
+      "default": false
     },
     "echo": {
       "type": "string",
-      "title": "Echo the native phrasing",
+      "title": "Correct my phrasing in chat",
       "description": "off — nothing; line — Claude opens every reply with the one line a native speaker would have used for your prompt; weave — the same, plus your ten weakest words worked into the answer. Costs a line of every response",
       "default": "off"
     },
     "level": {
       "type": "string",
-      "title": "Your level (optional)",
+      "title": "Skip words below this level",
       "description": "A2/B1/B2/C1 — words below this level never become cards. Empty means no level filter",
       "default": ""
     },

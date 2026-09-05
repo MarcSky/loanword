@@ -13,7 +13,7 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { scriptLetters, trimToSentence } from './lang.mjs';
 import { anchorLevel, broken, keepContext, keepForm, keepIpa, keywordsIn, reasonsOf, vet } from './lexis.mjs';
-import { MAX_CHARS, RANGES, SESSION_LENGTHS, USAGE_WINDOWS, clampInt, intIn, textIn } from './limits.mjs';
+import { API_KEY, MAX_CHARS, RANGES, SESSION_LENGTHS, USAGE_WINDOWS, clampInt, intIn, textIn } from './limits.mjs';
 import { parsePick } from './peek.mjs';
 import { CODES, isPickable, scriptOf } from './languages.mjs';
 import { stemKey } from './stem.mjs';
@@ -215,7 +215,7 @@ function envConfig(env = process.env) {
       ? env.CLAUDE_PLUGIN_OPTION_MODE.toLowerCase()
       : 'both',
     dailyLimit: (limit > 0 && clampInt(limit, RANGES.dailyLimit)) || RANGES.dailyLimit.fallback,
-    autoBuild: env.CLAUDE_PLUGIN_OPTION_AUTO_BUILD !== 'false',
+    autoBuild: env.CLAUDE_PLUGIN_OPTION_AUTO_BUILD === 'true',
     echo: echoMode(env.CLAUDE_PLUGIN_OPTION_ECHO === 'true' || env.CLAUDE_PLUGIN_OPTION_ECHO) ?? 'off',
     level: CEFR_LEVELS.includes(level) ? level : '',
     theme: 'system',
@@ -236,9 +236,16 @@ function envConfig(env = process.env) {
     tickerEvery: clampInt(env.CLAUDE_PLUGIN_OPTION_TICKER_EVERY, RANGES.tickerEvery) ?? RANGES.tickerEvery.fallback,
     produce: true,
     phonetics: 'auto',
+    apiKey: '',
     exercises: ['flashcards', 'learn', 'cloze', 'type', 'reverse'],
   };
 }
+
+const apiKeyIn = (value) => {
+  if (typeof value !== 'string') return undefined;
+  const key = textIn(value, MAX_CHARS.apiKey);
+  return key === '' || API_KEY.test(key) ? key : undefined;
+};
 
 const stringList = (value, allowed) => {
   if (!Array.isArray(value)) return undefined;
@@ -291,7 +298,13 @@ const SETTING_RULES = {
   produce: (v) => (typeof v === 'boolean' ? v : undefined),
   phonetics: (v) => (PHONETICS.includes(v) ? v : undefined),
   exercises: (v) => stringList(v, EXERCISES),
+  apiKey: apiKeyIn,
 };
+
+export const maskKey = (key) =>
+  typeof key === 'string' && API_KEY.test(key) ? `${key.slice(0, 10)}…${key.slice(-4)}` : '';
+
+export const publicConfig = (cfg = config()) => ({ ...cfg, apiKey: maskKey(cfg.apiKey) });
 
 export function sanitizeSettings(input) {
   const clean = {};
@@ -352,6 +365,43 @@ export function seedSettings(env = process.env) {
   return Object.keys(changed);
 }
 
+const claudeSettings = () => join(process.env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude'), 'settings.json');
+
+const DIALOG_OPTIONS = {
+  native_lang: (cfg) => cfg.native,
+  target_lang: (cfg) => cfg.target,
+  mode: (cfg) => cfg.mode,
+  daily_limit: (cfg) => cfg.dailyLimit,
+  auto_build: (cfg) => cfg.autoBuild,
+  echo: (cfg) => cfg.echo,
+  level: (cfg) => cfg.level,
+  peek: (cfg) => cfg.peek === 'on',
+  peek_pick: (cfg) => (cfg.peekPick || []).join(','),
+  peek_every: (cfg) => cfg.peekEvery,
+  ticker_every: (cfg) => cfg.tickerEvery,
+};
+
+export function mirrorPluginConfig(cfg, file = claudeSettings()) {
+  if (process.env.CLAUDE_PLUGIN_DATA) return null;
+  const settings = readJson(file, null);
+  if (!settings || typeof settings !== 'object' || Array.isArray(settings)) return null;
+
+  const key = Object.keys({ ...settings.enabledPlugins, ...settings.pluginConfigs }).find((name) =>
+    name.startsWith('loanword@'),
+  );
+  if (!key) return null;
+
+  const entry = settings.pluginConfigs?.[key] || {};
+  const options = Object.fromEntries(Object.entries(DIALOG_OPTIONS).map(([name, read]) => [name, read(cfg)]));
+  if (JSON.stringify(entry.options) === JSON.stringify(options)) return null;
+
+  const next = { ...settings, pluginConfigs: { ...settings.pluginConfigs, [key]: { ...entry, options } } };
+  const temp = `${file}.${process.pid}.tmp`;
+  writeFileSync(temp, `${JSON.stringify(next, null, 2)}\n`, { mode: statSync(file).mode & 0o777 });
+  renameSync(temp, file);
+  return key;
+}
+
 export class SamePairError extends Error {}
 
 export function saveSettings(patch) {
@@ -380,7 +430,11 @@ export function saveSettings(patch) {
   }
 
   writeJson(paths.settings, merged);
-  return config();
+  const saved = config();
+  try {
+    mirrorPluginConfig(saved);
+  } catch {}
+  return saved;
 }
 
 export function fileSize(file) {
@@ -441,7 +495,7 @@ export function writeJson(file, value) {
   ensureData();
   mkdirSync(dirname(file), { recursive: true });
   const temp = `${file}.${process.pid}.tmp`;
-  writeFileSync(temp, JSON.stringify(value));
+  writeFileSync(temp, JSON.stringify(value), { mode: 0o600 });
   renameSync(temp, file);
 }
 

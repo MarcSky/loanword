@@ -3498,7 +3498,8 @@ svg .hit:focus-visible {
   font-size: 0.85em;
 }
 
-.control-pair {
+.control-pair,
+.key-row {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -3514,6 +3515,21 @@ svg .hit:focus-visible {
 
 .control-pair .every .input {
   width: 68px;
+}
+
+.key-row .input {
+  flex: 1;
+  min-width: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.key-row .btn {
+  flex: none;
+  padding: 0 14px;
+}
+
+.field-hint[role='alert'] {
+  color: var(--danger);
 }
 
 .path {

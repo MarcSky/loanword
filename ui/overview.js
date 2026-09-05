@@ -257,7 +257,7 @@ export function captureSwitches() {
         <span class="capture-lang">${esc(languageName(code))}</span>
         <button class="switch" role="switch" data-act="toggle-capture" data-value="${code}"
           aria-checked="${capturing.has(code)}"
-          aria-label="${esc(t('Capture into {lang}', { lang: languageName(code) }))}"></button>
+          aria-label="${esc(t('Collect words for {lang}', { lang: languageName(code) }))}"></button>
       </div>`,
     )
     .join('');

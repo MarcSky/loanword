@@ -28,6 +28,8 @@ turns those words into flashcards, and schedules them with FSRS.
 
 ![The trainer: the Overview, the deck, Chapters, and a graded test being set up](images/demo.webp)
 
+[The whole tour, 98 seconds, with a player you can scrub →](images/demo.mp4)
+
 ## How it works
 
 ![Five steps: you work, the words are captured, secrets are stripped, Claude writes the cards, the deck stays on your machine](images/readme-flow.webp)

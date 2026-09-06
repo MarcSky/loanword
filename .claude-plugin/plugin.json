@@ -2,7 +2,7 @@
   "name": "loanword",
   "displayName": "Loanword",
   "version": "0.1.0",
-  "description": "Turn the words you actually needed today into flashcards, made from your own work and reviewed right where you code: your own Quizlet, built from your own data.",
+  "description": "Your own Quizlet and Duolingo, built from your working Claude Code sessions: the words you actually reached for become flashcards. Study them whenever it suits you — at the airport, on the train, at home, or in the status-line ticker while you keep coding. FSRS scheduling, and nothing ever leaves your machine.",
   "author": {
     "name": "MarcSky",
     "url": "https://github.com/MarcSky"

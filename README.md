@@ -6,6 +6,8 @@
 [![Node 22.13+](https://img.shields.io/badge/node-%E2%89%A522.13-black)](https://nodejs.org)
 [![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-black)](https://docs.claude.com/en/docs/claude-code/plugins)
 [![Network: none](https://img.shields.io/badge/network-none-black)](#privacy)
+[![CI](https://github.com/MarcSky/loanword/actions/workflows/ci.yml/badge.svg)](https://github.com/MarcSky/loanword/actions/workflows/ci.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/MarcSky/loanword/badge)](https://scorecard.dev/viewer/?uri=github.com/MarcSky/loanword)
 
 **Your own Quizlet, Duolingo and Memrise, on one machine.** The drills are the
 ones you already know — a flashcard pile, four-choice learn mode, matching, a
@@ -28,7 +30,12 @@ turns those words into flashcards, and schedules them with FSRS.
 
 ![The trainer: the Overview, the deck, Chapters, and a graded test being set up](images/demo.webp)
 
-[The whole tour, 98 seconds, with a player you can scrub →](images/demo.mp4)
+**Open the trainer** — `localhost:4747`:
+
+- In Claude Code: **`/loanword:start`**
+- In a terminal: **`loanword`**
+
+[Download the whole tour, 98 seconds (2.3 MB, MP4) →](https://github.com/MarcSky/loanword/raw/master/images/demo.mp4)
 
 ## How it works
 

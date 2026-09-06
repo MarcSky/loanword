@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
-import { once } from 'node:events';
 import { existsSync, mkdtempSync, rmSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -175,6 +174,18 @@ test('committed words are not captured a second time', () => {
 
 const stats = () => JSON.parse(run([join(HERE, 'serve.mjs'), '--stats']));
 
+const listening = (server) =>
+  new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('the trainer never announced itself')), 15_000);
+    server.stderr.on('data', (chunk) => process.stderr.write(chunk));
+    server.stdout.on('data', (chunk) => {
+      if (String(chunk).includes('http://localhost:')) {
+        clearTimeout(timer);
+        resolve();
+      }
+    });
+  });
+
 test('brand-new cards wait to be learned; nothing is due before that', () => {
   assert.equal(stats().total, 2);
   assert.equal(stats().due_now, 0);
@@ -186,7 +197,7 @@ test('grading schedules the card into the future and counts the streak', async (
   const server = spawn('node', [join(HERE, 'serve.mjs')], { env: { ...env, LOANWORD_PORT: String(port) } });
   const base = `http://127.0.0.1:${port}`;
   try {
-    await once(server.stdout, 'data');
+    await listening(server);
 
     const { cards } = await (await fetch(`${base}/state`)).json();
     assert.equal(cards.length, 2);
@@ -227,7 +238,7 @@ test('the server rejects malformed, unknown and oversized input', async () => {
     fetch(`${base}${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body });
 
   try {
-    await once(server.stdout, 'data');
+    await listening(server);
     const { cards } = await (await fetch(`${base}/due`)).json();
     const realId = cards[0]?.id ?? '0000000000';
 
@@ -399,7 +410,7 @@ test('a word used in a real prompt is counted as a review, once a day', async ()
   const server = spawn('node', [join(HERE, 'serve.mjs')], { env: { ...env, LOANWORD_PORT: String(port) } });
   const base = `http://127.0.0.1:${port}`;
   try {
-    await once(server.stdout, 'data');
+    await listening(server);
     const state = await (await fetch(`${base}/state`)).json();
     const card = state.cards[0];
     assert.ok(card, 'there is a card to use at work');

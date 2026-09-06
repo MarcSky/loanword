@@ -1313,5 +1313,7 @@ server.listen(PORT, HOST, () => {
   if (buildInBackground()) console.log(dim('building cards from the queue in the background…'));
   if (argv.includes('--no-open') || LAN) return;
   const opener = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open';
-  spawn(opener, [url], { stdio: 'ignore', detached: true, shell: process.platform === 'win32' }).unref();
+  spawn(opener, [url], { stdio: 'ignore', detached: true, shell: process.platform === 'win32' })
+    .on('error', () => {})
+    .unref();
 });

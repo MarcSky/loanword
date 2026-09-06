@@ -129,6 +129,7 @@ function readProvider(command, args, input, timeout = IPA_TIMEOUT_MS) {
       clearTimeout(timer);
       resolve(code === 0 ? out : '');
     });
+    child.stdin.on('error', () => {});
     child.stdin.end(input);
   });
 }
@@ -182,6 +183,7 @@ function runProvider(command, args, input, timeout = RENDER_TIMEOUT_MS) {
       clearTimeout(timer);
       resolve(code === 0);
     });
+    child.stdin.on('error', () => {});
     if (input === null) child.stdin.end();
     else child.stdin.end(input);
   });

@@ -35,8 +35,6 @@ turns those words into flashcards, and schedules them with FSRS.
 - In Claude Code: **`/loanword:start`**
 - In a terminal: **`loanword`**
 
-[Download the whole tour, 98 seconds (2.3 MB, MP4) →](https://github.com/MarcSky/loanword/raw/master/images/demo.mp4)
-
 ## How it works
 
 ![Five steps: you work, the words are captured, secrets are stripped, Claude writes the cards, the deck stays on your machine](images/readme-flow.webp)
@@ -165,7 +163,8 @@ stops accepting until `loanword build` drains it.
   `claude plugin disable loanword` where it does not belong, or set
   `mode: active`.
 
-Found a leak in `queue.jsonl`? That is a P0. Open an issue.
+Found a leak in `queue.jsonl`? That is a P0 — report it privately, see
+[SECURITY.md](SECURITY.md).
 
 ## Settings
 

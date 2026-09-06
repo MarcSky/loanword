@@ -18,7 +18,7 @@
     "stem": "node scripts/stem-vendor.mjs"
   },
   "dependencies": {
-    "ts-fsrs": "^5.2.0"
+    "ts-fsrs": "^5.4.2"
   },
   "engines": {
     "node": ">=22.13.0"

@@ -5234,7 +5234,8 @@ svg[data-animate] .bar {
   }
 
   .tbl-back,
-  .tbl-meter {
+  .tbl-meter,
+  .tbl-added {
     display: none;
   }
 

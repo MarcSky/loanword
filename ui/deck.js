@@ -297,15 +297,18 @@ export function wordList(cards, { by = 'category' } = {}) {
 function wordTable(cards) {
   const { sort = 'front', dir = 'asc' } = app.deck;
   const head = [
-    ['front', t('Word')],
-    ['back', t('Meaning')],
-    ['cefr', t('Level')],
-    ['mastery', t('Mastery')],
-    ['due', t('Next')],
+    ['front', t('Word'), ''],
+    ['back', t('Meaning'), 'tbl-back'],
+    ['cefr', t('Level'), ''],
+    ['mastery', t('Mastery'), 'tbl-meter'],
+    ['created_at', t('Added'), 'tbl-added'],
+    ['due', t('Next'), ''],
   ];
+  const blank = (value) => value === null || value === undefined || value === '';
   const sorted = [...cards].sort((a, b) => {
     const [x, y] = [a[sort], b[sort]];
-    const cmp = typeof x === 'number' ? (x || 0) - (y || 0) : String(x || '').localeCompare(String(y || ''));
+    if (blank(x) || blank(y)) return blank(x) && blank(y) ? 0 : blank(x) ? 1 : -1;
+    const cmp = typeof x === 'number' ? x - y : String(x).localeCompare(String(y));
     return dir === 'asc' ? cmp : -cmp;
   });
   return `<div class="tbl-wrap"><table class="tbl">
@@ -313,7 +316,7 @@ function wordTable(cards) {
       <th></th>
       ${head
         .map(
-          ([key, label]) => `<th aria-sort="${sort === key ? (dir === 'asc' ? 'ascending' : 'descending') : 'none'}">
+          ([key, label, cls]) => `<th class="${cls}" aria-sort="${sort === key ? (dir === 'asc' ? 'ascending' : 'descending') : 'none'}">
             <button data-act="deck-sort" data-value="${key}">${esc(label)}${icon(sort === key ? (dir === 'asc' ? 'caret-down' : 'caret-right') : 'caret-up-down', 'icon-sm icon')}</button>
           </th>`,
         )
@@ -332,6 +335,7 @@ function wordTable(cards) {
           <td class="tbl-back" ${langAttrs(app.config.native)}>${esc(card.back)}</td>
           <td>${levelPill(card)}${leechPill(card)}</td>
           <td class="tbl-meter">${masteryMeter(card)}<span class="n">${esc(pct(card.mastery))}</span></td>
+          <td class="tbl-when tbl-added" title="${esc(card.created_at || '')}">${esc(ago(card.created_at))}</td>
           <td class="tbl-when" ${card.isDue ? 'data-due' : ''}>${esc(status)}</td>
           <td class="tbl-actions"><span class="row-actions">${starButton(card)}${sayButton(card)}${editButton(card)}${rewriteButton(card)}${deleteButton(card)}</span></td>
         </tr>`;
@@ -790,7 +794,8 @@ Object.assign(ACTIONS, {
   },
   'deck-sort': (value) => {
     const same = app.deck.sort === value;
-    app.deck.dir = same && app.deck.dir === 'asc' ? 'desc' : 'asc';
+    const first = value === 'created_at' ? 'desc' : 'asc';
+    app.deck.dir = same ? (app.deck.dir === 'asc' ? 'desc' : 'asc') : first;
     app.deck.sort = value;
     renderDeck();
   },

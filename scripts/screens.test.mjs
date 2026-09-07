@@ -105,6 +105,7 @@ const CARD = {
   project: '~/work/api',
   source: 'мы уже откатили миграцию',
   ts: new Date().toISOString(),
+  created_at: '2026-05-01T09:00:00.000Z',
   due: new Date().toISOString(),
   isNew: false,
   isDue: true,
@@ -274,6 +275,33 @@ test('a card shows the form it was met in and its pronunciation', () => {
   core.render();
   const page = document.querySelector('#page-deck').innerHTML;
   assert.ok(page.length > 0);
+});
+
+test('the table sorts by the day a card was added, by level, and by first letter', () => {
+  core.app.cards = [
+    { ...CARD, created_at: '2026-08-20T09:00:00.000Z' },
+    { ...CARD, id: 'card-2', front: 'ship it', cefr: 'C1', created_at: '2026-05-01T09:00:00.000Z' },
+    { ...CARD, id: 'card-3', front: 'a deadline', cefr: '', created_at: '2026-01-09T09:00:00.000Z' },
+  ];
+  core.app.route = 'deck';
+
+  const order = () =>
+    [...document.querySelector('#page-deck').innerHTML.matchAll(/class="tbl-front"[^>]*>([^<]*)/g)].map((hit) => hit[1]);
+
+  core.ACTIONS['deck-sort']('created_at');
+  assert.deepEqual(order(), ['roll back a migration', 'ship it', 'a deadline'], 'the newest card is named first');
+  core.ACTIONS['deck-sort']('created_at');
+  assert.deepEqual(order(), ['a deadline', 'ship it', 'roll back a migration'], 'and the oldest when the column is clicked again');
+
+  core.ACTIONS['deck-sort']('cefr');
+  assert.deepEqual(order(), ['roll back a migration', 'ship it', 'a deadline'], 'B1 before C1, and a card without a level last');
+
+  core.ACTIONS['deck-sort']('front');
+  assert.deepEqual(order(), ['a deadline', 'roll back a migration', 'ship it'], 'by the first letter of the word');
+
+  core.app.cards = [CARD];
+  core.app.deck.sort = 'front';
+  core.app.deck.dir = 'asc';
 });
 
 test('the queue dialog draws a column per language and a row per record', async () => {

@@ -161,6 +161,9 @@ function renderCardEditor() {
   box.innerHTML = cardForm(card);
 }
 
+const addedOn = (card) =>
+  card.created_at ? `<span class="when" title="${esc(card.created_at)}">${esc(ago(card.created_at))}</span>` : '';
+
 function wordRow(card) {
   return `<li class="row" style="${tintOf(card.category)}" data-act="card-open" data-value="${card.id}"
     role="button" tabindex="0" aria-label="${esc(card.front)}">
@@ -173,6 +176,7 @@ function wordRow(card) {
     <span class="row-back" ${langAttrs(app.config.native)}>${esc(card.back)}</span>
     ${levelPill(card)}
     ${leechPill(card)}
+    ${addedOn(card)}
     ${masteryMeter(card)}
   </li>`;
 }
@@ -301,8 +305,8 @@ function wordTable(cards) {
     ['back', t('Meaning'), 'tbl-back'],
     ['cefr', t('Level'), ''],
     ['mastery', t('Mastery'), 'tbl-meter'],
-    ['created_at', t('Added'), 'tbl-added'],
     ['due', t('Next'), ''],
+    ['created_at', t('Added'), 'tbl-added'],
   ];
   const blank = (value) => value === null || value === undefined || value === '';
   const sorted = [...cards].sort((a, b) => {
@@ -335,8 +339,8 @@ function wordTable(cards) {
           <td class="tbl-back" ${langAttrs(app.config.native)}>${esc(card.back)}</td>
           <td>${levelPill(card)}${leechPill(card)}</td>
           <td class="tbl-meter">${masteryMeter(card)}<span class="n">${esc(pct(card.mastery))}</span></td>
-          <td class="tbl-when tbl-added" title="${esc(card.created_at || '')}">${esc(ago(card.created_at))}</td>
           <td class="tbl-when" ${card.isDue ? 'data-due' : ''}>${esc(status)}</td>
+          <td class="tbl-added">${addedOn(card)}</td>
           <td class="tbl-actions"><span class="row-actions">${starButton(card)}${sayButton(card)}${editButton(card)}${rewriteButton(card)}${deleteButton(card)}</span></td>
         </tr>`;
       })
@@ -363,6 +367,7 @@ function wordCard(card) {
     <div class="word-foot">
       ${masteryMeter(card)}
       <span>${esc(status)}</span>
+      ${addedOn(card)}
       ${starButton(card)}${sayButton(card)}
       ${editButton(card)}
       ${rewriteButton(card)}
@@ -430,6 +435,7 @@ function twinGroup(group) {
                 : ''
           }
           ${card.example ? `<span class="twin-example" ${langAttrs(app.config.target)}>${esc(card.example)}</span>` : ''}
+          ${addedOn(card)}
           <button class="star danger" data-act="twins-drop" data-value="${card.id}"
             aria-label="${esc(t('Delete {word} for good', { word: card.front }))}">
             ${icon('trash', 'icon-sm icon')}

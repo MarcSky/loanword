@@ -304,6 +304,19 @@ test('the table sorts by the day a card was added, by level, and by first letter
   core.app.deck.dir = 'asc';
 });
 
+test('every view of the deck says when a card was added', () => {
+  core.app.route = 'deck';
+  core.app.deck.openAll = true;
+  for (const view of ['list', 'grid', 'chapters']) {
+    core.app.deck.view = view;
+    core.render();
+    const page = document.querySelector('#page-deck').innerHTML;
+    assert.match(page, new RegExp(CARD.created_at), `${view} does not carry the day the card arrived`);
+  }
+  core.app.deck.view = 'list';
+  core.app.deck.openAll = false;
+});
+
 test('the queue dialog draws a column per language and a row per record', async () => {
   const overview = await import('../ui/overview.js');
   core.app.queue = {

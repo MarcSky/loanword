@@ -132,7 +132,6 @@ core.app.config = {
   sessionMinutes: 10,
   exercises: ['flashcards', 'learn', 'cloze', 'type', 'reverse'],
   model: 'sonnet',
-  echo: 'off',
   mode: 'both',
   speech: 'reveal',
   peek: 'off',

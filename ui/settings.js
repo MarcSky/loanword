@@ -75,7 +75,6 @@ const HELP = {
   apiKey: () => [t('Use my API key'), t('With the switch off, the cards are written by the Claude subscription you are already signed into. Paste an Anthropic key and every call is billed to that key instead. The key is kept on this machine, in the settings file beside your deck, and only its first and last characters are ever shown. Turning the switch off deletes it.')],
   usage: () => [t('Spent on cards'), t('Every model call the trainer makes is logged with its tokens, from the result Claude Code reports. The builder runs as a bare completion — no tools, no project context — so a batch of twenty records costs the records and the brief, nothing else. Changing the model only changes the calls from now on; the line per model shows what each one has used.')],
   autoBuild: () => [t('Make cards automatically'), t('When a work session leaves ten or more captured records behind, the cards are built in the background.')],
-  echo: () => [t('Correct my phrasing in chat'), t('<b>One line</b> opens every reply with the phrasing a native speaker would have used. <b>Weave</b> also asks Claude to work your ten weakest words into the answer. Both spend a line of every response.')],
   dailyLimit: () => [t('New cards per day'), t('A cap on unseen cards only. Reviews that are due are never held back — those are the ones that decay.')],
   weeklyGoal: () => [t('Study days per week'), t('The streak asks for a rhythm, not a run. Miss a Tuesday and nothing resets — the week is still there to be met.')],
   intervals: () => [t('Show when a card comes back'), t('“Good · 4 d” instead of “got it”. Seeing the consequence makes the choice honest.')],
@@ -505,11 +504,6 @@ function renderSettings() {
         `<button class="switch" role="switch" data-setting="autoBuild" aria-checked="${!!cfg.autoBuild}"
           aria-label="${esc(t('Make cards automatically'))}"></button>`,
         { help: 'autoBuild' },
-      )}
-      ${setting(
-        t('Correct my phrasing in chat'),
-        choices('echo', [['off', 'Off'], ['line', 'One line'], ['weave', 'Weave my weakest words in']], cfg.echo || 'off'),
-        { help: 'echo' },
       )}
 
       </section><section class="panel settings-group"><h2 class="title">${esc(t('Model'))}</h2>

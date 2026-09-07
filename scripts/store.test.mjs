@@ -1397,7 +1397,7 @@ test('the trainer writes its settings back into the plugin install dialog', () =
     }),
   );
 
-  const cfg = { ...config(), native: 'en', target: 'es', dailyLimit: 30, echo: 'line', peek: 'on', peekPick: ['starred', 'B1'] };
+  const cfg = { ...config(), native: 'en', target: 'es', dailyLimit: 30, peek: 'on', peekPick: ['starred', 'B1'] };
 
   const data = process.env.CLAUDE_PLUGIN_DATA;
   assert.equal(mirrorPluginConfig(cfg, file), null, 'an overridden data directory is not the deck the dialog installed');
@@ -1411,7 +1411,6 @@ test('the trainer writes its settings back into the plugin install dialog', () =
     mode: cfg.mode,
     daily_limit: 30,
     auto_build: cfg.autoBuild,
-    echo: 'line',
     level: cfg.level,
     peek: true,
     peek_pick: 'starred,B1',

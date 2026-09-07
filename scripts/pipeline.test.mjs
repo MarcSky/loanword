@@ -372,24 +372,19 @@ test('a Georgian reply is captured as Georgian, an English one is not', () => {
   rmSync(join(DATA, 'queue.ka.jsonl'), { force: true });
 });
 
-test('the echo weave asks for the weakest words and stays within the hook budget', () => {
-  const settings = join(DATA, 'settings.json');
-  const stored = JSON.parse(readFileSync(settings, 'utf8'));
-  writeFileSync(settings, JSON.stringify({ ...stored, echo: 'weave' }));
-  const weak = Array.from({ length: 12 }, (_, index) => `weak ${index}\t0.${String(index + 10)}`);
-  writeFileSync(join(DATA, 'fronts.en.txt'), `${['roll back\t0.05', ...weak, 'ship it\t0.98'].join('\n')}\n`);
+test('the prompt hook writes nothing into the working session', () => {
+  writeFileSync(join(DATA, 'fronts.en.txt'), 'roll back\t0.05\nship it\t0.98\n');
+  rmSync(join(DATA, 'queue.en.jsonl'), { force: true });
 
   const started = Date.now();
   const out = capture('prompt', { prompt: 'hay que revertir la migración porque el índice no se reconstruyó' });
   const spent = Date.now() - started;
 
-  assert.match(out, /Loanword echo/);
-  assert.ok(out.includes('roll back'), 'the weakest front is named first');
-  assert.equal(out.match(/weak \d+/g).length, 9, 'ten fronts in all, never the whole deck');
-  assert.ok(!out.includes('ship it'), 'a card that is holding is not worth a line');
+  assert.equal(out.trim(), '', 'the hook captures in the background and never speaks to the model');
+  assert.equal(queueOf('en').length, 1, 'the prompt is still on its way to a card');
   assert.ok(spent < 8000, `the hook took ${spent}ms, and it gets ten seconds`);
 
-  writeFileSync(settings, JSON.stringify(stored));
+  rmSync(join(DATA, 'queue.en.jsonl'), { force: true });
 });
 
 test('the capture hook never opens the database', () => {

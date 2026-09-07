@@ -37,7 +37,7 @@ const INDIRECT = [
   'From your language to the one you are learning.',
   'Reviews', 'New', 'Learned', 'In review', 'Learning', 'Relearning', 'Not started',
   'Not worth learning', 'I already know it', 'Too rare to bother', 'The translation is wrong',
-  'Off', 'One line', 'Weave my weakest words in',
+  'Off',
   'Automatic',
   'Sign in first: run claude in a terminal and type /login',
   'The Claude account has no credit left',

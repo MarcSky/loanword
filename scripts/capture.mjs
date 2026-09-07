@@ -36,7 +36,6 @@ export const AUTO_BUILD_THRESHOLD = 10;
 export const MAX_WORDS_PER_SESSION = 40;
 export const MAX_PROMPT_CHARS = 400;
 const CODE_RATIO = 0.5;
-const ECHO_WEAVE_WORDS = 10;
 
 export const MIN_PHRASE_WORDS = 3;
 const MAX_ACRONYM_LENGTH = 6;
@@ -183,31 +182,6 @@ export function captureSession(event, cfg, meta, cached) {
   return fresh.length ? { ...meta, source: 'session', lang: cfg.target, words: fresh } : null;
 }
 
-function echoWords(target, limit = ECHO_WEAVE_WORDS) {
-  return readLines(frontsFile(target))
-    .map((line) => {
-      const [front, score] = line.split('\t');
-      return { front, score: Number(score) || 0 };
-    })
-    .filter((row) => row.front)
-    .sort((a, b) => a.score - b.score)
-    .slice(0, limit)
-    .map((row) => row.front);
-}
-
-export function echoLine(cfg, weakest = []) {
-  if (cfg.echo === 'off' || !cfg.echo) return '';
-  const line =
-    `Loanword echo: the user wrote the prompt in ${cfg.native} while learning ${cfg.target}. ` +
-    `Open your reply with one line — "> 🗣️ <the ${cfg.target} a native speaker would have used>" — ` +
-    `naming the tier if a form in it is irregular, then answer the request in full as usual.\n`;
-  if (cfg.echo !== 'weave' || !weakest.length) return line;
-  return (
-    `${line}Then weave exactly two of these ${cfg.target} phrases into your answer where they fit naturally, ` +
-    `each wrapped in **bold** the first time it appears: ${weakest.join(', ')}.\n`
-  );
-}
-
 export function wildMatches(text, fronts) {
   const haystack = ` ${String(text || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ')} `;
   const hits = [];
@@ -257,21 +231,15 @@ async function main(source) {
     return log(`capture(${source}): every queue is above ${MAX_QUEUE_BYTES} bytes, run 'loanword build'`);
   }
 
-  let wrote = false;
-
   if (source === 'prompt' && cfg.mode !== 'passive') {
     for (const target of open) {
       const row = capturePrompt(event, { ...cfg, target }, meta);
       if (!row) continue;
       appendJsonl(queueFile(target), [row]);
-      wrote = true;
       const hits = wildMatches(row.text, readLines(frontsFile(target)).map((line) => line.split('\t')[0]));
       if (hits.length) {
         appendJsonl(wildFile(target), hits.map((front) => ({ ts: meta.ts, front, target })));
       }
-    }
-    if (wrote && cfg.echo && cfg.echo !== 'off') {
-      process.stdout.write(echoLine(cfg, echoWords(cfg.target)));
     }
     process.stdout.write(peekCard(cfg));
   }
@@ -282,7 +250,6 @@ async function main(source) {
       const row = captureSession(event, { ...cfg, target }, meta, cached);
       if (!row) continue;
       appendJsonl(queueFile(target), [row]);
-      wrote = true;
     }
     const queued = open.reduce((sum, target) => sum + countJsonl(queueFile(target)), 0);
     if (cfg.autoBuild && queued >= AUTO_BUILD_THRESHOLD) buildInBackground();

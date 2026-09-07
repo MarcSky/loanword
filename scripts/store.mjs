@@ -176,7 +176,6 @@ export function usageWindows() {
 const MODES = ['active', 'passive', 'both'];
 const THEMES = ['light', 'dark', 'system'];
 const STUDY_MODES = ['flashcards', 'learn'];
-const ECHO_MODES = ['off', 'line', 'weave'];
 const SPEECH_MODES = ['off', 'reveal', 'ask'];
 const PHONETICS = ['auto', 'off'];
 const PEEK_MODES = ['off', 'on'];
@@ -195,12 +194,6 @@ const peekMode = (value) => {
 
 const LEGACY_PEEK = ['hard', 'starred', 'mixed'];
 
-const echoMode = (value) => {
-  if (value === true) return 'line';
-  if (value === false) return 'off';
-  return ECHO_MODES.includes(value) ? value : undefined;
-};
-
 const peekEveryFrom = (value) => clampInt(value, RANGES.peekEvery) ?? RANGES.peekEvery.fallback;
 
 function envConfig(env = process.env) {
@@ -216,7 +209,6 @@ function envConfig(env = process.env) {
       : 'both',
     dailyLimit: (limit > 0 && clampInt(limit, RANGES.dailyLimit)) || RANGES.dailyLimit.fallback,
     autoBuild: env.CLAUDE_PLUGIN_OPTION_AUTO_BUILD === 'true',
-    echo: echoMode(env.CLAUDE_PLUGIN_OPTION_ECHO === 'true' || env.CLAUDE_PLUGIN_OPTION_ECHO) ?? 'off',
     level: CEFR_LEVELS.includes(level) ? level : '',
     theme: 'system',
     studyMode: 'flashcards',
@@ -282,7 +274,6 @@ const SETTING_RULES = {
   model: (v) => (MODELS.includes(v) ? v : undefined),
   categories: (v) => (Array.isArray(v) ? categoriesOf(v) : undefined),
   field: (v) => (v === '' || knownField(v) ? v : undefined),
-  echo: echoMode,
   level: (v) => (v === '' || CEFR_LEVELS.includes(v) ? v : undefined),
   theme: (v) => (THEMES.includes(v) ? v : undefined),
   studyMode: (v) => (STUDY_MODES.includes(v) ? v : undefined),
@@ -373,7 +364,6 @@ const DIALOG_OPTIONS = {
   mode: (cfg) => cfg.mode,
   daily_limit: (cfg) => cfg.dailyLimit,
   auto_build: (cfg) => cfg.autoBuild,
-  echo: (cfg) => cfg.echo,
   level: (cfg) => cfg.level,
   peek: (cfg) => cfg.peek === 'on',
   peek_pick: (cfg) => (cfg.peekPick || []).join(','),

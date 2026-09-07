@@ -178,7 +178,6 @@ the plugin data directory; the stored value wins.
 | `mode` | `both` | `active`: your prompts; `passive`: assistant replies |
 | `daily_limit` | `15` | New cards per day, 3 to 100. Reviews are never capped |
 | `auto_build` | `false` | Build cards when a session ends, without asking |
-| `echo` | `off` | `line`: open every reply with the native phrasing of your prompt; `weave`: also work your ten weakest words into the answer |
 | `level` | — | `A1`…`C2`: words below this level never become cards |
 | `peek` | `false` | Print one card into the session while you wait for an answer |
 | `peek_pick` | — | Which cards may appear: `starred`, `slipping`, `leech`, `new`, and any CEFR levels |

@@ -28,10 +28,9 @@ export function repeatsOf(cards, lang = '') {
   const seen = new Set();
   const repeats = [];
   for (const card of cards) {
-    if (!card.concept || card.type === 'letter') continue;
-    const front = stemKey(card.front, lang);
-    if (!front) continue;
-    const key = `${card.concept} ${front}`;
+    if (card.type === 'letter') continue;
+    const key = stemKey(card.front, lang);
+    if (!key) continue;
     if (seen.has(key)) repeats.push(card);
     else seen.add(key);
   }

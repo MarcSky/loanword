@@ -130,6 +130,18 @@ test('a second card for a word the deck already teaches is a repeat, and --apply
 
   const repeats = repeatsOf(db.cardsOfDeck(deck), 'de');
   assert.deepEqual(repeats.map((card) => card.id), ['bbbbbbbb03'], 'one word twice is the repeat, another wording is not');
+  assert.deepEqual(
+    repeatsOf(
+      [
+        { id: 'x1', type: 'word', front: 'zurückbleiben', back: 'lag behind', concept: 'aaa' },
+        { id: 'x2', type: 'word', front: 'zurückbleiben', back: 'fall behind', concept: 'bbb' },
+        { id: 'x3', type: 'word', front: 'hinterherhinken', back: 'lag behind', concept: 'aaa' },
+      ],
+      'de',
+    ).map((card) => card.id),
+    ['x2'],
+    'the same word twice is a repeat whatever the second card calls it, the way commit reads it',
+  );
 
   writeJson(paths.settings, { ...JSON.parse(readFileSync(paths.settings, 'utf8')), native: 'en', target: 'de' });
   const out = await repair({ apply: true });

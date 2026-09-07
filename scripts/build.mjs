@@ -369,7 +369,9 @@ function run(args, prompt, onText) {
     let rest = '';
     const timer = setTimeout(() => {
       child.kill('SIGKILL');
-      reject(new Error(`the lexicographer did not answer within ${BATCH_TIMEOUT_MS / 60_000} min`));
+      const error = new Error(`the lexicographer did not answer within ${BATCH_TIMEOUT_MS / 60_000} min`);
+      error.timeout = true;
+      reject(error);
     }, BATCH_TIMEOUT_MS);
 
     child.stdout.on('data', (chunk) => {

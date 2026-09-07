@@ -12,6 +12,17 @@ const { HINTS, SHAPES, SPLIT_FLOOR, budgetStopped, busy, forgetTuning, hintFor, 
 
 test.after(() => rmSync(DATA, { recursive: true, force: true }));
 
+test('a call that ran past the timeout halves the batch instead of walking the command line', () => {
+  const error = new Error('the lexicographer did not answer within 5 min');
+  error.timeout = true;
+  const tuned = tuneFor(error, 'lean');
+  assert.equal(tuned.change, 'split', 'twenty records at once is why the call was slow, not the flags');
+  assert.equal(tuned.shape, 'lean', 'and the shape that worked is kept');
+
+  const silent = new Error('claude exited 1 without a word');
+  assert.equal(tuneFor(silent, 'lean').change, 'shape', 'a refused command line still walks down');
+});
+
 test('a failure is read for what it says, not for the exit code', () => {
   assert.equal(budgetStopped({ subtype: 'error_max_budget_usd' }), true);
   assert.equal(budgetStopped({ message: 'claude stopped: Reached maximum budget ($3)' }), true);

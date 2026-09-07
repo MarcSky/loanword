@@ -27,6 +27,8 @@ export const saidNothing = (error) => !String(error?.reason || '').trim() && !St
 
 export const busy = (error) => BUSY.test(said(error));
 
+const timedOut = (error) => error?.timeout === true;
+
 const stay = (shape) => ({ change: 'none', shape, note: '' });
 
 const step = (shape, why) => {
@@ -37,6 +39,7 @@ const step = (shape, why) => {
 export function tuneFor(error, shape = 'lean') {
   if (budgetStopped(error)) return { change: 'split', shape, note: 'the call cost more than the ceiling; halving the batch' };
   if (busy(error)) return { change: 'wait', shape, note: 'the model is busy; waiting once before asking again' };
+  if (timedOut(error)) return { change: 'split', shape, note: 'the call ran past the timeout; halving the batch' };
   const hint = hintFor(said(error));
   if (hint === 'login' && shape === 'bare') return step(shape, 'a bare call reads no login of its own');
   if (hint) return stay(shape);

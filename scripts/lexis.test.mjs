@@ -12,6 +12,7 @@ import {
   keepIpa,
   keywordsIn,
   reasonsOf,
+  repeatKey,
   vet,
   wordCount,
   words,
@@ -23,6 +24,14 @@ const enKa = { native: 'en', target: 'ka' };
 const ruEn = { native: 'ru', target: 'en' };
 const enDe = { native: 'en', target: 'de' };
 const enJa = { native: 'en', target: 'ja' };
+
+test('a repeat is the same word again, and a letter card is never one', () => {
+  const word = (front, type = 'word') => ({ front, type });
+  assert.equal(repeatKey(word('Nutzen'), 'de'), repeatKey(word('nutzen'), 'de'), 'one word, one key');
+  assert.notEqual(repeatKey(word('nutzen'), 'de'), repeatKey(word('verwenden'), 'de'), 'another word for it is its own card');
+  assert.equal(repeatKey(word('A', 'letter'), 'de'), '', 'an alphabet card repeats nothing');
+  assert.equal(repeatKey(null, 'de'), '');
+});
 
 test('a word tapped in an example is built in its citation form, one card per tap (L-41…L-45)', async () => {
   const { readFileSync } = await import('node:fs');

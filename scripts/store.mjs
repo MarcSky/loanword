@@ -12,7 +12,7 @@ import {
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { scriptLetters, trimToSentence } from './lang.mjs';
-import { anchorLevel, broken, keepContext, keepForm, keepIpa, keywordsIn, reasonsOf, vet } from './lexis.mjs';
+import { anchorLevel, broken, keepContext, keepForm, keepIpa, keywordsIn, reasonsOf, repeatKey, vet } from './lexis.mjs';
 import { API_KEY, MAX_CHARS, RANGES, SESSION_LENGTHS, USAGE_WINDOWS, clampInt, intIn, textIn } from './limits.mjs';
 import { parsePick } from './peek.mjs';
 import { CODES, isPickable, scriptOf } from './languages.mjs';
@@ -817,13 +817,13 @@ function classifyCards(newCards, pair, deck, queue) {
     const id = cardId(sided);
     if (seen.has(id)) continue;
     seen.add(id);
-    const key = stemKey(sided.front, pair.target);
-    if (sided.type !== 'letter' && key && fronts.has(key)) {
+    const key = repeatKey(sided, pair.target);
+    if (key && fronts.has(key)) {
       dropped += 1;
       log(`commit dropped a second card for a word the deck has: ${sided.front.slice(0, 60)}`);
       continue;
     }
-    if (sided.type !== 'letter' && key) fronts.add(key);
+    if (key) fronts.add(key);
     const concept = db.conceptKey(sided.back, { lang: pair.native, stop: nativeStop });
     ids.push(id);
     stamped.push({

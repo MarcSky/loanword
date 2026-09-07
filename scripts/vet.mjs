@@ -3,9 +3,8 @@
 import { rmSync } from 'node:fs';
 import * as db from './db.mjs';
 import { askFull, brief, chunk, effortFor, heldBy, modelFor, parseCards, progressIn, repairPrompt, triage } from './build.mjs';
-import { broken, reasonsOf, vet as vetCard } from './lexis.mjs';
+import { broken, reasonsOf, repeatKey, vet as vetCard } from './lexis.mjs';
 import { config, frequentWords, log, paths, recordUsage, writeJson, writeSnapshots } from './store.mjs';
-import { stemKey } from './stem.mjs';
 
 export const BATCH_CARDS = 20;
 const SAMPLE_SIZE = 20;
@@ -28,8 +27,7 @@ export function repeatsOf(cards, lang = '') {
   const seen = new Set();
   const repeats = [];
   for (const card of cards) {
-    if (card.type === 'letter') continue;
-    const key = stemKey(card.front, lang);
+    const key = repeatKey(card, lang);
     if (!key) continue;
     if (seen.has(key)) repeats.push(card);
     else seen.add(key);

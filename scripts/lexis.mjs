@@ -4,6 +4,7 @@ import { clozeOf } from './session.mjs';
 import { scriptLetters, scriptOf } from './lang.mjs';
 import { MAX_CHARS } from './limits.mjs';
 import { CEFR_LEVELS, PLUGIN_ROOT } from './store-paths.mjs';
+import { stemKey } from './stem.mjs';
 import { wordCount, words } from './words.mjs';
 
 export { wordCount, words };
@@ -30,6 +31,9 @@ export function budget(records) {
 }
 
 export const flat = (text) => String(text ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
+
+export const repeatKey = (card, lang = '') =>
+  card?.type === 'letter' ? '' : stemKey(String(card?.front ?? ''), lang);
 const unpunctuated = (text) => flat(text).replace(/[.!?…。！？؟।॥]+$/u, '');
 
 const isSentence = (text, lang) =>

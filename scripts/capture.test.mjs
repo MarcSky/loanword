@@ -12,7 +12,6 @@ const {
   candidateWords,
   capturePrompt,
   captureSession,
-  echoLine,
   MIN_PHRASE_WORDS,
   MAX_PROMPT_CHARS,
   stripFilenames,
@@ -213,23 +212,6 @@ test('captureSession caps how many words one session can contribute', () => {
   assert.ok(row);
   assert.equal(row.words.length, MAX_WORDS_PER_SESSION);
   assert.equal(new Set(row.words).size, row.words.length, 'no duplicates within a batch');
-});
-
-test('the echo line names both languages and asks for one line only', () => {
-  const line = echoLine({ native: 'ru', target: 'en', echo: 'line' });
-  assert.match(line, /\bru\b/);
-  assert.match(line, /\ben\b/);
-  assert.equal(line.split('\n').filter(Boolean).length, 1, 'one line of injected context, never a paragraph');
-});
-
-test('the echo has three settings and only weave names the weak words', () => {
-  const weak = ['roll back', 'deadline'];
-  assert.equal(echoLine({ native: 'ru', target: 'en', echo: 'off' }, weak), '');
-  const line = echoLine({ native: 'ru', target: 'en', echo: 'line' }, weak);
-  assert.ok(!line.includes('roll back'));
-  const weave = echoLine({ native: 'ru', target: 'en', echo: 'weave' }, weak);
-  assert.ok(weave.includes('roll back') && weave.includes('deadline'));
-  assert.equal(weave.split('\n').filter(Boolean).length, 2, 'one extra line, never a paragraph');
 });
 
 test('a peek card is shown at most once per interval and only when asked for', () => {

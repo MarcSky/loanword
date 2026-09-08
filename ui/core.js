@@ -679,6 +679,11 @@ export function readAnalyticsHash(hash) {
   app.analytics.cefr = (params.get('cefr') || '').split(',').filter((key) => LEVELS.includes(key));
 }
 
+export function forgetDeck() {
+  app.duplicates = null;
+  app.analytics.data = null;
+}
+
 export async function refresh() {
   await loadLanguage();
   await load();

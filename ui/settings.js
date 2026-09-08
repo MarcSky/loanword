@@ -18,6 +18,7 @@ import {
   dialogHead,
   esc,
   flagOf,
+  forgetDeck,
   icon,
   languageName,
   levelBlurb,
@@ -830,7 +831,7 @@ Object.assign(ACTIONS, {
       app.category = '';
       app.level = '';
       app.session = null;
-      app.duplicates = null;
+      forgetDeck();
       await refresh();
       toast(t('Now {from} → {to}', { from: languageName(app.config.native), to: languageName(app.config.target) }));
     } catch (error) {
@@ -856,7 +857,7 @@ Object.assign(ACTIONS, {
       const out = await api('/deck/delete', { native: asked.native, target: asked.target });
       $('#drop').close();
       toast(tn(out.removed, 'card removed', 'cards removed'));
-      app.duplicates = null;
+      forgetDeck();
       await refresh();
     } catch (error) {
       asked.busy = false;

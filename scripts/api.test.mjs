@@ -912,6 +912,8 @@ test('a deck can be deleted, and the trainer moves to one that is left', async (
     ],
     ['bbbbbbbb01'],
   );
+  const doomed = db.deckId('ru', 'sv');
+  db.logReview({ card_id: 'bbbbbbbb01', deck_id: doomed, rating: 3, was_new: 1 });
   await post('/settings', { native: 'ru', target: 'sv' });
   const before = await get('/state');
   assert.equal(before.body.config.target, 'sv');
@@ -924,8 +926,11 @@ test('a deck can be deleted, and the trainer moves to one that is left', async (
 
   const after = await get('/state');
   assert.ok(!after.body.pairs.some((pair) => pair.target === 'sv' && pair.total > 0));
-  const restored = await post('/restore', { id: 'bbbbbbbb01' });
-  assert.equal(restored.status, 200, 'the cards are only put aside, so one can come back');
+  assert.equal(
+    db.get('SELECT COUNT(*) AS n FROM reviews WHERE deck_id = ?', doomed).n,
+    0,
+    'and the analytics of a deleted deck go with it',
+  );
 });
 
 test('a word tapped in an example is queued as a pick, junk and repeats dropped', async () => {

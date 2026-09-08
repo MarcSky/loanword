@@ -939,7 +939,7 @@ const server = createServer(async (req, res) => {
       const deckId = db.deckIdIfAny(native, target);
       if (deckId === null) return json(res, { error: 'no such deck' }, 404);
 
-      const removed = db.deleteDeckCards(deckId);
+      const removed = db.deleteDeck(deckId);
       const left = db.deckPairsWithCounts().filter((pair) => pair.total > 0);
       const teaches = left.some((pair) => pair.target === target);
       const cfg = config();

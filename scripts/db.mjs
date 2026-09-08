@@ -9,7 +9,7 @@ import { stem, wordsOf } from './stem.mjs';
 const require = createRequire(import.meta.url);
 
 export const DB_FILE = join(DATA, 'loanword.db');
-export const SCHEMA_VERSION = 12;
+export const SCHEMA_VERSION = 13;
 
 export { LEECH_LAPSES, wordsOf };
 
@@ -314,6 +314,21 @@ const MIGRATIONS = {
     if (!columns.has('bands')) handle.exec("ALTER TABLE ability ADD COLUMN bands TEXT NOT NULL DEFAULT '{}'");
     handle.exec('DELETE FROM ability');
     recountAbility(handle);
+  },
+
+  13: (handle) => {
+    const empty = handle
+      .prepare(`SELECT d.id AS id FROM decks d
+                LEFT JOIN cards c ON c.deck_id = d.id AND c.deleted_at IS NULL
+                GROUP BY d.id HAVING COUNT(c.id) = 0`)
+      .all()
+      .map((row) => row.id);
+    for (const table of ['fsrs_state', 'reviews', 'sessions', 'junk', 'ability', 'cards']) {
+      const drop = handle.prepare(`DELETE FROM ${table} WHERE deck_id = ?`);
+      for (const id of empty) drop.run(id);
+    }
+    const drop = handle.prepare('DELETE FROM decks WHERE id = ?');
+    for (const id of empty) drop.run(id);
   },
 };
 
@@ -966,10 +981,18 @@ export function junkCard(id, deck, reason, front) {
   );
 }
 
-export function deleteDeckCards(deck, now = new Date()) {
-  return Number(
-    run('UPDATE cards SET deleted_at = ? WHERE deck_id = ? AND deleted_at IS NULL', now.toISOString(), deck).changes,
-  );
+export function deleteDeck(deck) {
+  return tx(() => {
+    const removed = countCards(deck);
+    run('DELETE FROM fsrs_state WHERE deck_id = ?', deck);
+    run('DELETE FROM reviews WHERE deck_id = ?', deck);
+    run('DELETE FROM sessions WHERE deck_id = ?', deck);
+    run('DELETE FROM junk WHERE deck_id = ?', deck);
+    run('DELETE FROM ability WHERE deck_id = ?', deck);
+    run('DELETE FROM cards WHERE deck_id = ?', deck);
+    run('DELETE FROM decks WHERE id = ?', deck);
+    return removed;
+  });
 }
 
 export function restoreCard(id) {

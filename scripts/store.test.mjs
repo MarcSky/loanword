@@ -27,6 +27,7 @@ const {
   usageWindows,
   dropFromQueue,
   saveKnownWords,
+  forgetTarget,
   sanitizeSettings,
   seedSettings,
   saveSettings,
@@ -39,6 +40,8 @@ const {
   loadCards,
   peekFile,
   frontsFile,
+  knownFile,
+  wildFile,
   forgetSnapshots,
   readLines,
   queueFile,
@@ -215,6 +218,25 @@ test('the hook reads a plain-text snapshot, never the database', () => {
   assert.ok(snapshot.has('alpha') && snapshot.has('gamma'));
   assert.deepEqual([...snapshot].sort(), [...knownWords('zz')].sort(), 'the file mirrors the table exactly');
   assert.equal(knownSnapshot('qq').size, 0);
+});
+
+test('a language that is gone leaves no files and no known words behind', () => {
+  saveKnownWords('yy', new Set(['spurious']));
+  const files = [queueFile('yy'), knownFile('yy'), frontsFile('yy'), peekFile('yy'), wildFile('yy')];
+  for (const file of files) writeFileSync(file, 'x');
+  mkdirSync(paths.audio, { recursive: true });
+  const mine = join(paths.audio, 'yy-abc.wav');
+  const theirs = join(paths.audio, 'zz-abc.wav');
+  writeFileSync(mine, '');
+  writeFileSync(theirs, '');
+
+  forgetTarget('yy');
+
+  for (const file of files) assert.ok(!existsSync(file), basename(file));
+  assert.equal(knownWords('yy').size, 0);
+  assert.ok(!existsSync(mine), 'its cached speech goes too');
+  assert.ok(existsSync(theirs), 'another language keeps hers');
+  assert.doesNotThrow(() => forgetTarget('yy'), 'and forgetting twice is not an error');
 });
 
 test('commit refuses anything that is not an array', () => {

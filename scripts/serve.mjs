@@ -45,6 +45,7 @@ import {
   cardWords,
   config,
   decksOnDisk,
+  forgetTarget,
   isLearned,
   knownWords,
   loadCards,
@@ -69,7 +70,6 @@ import {
   usageTotals,
   usageWindows,
   wildFile,
-  writeLines,
   writeSnapshots,
 } from './store.mjs';
 
@@ -947,7 +947,7 @@ const server = createServer(async (req, res) => {
       if (!teaches) {
         patch.targets = (cfg.targets || []).filter((code) => code !== target);
         patch.paused = (cfg.paused || []).filter((code) => code !== target);
-        writeLines(queueFile(target), []);
+        forgetTarget(target);
       }
       if (cfg.native === native && cfg.target === target) {
         const next = left[0];

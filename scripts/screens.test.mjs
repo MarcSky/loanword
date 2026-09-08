@@ -228,6 +228,20 @@ test('the settings screen offers the key switch and shows only the ends of a sto
   core.app.config.apiKey = '';
 });
 
+test('dropping a deck forgets what was loaded about it', async () => {
+  const before = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ ok: true, removed: 2, config: core.app.config }) });
+  core.app.duplicates = { groups: [] };
+  core.app.analytics.data = { summary: { total: 99 } };
+  core.app.dropping = { native: 'ru', target: 'sv', total: 2, busy: false };
+
+  await core.ACTIONS['deck-drop-confirm']();
+  globalThis.fetch = before;
+
+  assert.equal(core.app.analytics.data, null, 'the analytics of a deck that is gone are not redrawn');
+  assert.equal(core.app.duplicates, null);
+});
+
 test('the key dialog hides what is typed until the eye is clicked', async () => {
   core.app.config.apiKey = '';
   await core.ACTIONS['apikey-toggle']();

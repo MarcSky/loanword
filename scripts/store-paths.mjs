@@ -71,6 +71,13 @@ export const frontsFile = (target) => join(DATA, `fronts.${safe(target)}.txt`);
 export const wildFile = (target) => join(DATA, `wild.${safe(target)}.jsonl`);
 export const peekFile = (target) => join(DATA, `peek.${safe(target)}.jsonl`);
 
+export const targetFiles = (target) =>
+  [queueFile, lockFile, progressFile, failedFile, knownFile, frontsFile, wildFile, peekFile].map(
+    (fileOf) => fileOf(target),
+  );
+
+export const audioPrefix = (target) => `${safe(target)}-`;
+
 export function frequentWords(language) {
   const file = join(PLUGIN_ROOT, 'data', 'freq', `${String(language || '').toLowerCase().slice(0, 2)}.txt`);
   if (!existsSync(file)) return new Set();

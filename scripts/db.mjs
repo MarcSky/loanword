@@ -777,6 +777,8 @@ export const setKnown = (id, on) => run('UPDATE cards SET known = ? WHERE id = ?
 export const knownWordsOf = (target) =>
   new Set(all('SELECT word FROM known_words WHERE target = ?', target).map((row) => row.word));
 
+export const forgetKnownWords = (target) => run('DELETE FROM known_words WHERE target = ?', target);
+
 export function addKnownWords(target, words) {
   const insert = stmt('INSERT OR IGNORE INTO known_words (target, word) VALUES (?, ?)');
   for (const word of words) {

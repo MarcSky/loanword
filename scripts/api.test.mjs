@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
-import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -931,6 +931,9 @@ test('a deck can be deleted, and the trainer moves to one that is left', async (
     0,
     'and the analytics of a deleted deck go with it',
   );
+  const { queueFile: fileFor } = await import('./store.mjs');
+  assert.ok(!existsSync(fileFor('sv')), 'the language it taught leaves no files behind');
+  assert.equal(db.get('SELECT COUNT(*) AS n FROM known_words WHERE target = ?', 'sv').n, 0);
 });
 
 test('a word tapped in an example is queued as a pick, junk and repeats dropped', async () => {

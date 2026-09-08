@@ -4,6 +4,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
   renameSync,
   rmSync,
   statSync,
@@ -34,6 +35,8 @@ import {
   peekFile,
   queueFile,
   resolveData,
+  audioPrefix,
+  targetFiles,
   wildFile,
 } from './store-paths.mjs';
 import * as db from './db.mjs';
@@ -547,6 +550,15 @@ export function knownWords(target = config().target) {
 
 export function knownSnapshot(target) {
   return new Set(readLines(knownFile(target)).map((word) => word.toLowerCase()));
+}
+
+export function forgetTarget(target) {
+  for (const file of targetFiles(target)) rmSync(file, { force: true });
+  const audio = existsSync(paths.audio) ? readdirSync(paths.audio) : [];
+  for (const name of audio.filter((file) => file.startsWith(audioPrefix(target)))) {
+    rmSync(join(paths.audio, name), { force: true });
+  }
+  db.forgetKnownWords(target);
 }
 
 export function saveKnownWords(target, words) {

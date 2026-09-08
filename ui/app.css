@@ -1279,7 +1279,7 @@ select.edit {
 
 .row {
   display: grid;
-  grid-template-columns: auto minmax(0, 1.1fr) minmax(0, 1.4fr) auto 56px;
+  grid-template-columns: auto minmax(0, 1.1fr) minmax(0, 1.4fr) auto auto 56px;
   align-items: center;
   gap: 14px;
   padding: 9px 4px;
@@ -4790,6 +4790,12 @@ h2 {
   white-space: nowrap;
 }
 
+.when {
+  color: var(--ink-3);
+  font-size: var(--fs-label);
+  white-space: nowrap;
+}
+
 .tbl-when[data-due] {
   color: var(--accent-text);
   font-weight: 500;
@@ -5234,7 +5240,8 @@ svg[data-animate] .bar {
   }
 
   .tbl-back,
-  .tbl-meter {
+  .tbl-meter,
+  .tbl-added {
     display: none;
   }
 
@@ -6067,7 +6074,7 @@ picture.art img {
 
 .sync-row {
   display: grid;
-  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  grid-template-columns: auto auto minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 12px;
   padding: 10px 14px;

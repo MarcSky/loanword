@@ -1,4 +1,4 @@
-const CACHE = 'loanword-shell-v23';
+const CACHE = 'loanword-shell-v25';
 
 const SHELL = [
   '/',

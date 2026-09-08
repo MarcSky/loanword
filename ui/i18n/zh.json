@@ -658,5 +658,6 @@
   "<b>My messages</b> takes the prompts you write and shows how a native speaker would have put them. <b>Claude’s replies</b> takes the unfamiliar words out of the answers you get. <b>Both</b> does each.": "<b>我的消息</b>取你写的提示词，展示母语者会怎么说。<b>Claude 的回复</b>从你收到的回答里挑出陌生词。<b>两者</b>两样都做。",
   "Every card is written by a Claude you already have: the trainer runs <code>claude -p</code> on this machine as a bare completion, so nothing is sent anywhere else. <b>Sonnet</b> is the default: it follows the lexis rules and judges level. <b>Haiku</b> is cheaper and enough for a language close to yours, but it is the model that wrote definitions where translations were asked for. <b>Opus</b> for the stubborn cases. Every call is logged with its tokens and cost below.": "每张卡片都由你已有的 Claude 编写：训练器在本机以纯补全方式运行 <code>claude -p</code>，因此不会把任何内容发到别处。<b>Sonnet</b> 是默认：它遵守词汇规则并判断等级。<b>Haiku</b> 更便宜，对与你母语相近的语言够用，但正是它在该给译文的地方写了释义。<b>Opus</b> 用于顽固的情况。每次调用的 token 与费用都记录在下方。",
   "With the switch off, the cards are written by the Claude subscription you are already signed into. Paste an Anthropic key and every call is billed to that key instead. The key is kept on this machine, in the settings file beside your deck, and only its first and last characters are ever shown. Turning the switch off deletes it.": "开关关闭时，卡片由你已登录的 Claude 订阅生成。粘贴一个 Anthropic 密钥，之后每次调用都记到该密钥上。密钥保存在本机、卡组旁边的设置文件里，界面只显示它的首尾几个字符。关掉开关就会删除它。",
-  "Model": "模型"
+  "Model": "模型",
+  "Added": "添加时间"
 }

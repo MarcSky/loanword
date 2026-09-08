@@ -19,6 +19,10 @@ const {
   peekFile,
   queueFile,
   resolveData,
+  targetFiles,
+  progressFile,
+  failedFile,
+  audioPrefix,
   wildFile,
 } = await import('./store-paths.mjs');
 
@@ -47,6 +51,15 @@ test('each target owns its queue, its lock and its snapshots', () => {
   assert.match(lockFile('ka'), /build\.ka\.lock$/);
   assert.match(knownFile('ka'), /known\.ka\.txt$/);
   assert.match(peekFile('ka'), /peek\.ka\.jsonl$/);
+});
+
+test('targetFiles names every file a language owns, so removing one is not a guess', () => {
+  const wanted = [queueFile, lockFile, progressFile, failedFile, knownFile, frontsFile, wildFile, peekFile].map(
+    (build) => build('ka'),
+  );
+  assert.deepEqual([...targetFiles('ka')].sort(), [...wanted].sort());
+  assert.equal(new Set(targetFiles('ka')).size, wanted.length, 'and names each of them once');
+  assert.equal(audioPrefix('KA'), 'ka-', 'cached speech is found by the same code');
 });
 
 test('a language code can never be used to write outside the data directory', () => {

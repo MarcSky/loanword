@@ -796,3 +796,42 @@ test('an old deck is given the level its own review log implies', async () => {
   db.close();
   db.open();
 });
+
+test('deleting a deck takes its analytics with it, old databases included', () => {
+  const deck = db.deckId('ru', 'da');
+  db.insertCards(
+    [{ deck_id: deck, front: 'tak', back: 'спасибо', created_at: new Date().toISOString() }],
+    ['ddddddd001'],
+  );
+  db.logReview({ card_id: 'ddddddd001', deck_id: deck, rating: 3, was_new: 1 });
+  db.openSession(deck, 10, 20);
+  db.saveAbility(deck, { theta: 0.5, n: 1, label: 'A1', bands: { A1: 1 } });
+
+  assert.equal(db.deleteDeck(deck), 1);
+  for (const table of ['cards', 'reviews', 'sessions', 'ability', 'fsrs_state', 'junk']) {
+    assert.equal(db.get(`SELECT COUNT(*) AS n FROM ${table} WHERE deck_id = ?`, deck).n, 0, table);
+  }
+  assert.equal(db.get('SELECT COUNT(*) AS n FROM decks WHERE id = ?', deck).n, 0);
+
+  const stale = db.deckId('ru', 'nb');
+  db.insertCards(
+    [{ deck_id: stale, front: 'takk', back: 'спасибо', created_at: new Date().toISOString() }],
+    ['ddddddd002'],
+  );
+  db.logReview({ card_id: 'ddddddd002', deck_id: stale, rating: 3, was_new: 1 });
+  db.run('UPDATE cards SET deleted_at = ? WHERE deck_id = ?', new Date().toISOString(), stale);
+  const kept = db.deckId('ru', 'sv');
+  db.insertCards(
+    [{ deck_id: kept, front: 'tack', back: 'спасибо', created_at: new Date().toISOString() }],
+    ['ddddddd003'],
+  );
+  db.logReview({ card_id: 'ddddddd003', deck_id: kept, rating: 3, was_new: 1 });
+  db.run('UPDATE schema_version SET version = 12');
+  db.close();
+
+  db.open();
+  assert.equal(db.get('SELECT COUNT(*) AS n FROM reviews WHERE deck_id = ?', stale).n, 0);
+  assert.equal(db.get('SELECT COUNT(*) AS n FROM decks WHERE id = ?', stale).n, 0);
+  assert.equal(db.get('SELECT COUNT(*) AS n FROM reviews WHERE deck_id = ?', kept).n, 1, 'a live deck keeps its log');
+  assert.equal(db.get('SELECT version FROM schema_version').version, db.SCHEMA_VERSION);
+});

@@ -1,6 +1,6 @@
 {
   "name": "loanword",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Turn the words you actually needed today into flashcards, inside Claude Code.",
   "license": "MIT",
   "private": true,

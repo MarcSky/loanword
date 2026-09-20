@@ -27,6 +27,8 @@ export const saidNothing = (error) => !String(error?.reason || '').trim() && !St
 
 export const busy = (error) => BUSY.test(said(error));
 
+export const timedOut = (error) => !!error?.timedOut;
+
 const stay = (shape) => ({ change: 'none', shape, note: '' });
 
 const step = (shape, why) => {
@@ -35,6 +37,7 @@ const step = (shape, why) => {
 };
 
 export function tuneFor(error, shape = 'lean') {
+  if (timedOut(error)) return { change: 'split', shape, note: 'the call ran out of time; halving the batch' };
   if (budgetStopped(error)) return { change: 'split', shape, note: 'the call cost more than the ceiling; halving the batch' };
   if (busy(error)) return { change: 'wait', shape, note: 'the model is busy; waiting once before asking again' };
   const hint = hintFor(said(error));
@@ -58,6 +61,12 @@ export function rememberTuning(patch) {
   const next = { shape, records };
   writeJson(paths.tuning, next);
   return next;
+}
+
+export function forgetShape() {
+  const { shape, records } = readTuning();
+  if (!shape) return;
+  writeJson(paths.tuning, { shape: '', records });
 }
 
 export const forgetTuning = () => rmSync(paths.tuning, { force: true });

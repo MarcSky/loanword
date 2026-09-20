@@ -2,7 +2,7 @@
 
 import { rmSync } from 'node:fs';
 import * as db from './db.mjs';
-import { askFull, brief, chunk, effortFor, heldBy, modelFor, parseCards, progressIn, repairPrompt, triage } from './build.mjs';
+import { askFull, brief, chunk, effortFor, heldBy, modelFor, jsonArray, progressIn, repairPrompt, triage } from './build.mjs';
 import { broken, reasonsOf, vet as vetCard } from './lexis.mjs';
 import { config, frequentWords, log, paths, recordUsage, writeJson, writeSnapshots } from './store.mjs';
 import { stemKey } from './stem.mjs';
@@ -91,7 +91,7 @@ export async function repair({ apply = false, onProgress = () => {} } = {}) {
     for (const [index, batch] of batches.entries()) {
       progress(index * BATCH_CARDS, index + 1);
       const { text, usage } = await askFull(repairPrompt(batch, pair), () => {}, { model, system, effort });
-      const raw = parseCards(text);
+      const raw = jsonArray(text);
       recordUsage({ kind: 'vet', model, effort, target: cfg.target, records: batch.length, cards: raw.length, ...usage });
       const byId = new Map(batch.map((item) => [item.card.id, item]));
       const fixed = triage(raw, [], pair, stopWords).kept.filter((card) => byId.has(card.n));

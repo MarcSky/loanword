@@ -7,7 +7,7 @@ import { join } from 'node:path';
 const DATA = mkdtempSync(join(tmpdir(), 'loanword-tune-'));
 process.env.CLAUDE_PLUGIN_DATA = DATA;
 
-const { HINTS, SHAPES, SPLIT_FLOOR, budgetStopped, busy, forgetTuning, hintFor, readTuning, rememberTuning, saidNothing, tuneFor, unknownFlag } =
+const { HINTS, SHAPES, SPLIT_FLOOR, budgetStopped, busy, forgetShape, forgetTuning, hintFor, readTuning, rememberTuning, saidNothing, timedOut, tuneFor, unknownFlag } =
   await import('./tune.mjs');
 
 test.after(() => rmSync(DATA, { recursive: true, force: true }));
@@ -87,4 +87,30 @@ test('what the tuning learned outlives the process, and only what changed is wri
 
   forgetTuning();
   assert.equal(readTuning().shape, '');
+});
+
+test('a call that ran out of time is a batch too big, never a refused command line', () => {
+  const late = Object.assign(new Error('the lexicographer went quiet for 5 min'), { timedOut: true });
+
+  assert.equal(timedOut(late), true);
+  assert.equal(timedOut({ reason: 'anything else' }), false);
+  assert.equal(saidNothing(late), true, 'a timeout says nothing, and that used to read as a refused flag');
+  assert.deepEqual(
+    { ...tuneFor(late, 'lean') },
+    { change: 'split', shape: 'lean', note: 'the call ran out of time; halving the batch' },
+    'the shape that was working stays, the batch is what gives',
+  );
+  assert.equal(tuneFor(late, 'bare').shape, 'bare', 'no shape is blamed for the clock');
+});
+
+test('a shape is forgotten without losing the batch size that was learned', () => {
+  forgetTuning();
+  rememberTuning({ shape: 'stream', records: 5 });
+
+  forgetShape();
+  assert.deepEqual(readTuning(), { shape: '', records: 5 }, 'the next build probes for a shape again');
+  forgetShape();
+  assert.deepEqual(readTuning(), { shape: '', records: 5 }, 'and asking twice writes nothing new');
+
+  forgetTuning();
 });

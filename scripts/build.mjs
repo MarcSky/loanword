@@ -9,7 +9,7 @@ import * as speech from './speech.mjs';
 import { EXAMPLE_WARNING, broken, budget, flat, reasonsOf, vet } from './lexis.mjs';
 import { MAX_CHARS } from './limits.mjs';
 import { scrub } from './scrub.mjs';
-import { SPLIT_FLOOR, WAIT_MS, hintFor, readTuning, rememberTuning, tuneFor } from './tune.mjs';
+import { SPLIT_FLOOR, WAIT_MS, forgetShape, hintFor, readTuning, rememberTuning, tuneFor } from './tune.mjs';
 import * as db from './db.mjs';
 import {
   adoptQueue,
@@ -44,7 +44,15 @@ const BUILD_CONCURRENCY = Number(process.env.LOANWORD_BUILD_CONCURRENCY) || 3;
 const MAX_RECORD_CHARS = 400;
 const TOPICS_PER_CATEGORY = 30;
 const FALLBACK_MODEL = 'sonnet';
-const BATCH_TIMEOUT_MS = 5 * 60_000;
+const BATCH_TIMEOUT_MS = 20 * 60_000;
+const QUIET_TIMEOUT_MS = 5 * 60_000;
+
+const timeouts = () => ({
+  hard: Number(process.env.LOANWORD_BATCH_TIMEOUT_MS) || BATCH_TIMEOUT_MS,
+  quiet: Number(process.env.LOANWORD_QUIET_TIMEOUT_MS) || QUIET_TIMEOUT_MS,
+});
+
+const minutesOf = (ms) => Math.round((ms / 60_000) * 10) / 10;
 
 const STALE_LOCK_MS = 30 * 60_000;
 
@@ -238,7 +246,6 @@ export function jsonArray(reply) {
   return rows;
 }
 
-export const parseCards = jsonArray;
 
 export const STREAM_ARGS = ['--output-format', 'stream-json', '--include-partial-messages', '--verbose'];
 
@@ -302,20 +309,21 @@ const eventOf = (line) => {
   }
 };
 
-const deltaOf = (line) => {
-  const event = eventOf(line);
-  if (event?.type !== 'stream_event' || event.event?.type !== 'content_block_delta') return '';
-  return event.event.delta?.text || '';
-};
+const deltaIn = (event) =>
+  event?.type === 'stream_event' && event.event?.type === 'content_block_delta' ? event.event.delta?.text || '' : '';
+
+const deltaOf = (line) => deltaIn(eventOf(line));
+
+const eventsIn = (out) => String(out).split('\n').map(eventOf).filter(Boolean);
+
+const resultIn = (events) => events.find((event) => event.type === 'result') || null;
 
 export function replyText(out) {
   let streamed = '';
   let finished = '';
   let assistant = '';
-  for (const line of String(out).split('\n')) {
-    const event = eventOf(line);
-    if (!event) continue;
-    if (event.type === 'stream_event') streamed += deltaOf(line);
+  for (const event of eventsIn(out)) {
+    if (event.type === 'stream_event') streamed += deltaIn(event);
     else if (event.type === 'result' && typeof event.result === 'string') finished = event.result;
     else if (event.type === 'assistant') {
       assistant += (event.message?.content || [])
@@ -330,32 +338,26 @@ export function replyText(out) {
 const NO_COST = { input: 0, cacheRead: 0, cacheWrite: 0, output: 0, thinking: 0, cost: 0, ms: 0 };
 
 export function failureOf(out) {
-  for (const line of String(out).split('\n')) {
-    const event = eventOf(line);
-    if (event?.type !== 'result' || !event.is_error) continue;
-    const named = Array.isArray(event.errors) ? event.errors.find((row) => typeof row === 'string') : '';
-    const subtype = String(event.subtype || '');
-    return { reason: named || (typeof event.result === 'string' ? event.result : '') || subtype, subtype };
-  }
-  return { reason: '', subtype: '' };
+  const event = resultIn(eventsIn(out));
+  if (!event?.is_error) return { reason: '', subtype: '' };
+  const named = Array.isArray(event.errors) ? event.errors.find((row) => typeof row === 'string') : '';
+  const subtype = String(event.subtype || '');
+  return { reason: named || (typeof event.result === 'string' ? event.result : '') || subtype, subtype };
 }
 
 export function costOf(out) {
-  for (const line of String(out).split('\n')) {
-    const event = eventOf(line);
-    if (event?.type !== 'result') continue;
-    const usage = event.usage || {};
-    return {
-      input: Number(usage.input_tokens) || 0,
-      cacheRead: Number(usage.cache_read_input_tokens) || 0,
-      cacheWrite: Number(usage.cache_creation_input_tokens) || 0,
-      output: Number(usage.output_tokens) || 0,
-      thinking: Number(usage.output_tokens_details?.thinking_tokens) || 0,
-      cost: Number(event.total_cost_usd) || 0,
-      ms: Number(event.duration_ms) || 0,
-    };
-  }
-  return { ...NO_COST };
+  const event = resultIn(eventsIn(out));
+  if (!event) return { ...NO_COST };
+  const usage = event.usage || {};
+  return {
+    input: Number(usage.input_tokens) || 0,
+    cacheRead: Number(usage.cache_read_input_tokens) || 0,
+    cacheWrite: Number(usage.cache_creation_input_tokens) || 0,
+    output: Number(usage.output_tokens) || 0,
+    thinking: Number(usage.output_tokens_details?.thinking_tokens) || 0,
+    cost: Number(event.total_cost_usd) || 0,
+    ms: Number(event.duration_ms) || 0,
+  };
 }
 
 function run(args, prompt, onText) {
@@ -367,25 +369,42 @@ function run(args, prompt, onText) {
     let out = '';
     let err = '';
     let rest = '';
-    const timer = setTimeout(() => {
+    const { hard, quiet } = timeouts();
+    const stop = (note) => {
       child.kill('SIGKILL');
-      reject(new Error(`the lexicographer did not answer within ${BATCH_TIMEOUT_MS / 60_000} min`));
-    }, BATCH_TIMEOUT_MS);
+      const error = new Error(note);
+      error.timedOut = true;
+      reject(error);
+    };
+    const ceiling = setTimeout(() => stop(`the lexicographer did not answer within ${minutesOf(hard)} min`), hard);
+    let silence = null;
+    const done = () => {
+      clearTimeout(ceiling);
+      clearTimeout(silence);
+    };
+    const heard = () => {
+      clearTimeout(silence);
+      silence = setTimeout(() => stop(`the lexicographer went quiet for ${minutesOf(quiet)} min`), quiet);
+    };
 
     child.stdout.on('data', (chunk) => {
+      heard();
       out += chunk;
       rest += chunk;
       const lines = rest.split('\n');
       rest = lines.pop();
       for (const line of lines) onText(deltaOf(line));
     });
-    child.stderr.on('data', (chunk) => (err += chunk));
+    child.stderr.on('data', (chunk) => {
+      heard();
+      err += chunk;
+    });
     child.on('error', (error) => {
-      clearTimeout(timer);
+      done();
       reject(new Error(`claude could not be started (${error.code || error.message})`));
     });
     child.on('close', (code) => {
-      clearTimeout(timer);
+      done();
       if (code === 0) return resolve(out);
       const failure = failureOf(out);
       const reason = failure.reason || err.trim();
@@ -447,6 +466,7 @@ export async function askFull(prompt, onCards = () => {}, { model = modelFor(), 
     const call = callFor(shape);
     try {
       const out = await run(call.args, call.stdin, call.onText);
+      rememberTuning({ shape });
       return { text: replyText(out), usage: costOf(out) };
     } catch (error) {
       const tuned = tuneFor(error, shape);
@@ -456,10 +476,12 @@ export async function askFull(prompt, onCards = () => {}, { model = modelFor(), 
         await sleep(WAIT_MS);
         continue;
       }
-      if (tuned.change !== 'shape') throw error;
+      if (tuned.change !== 'shape') {
+        if (tuned.change === 'split') forgetShape();
+        throw error;
+      }
       log(tuned.note);
       shape = tuned.shape;
-      rememberTuning({ shape });
       text = '';
       counted = 0;
     }
@@ -507,7 +529,7 @@ async function repaired(first, records, pair, stopWords, { model, system, target
   try {
     const effort = effortFor('repair');
     const { text, usage } = await askFull(repairPrompt(items, pair), () => {}, { model, system, effort });
-    const raw = parseCards(text);
+    const raw = jsonArray(text);
     recordUsage({ kind: 'repair', model, effort, target, records: items.length, cards: raw.length, ...usage });
     const second = triage(raw, records, pair, stopWords);
     fixed = [...second.kept, ...second.needsRepair.filter((item) => item.soft).map((item) => item.card)];
@@ -560,7 +582,7 @@ async function buildBatch({ role, records, pair, model, stopWords, target, onCar
       repaired: built.reduce((sum, run) => sum + run.repaired, 0),
     };
   }
-  const raw = parseCards(answer.text);
+  const raw = jsonArray(answer.text);
   recordUsage({ kind: role, model, effort, target, records: records.length, cards: raw.length, ...answer.usage });
   const first = triage(raw, records, pair, stopWords);
   return repaired(first, records, pair, stopWords, { model, system, target });

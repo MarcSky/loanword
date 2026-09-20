@@ -17,11 +17,10 @@ const {
   cardsSoFar,
   chunk,
   heldBy,
-  jsonArray,
   objectsIn,
   progressIn,
   locked,
-  parseCards,
+  jsonArray,
   promptFor,
   modelFor,
   readProgress,
@@ -130,10 +129,10 @@ test('the prompt carries the batch and the language pair', () => {
 
 test('a reply is read whether or not it arrives in a markdown fence', () => {
   const cards = [{ front: 'a', back: 'b' }];
-  assert.deepEqual(parseCards(JSON.stringify(cards)), cards);
-  assert.deepEqual(parseCards('```json\n' + JSON.stringify(cards) + '\n```'), cards);
-  assert.deepEqual(parseCards('Here you go:\n```\n' + JSON.stringify(cards) + '\n```\nHope that helps!'), cards);
-  assert.deepEqual(parseCards('[]'), []);
+  assert.deepEqual(jsonArray(JSON.stringify(cards)), cards);
+  assert.deepEqual(jsonArray('```json\n' + JSON.stringify(cards) + '\n```'), cards);
+  assert.deepEqual(jsonArray('Here you go:\n```\n' + JSON.stringify(cards) + '\n```\nHope that helps!'), cards);
+  assert.deepEqual(jsonArray('[]'), []);
 });
 
 test('a batch is not thrown away because the model dropped one comma', () => {
@@ -143,20 +142,20 @@ test('a batch is not thrown away because the model dropped one comma', () => {
     { n: 3, front: 'push back', back: 'возразить' },
   ];
   const dropped = `[${JSON.stringify(rows[0])},${JSON.stringify(rows[1])}\n${JSON.stringify(rows[2])}]`;
-  assert.deepEqual(parseCards(dropped), rows, 'every card the call paid for is kept');
+  assert.deepEqual(jsonArray(dropped), rows, 'every card the call paid for is kept');
 
   const cut = `[${JSON.stringify(rows[0])},${JSON.stringify(rows[1])},{"n":3,"front":"push ba`;
-  assert.deepEqual(parseCards(cut), rows.slice(0, 2), 'a reply cut short keeps the cards that arrived whole');
+  assert.deepEqual(jsonArray(cut), rows.slice(0, 2), 'a reply cut short keeps the cards that arrived whole');
 
   assert.deepEqual(objectsIn(`{"a":"}{"}{"b":2}`), [{ a: '}{' }, { b: 2 }], 'a brace inside a string is not a card');
   assert.deepEqual(objectsIn('{"a":{"b":1}}'), [{ a: { b: 1 } }], 'a nested object is one card, not two');
 });
 
 test('an unreadable reply raises rather than committing nonsense', () => {
-  assert.throws(() => parseCards('I could not do that.'), /no JSON array/);
-  assert.throws(() => parseCards(''), /no JSON array/);
-  assert.throws(() => parseCards('[{"front": broken}]'), SyntaxError);
-  assert.throws(() => parseCards('I would write {} for an empty one.'), /no JSON array/, 'prose with a brace in it is still prose');
+  assert.throws(() => jsonArray('I could not do that.'), /no JSON array/);
+  assert.throws(() => jsonArray(''), /no JSON array/);
+  assert.throws(() => jsonArray('[{"front": broken}]'), SyntaxError);
+  assert.throws(() => jsonArray('I would write {} for an empty one.'), /no JSON array/, 'prose with a brace in it is still prose');
 });
 
 test('a second build stands down while one is running', () => {
@@ -338,7 +337,7 @@ test('the reply is read back from a stream, and from plain output when there is 
     '{"type":"result","subtype":"success","result":"the deltas win over this"}',
   ].join('\n');
   assert.equal(replyText(stream), '[{"front":"roll back","back":"откатить"}]');
-  assert.deepEqual(parseCards(replyText(stream)), [{ front: 'roll back', back: 'откатить' }]);
+  assert.deepEqual(jsonArray(replyText(stream)), [{ front: 'roll back', back: 'откатить' }]);
 
   assert.equal(replyText('{"type":"result","subtype":"success","result":"[{\\"front\\":\\"a\\"}]"}'), '[{"front":"a"}]');
   assert.equal(
@@ -977,4 +976,53 @@ test('every shape the tuner can name is one the runner knows how to build', asyn
   for (const shape of SHAPES) {
     assert.ok(['bare', 'lean', 'stream', 'plain'].includes(shape), `${shape} has no call to build`);
   }
+});
+
+test('a call that never says a word is cut off at the ceiling, and the clock is not blamed on the flags', async () => {
+  const { ask } = await import('./build.mjs');
+  const { readTuning, rememberTuning, tuneFor } = await import('./tune.mjs');
+  process.env.LOANWORD_BATCH_TIMEOUT_MS = '1200';
+  process.env.LOANWORD_QUIET_TIMEOUT_MS = '600000';
+  fakeClaude('#!/bin/sh\ncat > /dev/null\nsleep 30\n');
+  rememberTuning({ shape: 'lean' });
+
+  const failed = await ask('anything').then(() => null, (error) => error);
+  assert.equal(failed?.timedOut, true);
+  assert.match(failed.message, /did not answer within/);
+  assert.equal(tuneFor(failed, 'lean').change, 'split', 'a slow call means too many records, not a refused command line');
+  assert.equal(readTuning().shape, '', 'and the shape is forgotten so the next build probes instead of sinking to plain');
+
+  delete process.env.LOANWORD_BATCH_TIMEOUT_MS;
+  delete process.env.LOANWORD_QUIET_TIMEOUT_MS;
+});
+
+test('a call that speaks and then stops is cut off long before the ceiling', async () => {
+  const { ask } = await import('./build.mjs');
+  process.env.LOANWORD_BATCH_TIMEOUT_MS = '600000';
+  process.env.LOANWORD_QUIET_TIMEOUT_MS = '900';
+  fakeClaude('#!/bin/sh\ncat > /dev/null\nprintf "["\nsleep 30\n');
+
+  const started = Date.now();
+  const failed = await ask('anything').then(() => null, (error) => error);
+  assert.equal(failed?.timedOut, true);
+  assert.match(failed.message, /went quiet/);
+  assert.ok(Date.now() - started < 10_000, 'a dead call is not waited out to the ceiling');
+
+  delete process.env.LOANWORD_BATCH_TIMEOUT_MS;
+  delete process.env.LOANWORD_QUIET_TIMEOUT_MS;
+});
+
+test('a long answer that keeps streaming is left alone, and the shape that carried it is remembered', async () => {
+  const { ask } = await import('./build.mjs');
+  const { readTuning } = await import('./tune.mjs');
+  process.env.LOANWORD_BATCH_TIMEOUT_MS = '600000';
+  process.env.LOANWORD_QUIET_TIMEOUT_MS = '700';
+  fakeClaude('#!/bin/sh\ncat > /dev/null\nfor i in 1 2 3 4 5 6; do printf "\\n"; sleep 0.3; done\nprintf "done"\n');
+
+  const text = await ask('anything');
+  assert.match(text, /done/, 'six pauses longer than nothing, each one shorter than the quiet window');
+  assert.equal(readTuning().shape, 'lean', 'a shape is remembered because it worked, never because it was tried');
+
+  delete process.env.LOANWORD_BATCH_TIMEOUT_MS;
+  delete process.env.LOANWORD_QUIET_TIMEOUT_MS;
 });

@@ -18,13 +18,13 @@
     "stem": "node scripts/stem-vendor.mjs"
   },
   "dependencies": {
-    "ts-fsrs": "^5.2.0"
+    "ts-fsrs": "^5.4.2"
   },
   "engines": {
     "node": ">=22.13.0"
   },
   "devDependencies": {
-    "@awesome.me/webawesome": "^3.12.0",
+    "@awesome.me/webawesome": "^3.15.0",
     "@phosphor-icons/core": "^2.1.1"
   }
 }

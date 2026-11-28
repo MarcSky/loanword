@@ -484,7 +484,8 @@ printf '[{"n":0,"type":"phrase","front":"roll back the index","back":"откат
   }
   assert.equal(argv[argv.indexOf('--max-turns') + 1], '1');
   assert.equal(argv[argv.indexOf('--model') + 1], 'sonnet', 'sonnet writes the cards by default');
-  assert.equal(argv[argv.indexOf('--effort') + 1], 'medium', 'the brief is precise, so the model need not deliberate at length');
+  assert.equal(argv[argv.indexOf('--effort') + 1], 'low', 'the brief is precise, so the model need not deliberate at length');
+  assert.equal(effortFor('cloner'), 'medium', 'a clone measured no cheaper at low');
   assert.equal(effortFor('filer'), 'low', 'filing is classification, not composition');
   assert.equal(effortFor('alphabet'), 'low');
   const stdin = readFileSync(joinPath(DATA, 'stdin.txt'), 'utf8');
@@ -542,7 +543,7 @@ JSON
   assert.equal(line.output, 200);
   assert.equal(line.thinking, 170);
   assert.equal(line.cost, 0.0123);
-  assert.equal(line.effort, 'medium', 'the line says how hard the model was asked to think');
+  assert.equal(line.effort, 'low', 'the line says how hard the model was asked to think');
   assert.ok(line.ts);
 });
 

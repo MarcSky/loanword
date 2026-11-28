@@ -75,7 +75,7 @@ const ROLE_HEADINGS = {
 
 export const roleOf = (record) => ROLES[record?.source] || 'lexicographer';
 
-const EFFORT = { alphabet: 'low', filer: 'low', sentence: 'low' };
+const EFFORT = { lexicographer: 'low', alphabet: 'low', filer: 'low', sentence: 'low' };
 
 export const effortFor = (kind) => EFFORT[kind] || 'medium';
 
